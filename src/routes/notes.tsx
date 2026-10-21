@@ -30,7 +30,7 @@ function Notes() {
     <Shell title="Notes" subtitle="Your private scratchpad">
       <form className="surface mb-6 grid gap-2 p-4" onSubmit={(e) => {
         e.preventDefault();
-        if (!title.trim()) return toast.error("Add a title");
+        if (!title.trim()) { toast.error("Add a title"); return; }
         const at = new Date().toISOString();
         saveNote({ id: uid("note"), title: title.trim(), body, pinned: false, createdAt: at, updatedAt: at });
         setTitle(""); setBody(""); toast.success("Note saved");

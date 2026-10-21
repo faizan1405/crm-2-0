@@ -53,8 +53,8 @@ function Deals() {
                   <form className="flex gap-2" onSubmit={(e) => {
                     e.preventDefault();
                     const n = Number(amt[d.id]);
-                    if (!n || n <= 0) return toast.error("Enter an amount");
-                    if (n > out) return toast.error(`Amount exceeds the ${formatINR(out)} due`);
+                    if (!n || n <= 0) { toast.error("Enter an amount"); return; }
+                    if (n > out) { toast.error(`Amount exceeds the ${formatINR(out)} due`); return; }
                     addPayment({ dealId: d.id, amount: n, date: new Date().toISOString().slice(0, 10), method: "UPI", type: n === out ? "final" : "milestone" });
                     setAmt({ ...amt, [d.id]: "" });
                     toast.success("Payment recorded");

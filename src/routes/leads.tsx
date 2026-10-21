@@ -71,9 +71,9 @@ function AddLead({ open, onOpenChange }: { open: boolean; onOpenChange: (o: bool
   const dup = duplicatePhone(leads, f.phone);
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!f.name.trim() || !f.phone.trim()) return toast.error("Name and phone are required");
-    if (dup) return toast.error("A lead with this phone already exists");
-    addLead({ name: f.name.trim(), phone: f.phone.trim(), company: f.company, source: f.source, priority: f.priority, status: "new", pinned: false, quotedAmount: Number(f.quotedAmount) || undefined, aiScore: f.priority === "hot" ? 85 : f.priority === "warm" ? 70 : 50 });
+    if (!f.name.trim() || !f.phone.trim()) { toast.error("Name and phone are required"); return; }
+    if (dup) { toast.error("A lead with this phone already exists"); return; }
+    addLead({ name: f.name.trim(), phone: f.phone.trim(), company: f.company, source: f.source, priority: f.priority, status: "new", pinned: false, ...(Number(f.quotedAmount) > 0 ? { quotedAmount: Number(f.quotedAmount) } : {}), aiScore: f.priority === "hot" ? 85 : f.priority === "warm" ? 70 : 50 });
     toast.success("Lead added");
     setF({ name: "", phone: "", company: "", source: "Website", priority: "warm", quotedAmount: "" });
     onOpenChange(false);
