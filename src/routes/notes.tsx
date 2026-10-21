@@ -28,12 +28,13 @@ export const Route = createFileRoute("/notes")({
 function Notes() {
   const { notes, saveNote, deleteNote } = useCRM();
   const [q, setQ] = useState("");
+  const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<Note | null>(null);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [tag, setTag] = useState("");
   const sorted = notes.filter((n) => `${n.title} ${n.body} ${n.tag ?? ""}`.toLowerCase().includes(q.toLowerCase())).sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt));
-  const startEdit = (n: Note) => { setEditing(n); setTitle(n.title); setBody(n.body); setTag(n.tag ?? ""); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const startEdit = (n: Note) => { setEditorOpen(true); setEditing(n); setTitle(n.title); setBody(n.body); setTag(n.tag ?? ""); window.scrollTo({ top: 0, behavior: "smooth" }); };
   const clear = () => { setEditing(null); setTitle(""); setBody(""); setTag(""); };
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,16 +43,17 @@ function Notes() {
     saveNote({ id: editing?.id ?? uid("note"), title: title.trim(), body, pinned: editing?.pinned ?? false, createdAt: editing?.createdAt ?? at, updatedAt: at, ...(tag ? { tag } : {}) });
     toast.success(editing ? "Note updated" : "Note saved");
     clear();
+    setEditorOpen(false);
   };
   return (
-    <Shell title="Personal Notes" subtitle={`${notes.length} notes · Your private scratchpad, saved on this device`} actions={<Button variant="outline" onClick={() => { clear(); document.getElementById("note-title")?.focus(); }}><Plus />New note</Button>}>
+    <Shell title="Personal Notes" subtitle={`${notes.length} notes · Your private scratchpad, saved on this device`} actions={<Button variant="outline" onClick={() => { clear(); setEditorOpen(true); requestAnimationFrame(() => document.getElementById("note-title")?.focus()); }}><Plus />New note</Button>}>
       <div className="grid gap-5 lg:grid-cols-[310px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)]">
-        <form className="note-editor surface grid content-start gap-4 lg:sticky lg:top-24" onSubmit={submit}>
+        <form className={cn("note-editor surface content-start gap-4 lg:sticky lg:top-24 lg:grid", editorOpen ? "grid" : "hidden")} onSubmit={submit}>
           <div className="mb-1 flex items-center gap-2 text-sm font-bold"><FileText className="size-4 text-teal" />{editing ? "Edit note" : "New note"}</div>
           <Input id="note-title" aria-label="Note title" className="h-12 font-display font-bold" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
           <Textarea aria-label="Note body" rows={8} placeholder="Write something…" value={body} onChange={(e) => setBody(e.target.value)} />
           <Input aria-label="Note tag" placeholder="Tag (optional)" value={tag} onChange={(e) => setTag(e.target.value)} />
-          <div className="flex justify-end gap-2">{editing && <Button type="button" variant="ghost" onClick={clear}>Cancel</Button>}<Button type="submit">{editing ? "Update" : "Save note"}</Button></div>
+          <div className="flex justify-end gap-2">{(editing || editorOpen) && <Button type="button" variant="ghost" onClick={() => { clear(); setEditorOpen(false); }}>Cancel</Button>}<Button type="submit">{editing ? "Update" : "Save note"}</Button></div>
         </form>
         <div>
           <div className="relative mb-3"><Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" /><Input className="pl-8" placeholder="Search notes" value={q} onChange={(e) => setQ(e.target.value)} /></div>
