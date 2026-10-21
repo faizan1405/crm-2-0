@@ -14,6 +14,9 @@ Frontend-only demo. No backend; production CRM untouched.
 
 - [x] Call workflow completion + premium card redesign (Pipeline Call, confirmed Won/Lost, saved pending call, card system, motion)
 
+- [x] Visual reinvention stage 1–3: Sales OS foundation, top navigation, Dashboard, Leads workspace, Pipeline theatre, Finance studio
+- [ ] Visual reinvention: Follow-ups, Daily Briefing, Analytics, Notes, Settings (waiting on your approval of the four screens)
+
 ## V1 parity (see docs/V1_PARITY_CHECKLIST.md)
 - [x] Batch 1 Advanced Lead Management
 - [x] Batch 2 Smart Sales Workflows

@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Plus, Wallet, ChevronDown, IndianRupee, Target, AlertCircle, Percent, ArrowDownLeft } from "lucide-react";
-import { Shell, Stat, Empty, selectCls } from "@/components/crm/Shell";
+import { Plus, Wallet, ArrowDownLeft } from "lucide-react";
+import { Shell, Empty, selectCls } from "@/components/crm/Shell";
 import { useCRM } from "@/lib/crm/store";
 import { financeSummary, dealCollected, dealOutstanding, dealPaymentStatus } from "@/lib/crm/finance";
 import { formatINR, formatINRCompact, formatPct, formatDate, dayKey } from "@/lib/crm/format";
@@ -18,9 +18,9 @@ export const Route = createFileRoute("/deals")({
     meta: [
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { title: "Deals & Payments · Scale Flow CRM" },
+      { title: "Finance Studio · Scale Flow Sales OS" },
       { name: "description", content: "Track deal value, collections and overdue balances." },
-      { property: "og:title", content: "Deals & Payments · Scale Flow CRM" },
+      { property: "og:title", content: "Finance Studio · Scale Flow Sales OS" },
       { property: "og:description", content: "Track deal value, collections and overdue balances." },
     ],
   }),
@@ -39,60 +39,64 @@ function Deals() {
   const [filter, setFilter] = useState<"all" | "due" | "overdue" | "paid">("all");
   const list = deals.filter((d) => { const s = dealPaymentStatus(d, payments); return filter === "all" || (filter === "due" ? s === "partial" || s === "unpaid" || s === "overdue" : s === filter); });
 
+  const sel = list.find((d) => d.id === openId) ?? list[0];
+  const rate = Math.min((fin.collectionRate ?? 0) * 100, 100);
   return (
-    <Shell title="Deals & Payments" subtitle={`${deals.length} deals · CRM clients and other clients`} actions={<Button onClick={() => setAddDeal(true)}><Plus className="size-4" />New deal</Button>}>
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
-        <Stat label="Total deal value" value={formatINRCompact(fin.totalValue)} hint="Excludes cancelled" icon={<IndianRupee />} />
-        <Stat label="Money received" value={formatINRCompact(fin.collected)} hint={`${formatPct(fin.collectionRate)} collected`} tone="success" icon={<Wallet />} />
-        <Stat label="Outstanding" value={formatINRCompact(fin.outstanding)} tone="warning" icon={<Target />} />
-        <Stat label="Overdue" value={formatINRCompact(fin.overdue)} tone="destructive" icon={<AlertCircle />} />
-        <Stat label="Collection rate" value={formatPct(fin.collectionRate)} tone="teal" icon={<Percent />} />
-      </div>
-      <div className="mt-6 mb-3 flex gap-1 rounded-lg bg-muted p-1 sm:inline-flex">
-        {(["all", "due", "overdue", "paid"] as const).map((f) => <Button variant="ghost" size="sm" key={f} onClick={() => setFilter(f)} className={cn("rounded-md px-3 py-1.5 text-sm font-medium capitalize", filter === f ? "bg-card shadow-card" : "text-muted-foreground")}>{f === "all" ? "All deals" : f === "due" ? "Payment due" : f}</Button>)}
-      </div>
-      <div className="grid gap-4">
-        {list.length === 0 && <div className="surface"><Empty icon={<Wallet />} title="No deals here" /></div>}
-        {list.map((d) => {
-          const st = dealPaymentStatus(d, payments);
-          const got = dealCollected(d.id, payments);
-          const out = dealOutstanding(d, payments);
-          const pct = d.finalAmount ? Math.min(got / d.finalAmount, 1) : 0;
-          const hist = payments.filter((p) => p.dealId === d.id).sort((a, b) => b.date.localeCompare(a.date));
-          return (
-            <div key={d.id} className="deal-card surface surface-hover">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <div className="mb-3 flex items-center gap-3"><div className="grid size-10 place-items-center rounded-lg bg-teal-soft text-teal"><Wallet className="size-5" /></div><div><div className="font-display font-bold">{d.name}</div><div className="mt-0.5 text-xs text-muted-foreground">{d.clientName}{d.company ? ` · ${d.company}` : ""}</div></div></div>
-                  <div className="text-sm text-muted-foreground">
-                    {d.leadId ? <Link to="/leads/$id" params={{ id: d.leadId }} className="hover:text-primary">{d.clientName}</Link> : d.clientName}
-                    {d.company ? ` · ${d.company}` : ""} · {d.clientType === "crm" ? "CRM client" : "Other client"} · due {formatDate(d.dueDate)} · {DEAL_STATUS_LABEL[d.status]}
-                  </div>
-                </div>
-                <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold capitalize", TONE[st])}>{st}</span>
-              </div>
-              <div className="mt-5 grid grid-cols-3 gap-4 border-t pt-4"><div><span className="text-[10px] uppercase text-muted-foreground">Contract value</span><div className="num mt-1 text-lg font-bold">{formatINR(d.finalAmount)}</div></div><div><span className="text-[10px] uppercase text-muted-foreground">Received</span><div className="num mt-1 text-lg font-bold text-success">{formatINR(got)}</div></div><div><span className="text-[10px] uppercase text-muted-foreground">Outstanding</span><div className="num mt-1 text-lg font-bold text-warning">{formatINR(out)}</div></div></div>
-              <div className="deal-progress mt-4 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-success transition-all" style={{ width: `${pct * 100}%` }} /></div>
-              <div className="num mt-2 flex flex-wrap items-center justify-between gap-2 text-sm">
-                <span><b>{formatINR(got)}</b> of {formatINR(d.finalAmount)} <span className="text-muted-foreground">· quoted {formatINR(d.quotedAmount)} · {formatINR(out)} due</span></span>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="ghost" onClick={() => setOpenId(openId === d.id ? null : d.id)}>History ({hist.length})<ChevronDown className={cn("size-4 transition-transform", openId === d.id && "rotate-180")} /></Button>
-                  {out > 0 && d.status !== "cancelled" && <Button size="sm" onClick={() => setPay(d)}>Record payment</Button>}
-                </div>
-              </div>
-              {openId === d.id && (
-                <ul className="mt-3 divide-y rounded-lg border text-sm">
-                  {hist.length === 0 && <li className="p-3 text-muted-foreground">No payments yet.</li>}
-                  {hist.map((p) => <PaymentRow key={p.id} id={p.id} />)}
-                </ul>
-              )}
-            </div>
-          );
-        })}
+    <Shell title="Finance studio" subtitle={`${deals.length} deals across CRM clients and other clients · every figure comes from recorded payments`} actions={<Button onClick={() => setAddDeal(true)} className="rounded-full"><Plus className="size-4" />New deal</Button>}>
+      <section className="panel-ink grid gap-8 p-6 sm:p-8 lg:grid-cols-[1.2fr_2fr]">
+        <div><div className="eyebrow">Total booked</div><div className="num mt-3 text-[48px] leading-none">{formatINR(fin.totalValue)}</div><div className="mt-2 text-xs opacity-70">Excludes cancelled deals</div></div>
+        <div className="grid content-end gap-5">
+          <div className="flex h-3 overflow-hidden rounded-full bg-[color-mix(in_oklab,var(--hero-foreground)_14%,transparent)]"><div className="bg-lime" style={{ width: `${rate}%` }} title="Received" /><div className="bg-clay" style={{ width: `${fin.totalValue ? Math.min(fin.overdue / fin.totalValue, 1) * 100 : 0}%` }} title="Overdue" /></div>
+          <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">{([["Received", formatINRCompact(fin.collected), "bg-lime"], ["Outstanding", formatINRCompact(fin.outstanding), "bg-[var(--hero-muted)]"], ["Overdue", formatINRCompact(fin.overdue), "bg-clay"], ["Collection rate", formatPct(fin.collectionRate), ""]] as const).map(([k, v, dot]) => <div key={k}><dt className="eyebrow flex items-center gap-1.5">{dot && <span className={cn("size-2 rounded-full", dot)} />}{k}</dt><dd className="num mt-1 text-2xl">{v}</dd></div>)}</dl>
+        </div>
+      </section>
+      <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(320px,1fr)_1.35fr]">
+        <div>
+          <div className="mb-3 flex items-center justify-between gap-2"><div className="eyebrow">Ledger</div><div className="seg" role="group" aria-label="Filter deals">{(["all", "due", "overdue", "paid"] as const).map((f) => <button type="button" key={f} aria-pressed={filter === f} onClick={() => setFilter(f)} className="capitalize">{f === "all" ? "All" : f === "due" ? "Due" : f}</button>)}</div></div>
+          <div role="listbox" aria-label="Deals" className="border-t border-foreground">
+            {list.length === 0 && <Empty icon={<Wallet />} title="No deals here" />}
+            {list.map((d) => { const st = dealPaymentStatus(d, payments); const got = dealCollected(d.id, payments); return (
+              <div key={d.id} role="option" tabIndex={0} aria-selected={sel?.id === d.id} onClick={() => setOpenId(d.id)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenId(d.id); } }} className="ledger-row px-3">
+                <div className="min-w-0"><div className="truncate text-sm font-semibold">{d.clientName}</div><div className="truncate text-xs text-muted-foreground">{d.name} · {d.clientType === "crm" ? "CRM client" : "Other client"}</div><div className="balance-track mt-2.5 h-1.5"><div style={{ width: `${d.finalAmount ? Math.min(got / d.finalAmount, 1) * 100 : 0}%` }} /></div></div>
+                <div className="text-right"><div className="num text-sm">{formatINR(d.finalAmount)}</div><span className={cn("mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", TONE[st])}>{st}</span></div>
+              </div>); })}
+          </div>
+        </div>
+        {sel && <DealInspector key={sel.id} deal={sel} onPay={() => setPay(sel)} onPick={setOpenId} />}
       </div>
       <NewDealDialog open={addDeal} onOpenChange={setAddDeal} />
       {pay && <PaymentDialog deal={pay} onClose={() => setPay(null)} />}
     </Shell>
+  );
+}
+
+function DealInspector({ deal: d, onPay, onPick }: { deal: Deal; onPay: () => void; onPick: (id: string) => void }) {
+  const { deals, payments } = useCRM();
+  const st = dealPaymentStatus(d, payments), got = dealCollected(d.id, payments), out = dealOutstanding(d, payments);
+  const hist = payments.filter((p) => p.dealId === d.id).sort((a, b) => b.date.localeCompare(a.date));
+  const others = deals.filter((x) => x.id !== d.id && (d.leadId ? x.leadId === d.leadId : x.clientName === d.clientName));
+  const pct = d.finalAmount ? Math.min(got / d.finalAmount, 1) : 0;
+  return (
+    <aside aria-label={`${d.name} details`} className="receipt inspector self-start overflow-hidden">
+      <div className="p-6 sm:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><div className="eyebrow">{d.clientType === "crm" ? "CRM client" : "Other client"} · {DEAL_STATUS_LABEL[d.status]}</div><h2 className="editorial mt-2 text-[40px]">{d.name}</h2><p className="mt-1 text-sm text-muted-foreground">{d.leadId ? <Link to="/leads/$id" params={{ id: d.leadId }} className="underline-offset-4 hover:underline">{d.clientName}</Link> : d.clientName}{d.company ? ` · ${d.company}` : ""}{d.dueDate ? ` · due ${formatDate(d.dueDate)}` : ""}</p></div><span className={cn("rounded-full px-2.5 py-1 text-xs font-medium capitalize", TONE[st])}>{st}</span></div>
+        <dl className="mt-7 grid grid-cols-2 gap-5 border-t border-foreground pt-5 sm:grid-cols-4">
+          <div><dt className="eyebrow">Quoted</dt><dd className="num mt-1 text-lg text-muted-foreground">{formatINR(d.quotedAmount)}</dd></div>
+          <div><dt className="eyebrow">Final</dt><dd className="num mt-1 text-lg">{formatINR(d.finalAmount)}</dd></div>
+          <div><dt className="eyebrow">Received</dt><dd className="num mt-1 text-lg text-success">{formatINR(got)}</dd></div>
+          <div><dt className="eyebrow">Outstanding</dt><dd className={cn("num mt-1 text-lg", st === "overdue" ? "text-destructive" : "text-warning")}>{formatINR(out)}</dd></div>
+        </dl>
+        <div className="balance-track mt-6"><div style={{ width: `${pct * 100}%` }} /></div>
+        <div className="num mt-2 flex justify-between text-[11px] text-muted-foreground"><span>{Math.round(pct * 100)}% collected</span>{d.quotedAmount !== d.finalAmount && <span>{d.finalAmount > d.quotedAmount ? "+" : "−"}{formatINR(Math.abs(d.finalAmount - d.quotedAmount))} vs quote</span>}</div>
+        {out > 0 && d.status !== "cancelled" && <Button onClick={onPay} className="mt-6 rounded-full"><Plus className="size-4" />Record payment</Button>}
+      </div>
+      <div className="receipt-edge" aria-hidden />
+      <div className="bg-secondary p-6 sm:p-8">
+        <div className="eyebrow mb-4">Payment history · {hist.length}</div>
+        <ul className="pay-timeline grid gap-4">{hist.length === 0 && <li className="text-sm text-muted-foreground">No payments yet.</li>}{hist.map((p) => <PaymentRow key={p.id} id={p.id} />)}</ul>
+        {others.length > 0 && <div className="mt-8 border-t pt-5"><div className="eyebrow mb-3">Other deals for {d.clientName}</div><div className="grid gap-2">{others.map((o) => <button key={o.id} type="button" onClick={() => onPick(o.id)} className="flex items-center justify-between rounded-xl border bg-card px-3 py-2.5 text-left text-sm hover:border-input"><span className="truncate">{o.name}</span><span className="num">{formatINRCompact(o.finalAmount)}</span></button>)}</div></div>}
+      </div>
+    </aside>
   );
 }
 
@@ -101,9 +105,9 @@ function PaymentRow({ id }: { id: string }) {
   const p = payments.find((x) => x.id === id);
   if (!p) return null;
   return (
-    <li className={cn("num flex items-center justify-between gap-2 p-3", p.voided && "text-muted-foreground line-through")}>
-      <span>{formatDate(p.date, { day: "numeric", month: "short", year: "numeric" })} · {p.method} · <span className="capitalize">{p.type}</span>{p.reference ? ` · ${p.reference}` : ""}</span>
-      <span className="flex items-center gap-3"><b>{formatINR(p.amount)}</b>{!p.voided && <Button size="sm" variant="ghost" className="text-xs text-muted-foreground hover:text-destructive" onClick={() => { if (window.confirm("Void this payment?")) { voidPayment(p.id); toast.success("Payment voided"); } }}>Void</Button>}</span>
+    <li className={cn("flex items-start justify-between gap-2 text-sm", p.voided && "is-void text-muted-foreground line-through")}>
+      <span><span className="block font-medium">{formatDate(p.date, { day: "numeric", month: "short", year: "numeric" })}</span><span className="text-xs text-muted-foreground">{p.method} · <span className="capitalize">{p.type}</span>{p.reference ? ` · ${p.reference}` : ""}</span></span>
+      <span className="flex items-center gap-2"><span className="num">{formatINR(p.amount)}</span>{!p.voided && <Button size="sm" variant="ghost" className="text-xs text-muted-foreground hover:text-destructive" onClick={() => { if (window.confirm("Void this payment?")) { voidPayment(p.id); toast.success("Payment voided"); } }}>Void</Button>}</span>
     </li>
   );
 }
