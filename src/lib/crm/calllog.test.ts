@@ -12,3 +12,16 @@ describe("post-call quick log", () => {
   it("Tomorrow is 11 AM next day", () => expect(shortcutValue("Tomorrow", now)).toBe("2026-10-22T11:00"));
   it("Next week is 7 days later", () => expect(shortcutValue("Next week", now)).toBe("2026-10-28T11:00"));
 });
+
+import { isConnectedOutcome, needsStageConfirm, callLogError } from "./calllog";
+describe("call log safeguards", () => {
+  it("Not picked is not a successful contact", () => expect(isConnectedOutcome("Not picked")).toBe(false));
+  it("Busy is not a successful contact", () => expect(isConnectedOutcome("Busy")).toBe(false));
+  it("Not picked keeps a new lead as new", () => expect(outcomeStage("Not picked", "new")).toBe("new"));
+  it("Won needs confirmation", () => expect(needsStageConfirm("won", "proposal")).toBe(true));
+  it("Lost needs confirmation", () => expect(needsStageConfirm("lost", "contacted")).toBe(true));
+  it("Unconfirmed won is blocked", () => expect(callLogError({ outcome: "Won", stage: "won", current: "proposal", confirmed: false, lostReason: "" })).toBe("Confirm the stage change"));
+  it("Lost without a reason is blocked", () => expect(callLogError({ outcome: "Lost", stage: "lost", current: "proposal", confirmed: true, lostReason: "  " })).toBe("Add a lost reason"));
+  it("Confirmed lost with reason saves", () => expect(callLogError({ outcome: "Lost", stage: "lost", current: "proposal", confirmed: true, lostReason: "Budget" })).toBeNull());
+  it("Missing outcome is blocked", () => expect(callLogError({ outcome: null, stage: "new", current: "new", confirmed: false, lostReason: "" })).toBe("Pick a call outcome"));
+});
