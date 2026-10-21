@@ -26,3 +26,21 @@ export function shortcutValue(s: DateShortcut, now = new Date()): string {
 }
 
 export const toISO = businessDateTime;
+
+/** Not picked / Busy are attempts only — they never count as a successful contact. */
+export function isConnectedOutcome(o: CallOutcome): boolean {
+  return o !== "Not picked" && o !== "Busy";
+}
+
+/** Moving to Won or Lost from a call needs an explicit confirmation step. */
+export function needsStageConfirm(stage: LeadStatus, current: LeadStatus): boolean {
+  return stage !== current && (stage === "won" || stage === "lost");
+}
+
+/** Returns a blocking message for the call log, or null when it can be saved. */
+export function callLogError(input: { outcome: CallOutcome | null; stage: LeadStatus; current: LeadStatus; confirmed: boolean; lostReason: string }): string | null {
+  if (!input.outcome) return "Pick a call outcome";
+  if (needsStageConfirm(input.stage, input.current) && !input.confirmed) return "Confirm the stage change";
+  if (input.stage === "lost" && input.stage !== input.current && !input.lostReason.trim()) return "Add a lost reason";
+  return null;
+}

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Shell, PriorityBadge, Identity } from "@/components/crm/Shell";
 import { LostReasonDialog } from "@/components/crm/Dialogs";
+import { CallButton } from "@/components/crm/CallButton";
 import { useCRM } from "@/lib/crm/store";
 import { formatINRCompact, formatDateTime } from "@/lib/crm/format";
 import { LEAD_STATUSES, STATUS_LABEL, type LeadStatus } from "@/lib/crm/types";
@@ -57,20 +58,20 @@ function Pipeline() {
               </div>
               <div className="pipeline-scroll flex min-h-40 flex-col gap-2 overflow-y-auto scrollbar-thin">
                 {col.map((l) => (
-                  <div key={l.id} draggable onDragStart={(e) => { e.dataTransfer.setData("text/plain", l.id); e.dataTransfer.effectAllowed = "move"; setDragging(l.id); }} onDragEnd={() => {setDragging(null);setOver(null);}} className={cn("pipeline-card surface surface-hover cursor-grab p-4 active:cursor-grabbing", dragging === l.id && "is-dragging")}>
+                  <div key={l.id} draggable data-priority={l.priority} onDragStart={(e) => { e.dataTransfer.setData("text/plain", l.id); e.dataTransfer.effectAllowed = "move"; setDragging(l.id); }} onDragEnd={() => {setDragging(null);setOver(null);}} className={cn("pipeline-card cursor-grab p-4 active:cursor-grabbing", dragging === l.id && "is-dragging")}>
                     <div className="flex items-start justify-between gap-2">
                       <Link to="/leads/$id" params={{ id: l.id }} className="min-w-0 hover:text-primary"><Identity name={l.name} company={l.company} /></Link>
                       <PriorityBadge p={l.priority} />
                     </div>
-                    
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <span className="num text-xs font-semibold">{formatINRCompact(l.quotedAmount ?? 0)}</span>
-                      <select aria-label={`Move ${l.name}`} className="h-8 max-w-[130px] rounded-md border border-input bg-card px-2 text-[11px] text-muted-foreground" value={l.status} onChange={(e) => move(l.id, e.target.value as LeadStatus)}>
+                    <div className="card-metric mt-3"><span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Opportunity</span><span className="num font-display text-lg font-extrabold">{formatINRCompact(l.quotedAmount ?? 0)}</span></div>
+                    {l.nextFollowUp && <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"><span className="size-1.5 rounded-full bg-teal" />Follow-up · {formatDateTime(l.nextFollowUp)}</div>}
+                    {l.lostReason && l.status === "lost" && <div className="mt-2 text-[11px] text-destructive">{l.lostReason}</div>}
+                    <div className="card-actions mt-3 flex items-center gap-2">
+                      <CallButton leadId={l.id} phone={l.phone} name={l.name} source="Pipeline" />
+                      <select aria-label={`Move ${l.name}`} className="ml-auto h-8 max-w-[120px] rounded-md border border-input bg-card px-2 text-[11px] text-muted-foreground" value={l.status} onChange={(e) => move(l.id, e.target.value as LeadStatus)}>
                         {LEAD_STATUSES.map((x) => <option key={x} value={x}>{STATUS_LABEL[x]}</option>)}
                       </select>
                     </div>
-                    {l.nextFollowUp && <div className="mt-3 border-t pt-2 text-[10px] text-muted-foreground">Follow-up · {formatDateTime(l.nextFollowUp)}</div>}
-                    {l.lostReason && l.status === "lost" && <div className="mt-2 text-[11px] text-destructive">{l.lostReason}</div>}
                   </div>
                 ))}
                 {col.length === 0 && <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">Drop leads here</div>}

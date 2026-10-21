@@ -11,3 +11,5 @@ Frontend-only demo. No backend; production CRM untouched.
 - [x] Redesign D — Analytics, Personal Notes, Settings
 - [x] Redesign E — 45 responsive checks, core workflow browser verification, 30 passing tests, docs/PREMIUM_REDESIGN.md
 - [ ] Backend phase (Antigravity) — real auth, database, AI extraction, notifications (waiting on backend setup)
+
+- [x] Call workflow completion + premium card redesign (Pipeline Call, confirmed Won/Lost, saved pending call, card system, motion)
