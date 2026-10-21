@@ -413,9 +413,7 @@ html.dark :is(.lead-card, .pipeline-card, .deal-card, .note-card, .stat-card, .f
 .lead-card { animation: card-in 280ms cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(var(--i, 0) * 25ms); }
 .briefing-item, .pipeline-card, .note-card, .followup-row { animation: card-in 240ms cubic-bezier(.2,.7,.2,1) both; }
 @keyframes card-in { from { opacity: 0; transform: translateY(6px) scale(.99); } to { opacity: 1; transform: none; } }
-[role="dialog"][data-state="open"] { animation: dialog-in 200ms cubic-bezier(.2,.7,.2,1); }
 [role="menu"][data-state="open"], [role="listbox"][data-state="open"] { animation: menu-in 140ms ease-out; }
-@keyframes dialog-in { from { opacity: 0; transform: translate(-50%, -48%) scale(.97); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
 @keyframes menu-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
 [role="tab"] { transition: color 160ms ease, background-color 160ms ease, box-shadow 160ms ease; }
 @media (max-width: 639px) {
@@ -423,6 +421,6 @@ html.dark :is(.lead-card, .pipeline-card, .deal-card, .note-card, .stat-card, .f
   .lead-card:hover, .pipeline-card:hover, .deal-card:hover, .note-card:hover, .stat-card:hover, .briefing-item:hover { transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lead-card, .briefing-item, .pipeline-card, .note-card, .followup-row, [role="dialog"], [role="menu"] { animation: none !important; }
+  .lead-card, .briefing-item, .pipeline-card, .note-card, .followup-row, [role="menu"] { animation: none !important; }
   .lead-card:hover, .pipeline-card:hover, .deal-card:hover, .note-card:hover, .stat-card:hover, .briefing-item:hover, .briefing-stat:hover, .followup-row:hover { transform: none; }
 }

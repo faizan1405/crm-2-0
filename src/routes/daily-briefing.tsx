@@ -1,4 +1,4 @@
-import { startCall } from "@/components/crm/PostCallDialog";
+import { CallButton } from "@/components/crm/CallButton";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -129,9 +129,9 @@ function Briefing() {
                     </div>
                     <div className="num text-right text-xs text-muted-foreground">{i.when && <div>{formatDateTime(i.when)}</div>}{i.value && <div className="font-semibold text-foreground">{formatINR(i.value)}</div>}</div>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
+                  <div className="card-actions mt-3 flex flex-wrap gap-1.5">
                     <Button size="sm" variant="outline" asChild><Link to="/leads/$id" params={{ id: i.lead.id }}><ExternalLink className="size-3.5" />Open</Link></Button>
-                    <Button size="sm" variant="outline" asChild><a href={`tel:${i.lead.phone}`} onClick={() => startCall(i.lead.id, "Daily Briefing")}><Phone className="size-3.5" />Call</a></Button>
+                    <CallButton leadId={i.lead.id} phone={i.lead.phone} name={i.lead.name} source="Daily Briefing" />
                     <Button size="sm" variant="outline" asChild><a href={`https://wa.me/91${digits(i.lead.phone)}`} target="_blank" rel="noreferrer" onClick={() => addActivity(i.lead.id, "WhatsApp from Daily Briefing", "whatsapp")}><MessageCircle className="size-3.5" />WhatsApp</a></Button>
                     <Button size="sm" variant="outline" onClick={() => setFuLead(i.lead.id)}><CalendarPlus className="size-3.5" />Follow-up</Button>
                     <Button size="sm" variant={done ? "ghost" : "default"} onClick={() => toggleBriefing(i.key)}><Check className="size-3.5" />{done ? "Undo" : "Mark done"}</Button>
