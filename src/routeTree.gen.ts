@@ -10,15 +10,29 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AnalyticsRouteImport } from './routes/analytics'
+import { Route as DailyBriefingRouteImport } from './routes/daily-briefing'
 import { Route as DealsRouteImport } from './routes/deals'
 import { Route as FollowUpsRouteImport } from './routes/follow-ups'
 import { Route as LeadsRouteImport } from './routes/leads'
 import { Route as NotesRouteImport } from './routes/notes'
 import { Route as PipelineRouteImport } from './routes/pipeline'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as LeadsIdRouteImport } from './routes/leads_.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AnalyticsRoute = AnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DailyBriefingRoute = DailyBriefingRouteImport.update({
+  id: '/daily-briefing',
+  path: '/daily-briefing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DealsRoute = DealsRouteImport.update({
@@ -46,54 +60,104 @@ const PipelineRoute = PipelineRouteImport.update({
   path: '/pipeline',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LeadsIdRoute = LeadsIdRouteImport.update({
+  id: '/leads_/$id',
+  path: '/leads/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/analytics': typeof AnalyticsRoute
+  '/daily-briefing': typeof DailyBriefingRoute
   '/deals': typeof DealsRoute
   '/follow-ups': typeof FollowUpsRoute
   '/leads': typeof LeadsRoute
   '/notes': typeof NotesRoute
   '/pipeline': typeof PipelineRoute
+  '/settings': typeof SettingsRoute
+  '/leads/$id': typeof LeadsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/analytics': typeof AnalyticsRoute
+  '/daily-briefing': typeof DailyBriefingRoute
   '/deals': typeof DealsRoute
   '/follow-ups': typeof FollowUpsRoute
   '/leads': typeof LeadsRoute
   '/notes': typeof NotesRoute
   '/pipeline': typeof PipelineRoute
+  '/settings': typeof SettingsRoute
+  '/leads/$id': typeof LeadsIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/analytics': typeof AnalyticsRoute
+  '/daily-briefing': typeof DailyBriefingRoute
   '/deals': typeof DealsRoute
   '/follow-ups': typeof FollowUpsRoute
   '/leads': typeof LeadsRoute
   '/notes': typeof NotesRoute
   '/pipeline': typeof PipelineRoute
+  '/settings': typeof SettingsRoute
+  '/leads_/$id': typeof LeadsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/deals' | '/follow-ups' | '/leads' | '/notes' | '/pipeline'
-  fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/deals' | '/follow-ups' | '/leads' | '/notes' | '/pipeline'
-  id:
-    | '__root__'
+  fullPaths:
     | '/'
+    | '/analytics'
+    | '/daily-briefing'
     | '/deals'
     | '/follow-ups'
     | '/leads'
     | '/notes'
     | '/pipeline'
+    | '/settings'
+    | '/leads/$id'
+  fileRoutesByTo: FileRoutesByTo
+  to:
+    | '/'
+    | '/analytics'
+    | '/daily-briefing'
+    | '/deals'
+    | '/follow-ups'
+    | '/leads'
+    | '/notes'
+    | '/pipeline'
+    | '/settings'
+    | '/leads/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/analytics'
+    | '/daily-briefing'
+    | '/deals'
+    | '/follow-ups'
+    | '/leads'
+    | '/notes'
+    | '/pipeline'
+    | '/settings'
+    | '/leads_/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AnalyticsRoute: typeof AnalyticsRoute
+  DailyBriefingRoute: typeof DailyBriefingRoute
   DealsRoute: typeof DealsRoute
   FollowUpsRoute: typeof FollowUpsRoute
   LeadsRoute: typeof LeadsRoute
   NotesRoute: typeof NotesRoute
   PipelineRoute: typeof PipelineRoute
+  SettingsRoute: typeof SettingsRoute
+  LeadsIdRoute: typeof LeadsIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -103,6 +167,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/analytics': {
+      id: '/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/daily-briefing': {
+      id: '/daily-briefing'
+      path: '/daily-briefing'
+      fullPath: '/daily-briefing'
+      preLoaderRoute: typeof DailyBriefingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/deals': {
@@ -140,16 +218,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PipelineRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/leads_/$id': {
+      id: '/leads_/$id'
+      path: '/leads/$id'
+      fullPath: '/leads/$id'
+      preLoaderRoute: typeof LeadsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AnalyticsRoute: AnalyticsRoute,
+  DailyBriefingRoute: DailyBriefingRoute,
   DealsRoute: DealsRoute,
   FollowUpsRoute: FollowUpsRoute,
   LeadsRoute: LeadsRoute,
   NotesRoute: NotesRoute,
   PipelineRoute: PipelineRoute,
+  SettingsRoute: SettingsRoute,
+  LeadsIdRoute: LeadsIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -1,5 +1,8 @@
 export const TIMEZONE = "Asia/Kolkata";
 
+/** Display prefs, synced from the store by the app shell. */
+export const displayPrefs = { hour12: true, longDate: false };
+
 const inr = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
 const inrCompact = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -9,7 +12,16 @@ const inrCompact = new Intl.NumberFormat("en-IN", {
 });
 
 export const formatINR = (n: number | undefined | null) => (n == null ? "—" : inr.format(n));
-export const formatINRCompact = (n: number) => inrCompact.format(n);
+/** ₹ in Indian units (K, L, Cr) — locale-independent so server and browser match. */
+export const formatINRCompact = (n: number) => {
+  const a = Math.abs(n), sign = n < 0 ? "-" : "";
+  const f = (v: number, u: string) => `${sign}₹${(Math.round(v * 10) / 10).toString()}${u}`;
+  if (a >= 1e7) return f(a / 1e7, "Cr");
+  if (a >= 1e5) return f(a / 1e5, "L");
+  if (a >= 1e3) return f(a / 1e3, "K");
+  return `${sign}₹${Math.round(a)}`;
+};
+void inrCompact;
 export const formatPct = (n: number | null) => (n == null ? "—" : `${Math.round(n * 100)}%`);
 
 /** yyyy-mm-dd in the business timezone */
@@ -23,7 +35,8 @@ export function isToday(d: string) {
 
 export function formatDate(d?: string, opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" }) {
   if (!d) return "—";
-  return new Intl.DateTimeFormat("en-IN", { timeZone: TIMEZONE, ...opts }).format(new Date(d));
+  const o = displayPrefs.longDate && opts.month === "short" && !opts.weekday ? { ...opts, month: "long" as const } : opts;
+  return new Intl.DateTimeFormat("en-IN", { timeZone: TIMEZONE, ...o }).format(new Date(d));
 }
 
 export function formatDateTime(d?: string) {
@@ -31,14 +44,15 @@ export function formatDateTime(d?: string) {
   return new Intl.DateTimeFormat("en-IN", {
     timeZone: TIMEZONE,
     day: "numeric",
-    month: "short",
+    month: displayPrefs.longDate ? "long" : "short",
     hour: "numeric",
     minute: "2-digit",
+    hour12: displayPrefs.hour12,
   }).format(new Date(d));
 }
 
 export function formatTime(d: string) {
-  return new Intl.DateTimeFormat("en-IN", { timeZone: TIMEZONE, hour: "numeric", minute: "2-digit" }).format(
+  return new Intl.DateTimeFormat("en-IN", { timeZone: TIMEZONE, hour: "numeric", minute: "2-digit", hour12: displayPrefs.hour12 }).format(
     new Date(d),
   );
 }
