@@ -33,7 +33,7 @@ export const Route = createFileRoute("/follow-ups")({
 type Tab = "overdue" | "today" | "upcoming" | "done";
 const TABS: [Tab, string][] = [["overdue", "Overdue"], ["today", "Today"], ["upcoming", "Upcoming"], ["done", "History"]];
 /** Same time of day, one day later — the follow-up's own scheduled time is the configured time. */
-export const tomorrowSameTime = (iso: string) => new Date(new Date(iso).getTime() + 86_400_000).toISOString();
+const tomorrowSameTime = (iso: string) => new Date(new Date(iso).getTime() + 86_400_000).toISOString();
 const timeOnly = (iso: string) => new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" }).format(new Date(iso));
 
 function FollowUps() {
