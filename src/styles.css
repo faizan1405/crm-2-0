@@ -562,3 +562,52 @@ main input[type="checkbox"] { accent-color: var(--foreground); width: 16px; heig
 @keyframes fill-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 .collect-bar { display: flex; height: 14px; gap: 2px; border-radius: 999px; overflow: hidden; }
 .collect-bar > div { flex-basis: 0; height: 100%; transform-origin: left; animation: fill-grow 700ms var(--ease-out) both; }
+
+/* ── Phase 2A: WhatsApp composer & follow-up agenda ── */
+.wa-btn { display: inline-grid; place-items: center; grid-auto-flow: column; gap: 6px; height: 32px; min-width: 32px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); color: var(--success); font-size: 12px; font-weight: 600; transition: transform 150ms ease, background 150ms ease, border-color 150ms ease; }
+.wa-btn.has-label { padding: 0 12px; color: var(--foreground); }
+.wa-btn.has-label svg { color: var(--success); }
+.wa-btn:hover { transform: translateY(-1px); border-color: color-mix(in oklab, var(--success) 45%, var(--border)); background: color-mix(in oklab, var(--success) 8%, var(--card)); }
+.wa-btn:active { transform: scale(.94); }
+.wa-composer { animation: wa-in 200ms cubic-bezier(.2,.8,.2,1); }
+@keyframes wa-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+.wa-client { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); background: color-mix(in oklab, var(--muted) 55%, var(--card)); }
+.wa-purpose { display: grid; justify-items: start; gap: 4px; padding: 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); text-align: left; transition: border-color 180ms ease, background 180ms ease, transform 150ms ease, box-shadow 180ms ease; }
+.wa-purpose:hover { transform: translateY(-1px); }
+.wa-purpose[aria-checked="true"] { border-color: var(--lime); background: color-mix(in oklab, var(--lime) 16%, var(--card)); box-shadow: 0 0 0 1px var(--lime); }
+.wa-purpose:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.wa-editor { animation: wa-fade 180ms ease; }
+@keyframes wa-fade { from { opacity: .3; } }
+.wa-after { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--success-soft); }
+.fu-overview { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+@media (min-width: 768px) { .fu-overview { grid-template-columns: repeat(4, minmax(0,1fr)); } }
+.fu-metric { display: grid; justify-items: start; gap: 2px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--border); background: var(--card); text-align: left; transition: transform 150ms ease, border-color 150ms ease; }
+.fu-metric:hover { transform: translateY(-1px); }
+.fu-metric svg { color: var(--muted-foreground); margin-bottom: 4px; }
+.fu-metric[data-tone="danger"] { border-color: color-mix(in oklab, var(--destructive) 35%, var(--border)); }
+.fu-metric[data-tone="danger"] svg, .fu-metric[data-tone="danger"] .num { color: var(--destructive); }
+.fu-metric[data-tone="hot"] svg { color: var(--warning); }
+.fu-tabs { display: flex; gap: 4px; overflow-x: auto; padding: 4px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); width: fit-content; max-width: 100%; }
+.fu-tab { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 500; color: var(--muted-foreground); transition: background 150ms ease, color 150ms ease; }
+.fu-tab[aria-selected="true"] { background: var(--foreground); color: var(--background); }
+.fu-count { font-size: 11px; padding: 0 6px; border-radius: 999px; background: color-mix(in oklab, currentColor 14%, transparent); }
+.fu-count.is-danger { background: var(--destructive); color: var(--destructive-foreground, white); }
+.fu-card { position: relative; padding: 16px 16px 14px 20px; border-radius: 16px; border: 1px solid var(--border); background: var(--card); box-shadow: var(--shadow-card, none); animation: fu-in 220ms ease both; transition: border-color 150ms ease, transform 150ms ease; }
+.fu-card::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 0 3px 3px 0; background: var(--border); }
+.fu-card[data-bucket="overdue"]::before { background: var(--destructive); }
+.fu-card[data-bucket="today"]::before { background: var(--lime); }
+.fu-card[data-bucket="upcoming"]::before { background: var(--teal, var(--primary)); }
+.fu-card:hover { border-color: color-mix(in oklab, var(--foreground) 18%, var(--border)); }
+@keyframes fu-in { from { opacity: 0; transform: translateY(4px); } }
+.fu-when { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-foreground); }
+.fu-when[data-bucket="overdue"] .num { color: var(--destructive); font-weight: 600; }
+.fu-type { padding: 2px 8px; border-radius: 999px; background: var(--primary-soft); color: var(--primary); font-weight: 600; font-size: 11px; }
+.fu-flag { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--destructive-soft); color: var(--destructive); }
+.fu-flag.is-muted { background: var(--muted); color: var(--muted-foreground); }
+.fu-flag.is-done { background: var(--success-soft); color: var(--success); }
+.fu-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
+.fu-facts { display: grid; gap: 1px; overflow: hidden; border-radius: 12px; border: 1px solid var(--border); background: var(--border); }
+.fu-facts > div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; background: var(--card); font-size: 13px; }
+.fu-facts dt { color: var(--muted-foreground); }
+.fu-facts dd { text-align: right; font-weight: 500; }
+@media (prefers-reduced-motion: reduce) { .wa-composer, .wa-editor, .fu-card { animation: none; } .wa-btn, .wa-purpose, .fu-metric, .fu-card { transition: none; } }
