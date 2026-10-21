@@ -36,7 +36,7 @@ export function FollowUpDialog({ open, onOpenChange, leadId }: { open: boolean; 
               </select>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="grid gap-1.5"><Label htmlFor="fu-type">Type</Label><select id="fu-type" className={selectCls} value={type} onChange={(e) => setType(e.target.value as FollowUpType)}>{Object.entries(FOLLOWUP_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
             <div className="grid gap-1.5"><Label htmlFor="fu-at">When</Label><Input id="fu-at" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} /></div>
           </div>
@@ -55,7 +55,7 @@ export function LostReasonDialog({ leadName, open, onCancel, onConfirm }: { lead
     <Dialog open={open} onOpenChange={(o) => { if (!o) { setReason(""); onCancel(); } }}>
       <DialogContent>
         <DialogHeader><DialogTitle>Mark {leadName ?? "lead"} as lost</DialogTitle></DialogHeader>
-        <div className="flex flex-wrap gap-2">{presets.map((p) => <button key={p} onClick={() => setReason(p)} className="rounded-full border px-3 py-1 text-xs hover:border-primary hover:text-primary">{p}</button>)}</div>
+        <div className="flex flex-wrap gap-2">{presets.map((p) => <Button variant="outline" size="sm" key={p} onClick={() => setReason(p)} className="rounded-full border px-3 py-1 text-xs hover:border-primary hover:text-primary">{p}</Button>)}</div>
         <Textarea placeholder="Why was this lead lost?" value={reason} onChange={(e) => setReason(e.target.value)} />
         <DialogFooter>
           <Button variant="ghost" onClick={() => { setReason(""); onCancel(); }}>Cancel</Button>

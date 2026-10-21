@@ -46,19 +46,19 @@ function Settings() {
   const [email, setEmail] = useState(s.email);
   const p = (patch: Partial<Prefs>) => { s.preferences(patch); toast.success("Preference saved"); };
   const Choice = <T extends string>({ value, options, onChange }: { value: T; options: readonly (readonly [T, string, React.ReactNode?])[]; onChange: (v: T) => void }) => (
-    <div className="flex flex-wrap gap-2">{options.map(([v, l, icon]) => <button key={v} onClick={() => onChange(v)} className={cn("flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors", value === v ? "border-primary bg-primary-soft text-primary" : "hover:border-foreground/20")}>{icon}{l}</button>)}</div>
+    <div className="flex flex-wrap gap-2">{options.map(([v, l, icon]) => <Button variant="outline" key={v} onClick={() => onChange(v)} className={cn("flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors", value === v ? "border-primary bg-primary-soft text-primary" : "hover:border-foreground/20")}>{icon}{l}</Button>)}</div>
   );
   const Row = ({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) => (
-    <div className="grid gap-2 border-b py-4 last:border-0 lg:grid-cols-[180px_minmax(0,1fr)] lg:items-center"><div><div className="text-sm font-medium">{label}</div>{hint && <div className="text-xs text-muted-foreground">{hint}</div>}</div><div>{children}</div></div>
+    <div className="grid gap-3 border-b py-5 last:border-0 lg:grid-cols-[180px_minmax(0,1fr)] lg:items-center"><div><div className="text-sm font-medium">{label}</div>{hint && <div className="text-xs text-muted-foreground">{hint}</div>}</div><div>{children}</div></div>
   );
 
   return (
     <Shell title="Settings" subtitle="Preferences are saved on this device">
       <div className="grid gap-5 xl:grid-cols-[220px_minmax(0,1fr)]">
         <nav className="flex gap-1 overflow-x-auto xl:flex-col">
-          {SECTIONS.map((x) => <button key={x.id} onClick={() => setSec(x.id)} className={cn("flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors", sec === x.id ? "bg-card font-medium text-foreground shadow-card" : "text-muted-foreground hover:text-foreground")}><x.icon className="size-4" />{x.label}</button>)}
+          {SECTIONS.map((x) => <Button variant="ghost" key={x.id} onClick={() => setSec(x.id)} className={cn("flex shrink-0 justify-start items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors", sec === x.id ? "bg-card font-medium text-foreground shadow-card" : "text-muted-foreground hover:text-foreground")}><x.icon className="size-4" />{x.label}</Button>)}
         </nav>
-        <section className="surface p-5 sm:p-6">
+        <section className="settings-content surface p-5 sm:p-6">
           <h2 className="mb-2 text-lg font-semibold">{SECTIONS.find((x) => x.id === sec)?.label}</h2>
           {sec === "profile" && <>
             <div className="flex items-center gap-4 py-3"><div className="grid size-14 place-items-center rounded-full bg-primary text-lg font-bold text-primary-foreground">{initials(s.owner)}</div><div><div className="font-semibold">{s.owner}</div><div className="text-sm text-muted-foreground">{s.email} · Owner</div></div></div>
@@ -69,7 +69,7 @@ function Settings() {
           </>}
           {sec === "appearance" && <>
             <Row label="Theme"><Choice value={s.theme} onChange={(v) => p({ theme: v })} options={[["light", "Light", <Sun key="l" className="size-4" />], ["dark", "Dark", <Moon key="d" className="size-4" />], ["system", "System", <Monitor key="s" className="size-4" />]] as const} /></Row>
-            <Row label="Accent colour"><div className="flex gap-2">{(["indigo", "emerald", "blue"] as const).map((a) => <button key={a} aria-label={a} onClick={() => p({ accent: a })} data-swatch={a} className={cn("size-9 rounded-full border-4 border-card ring-2 transition", s.accent === a ? "ring-foreground" : "ring-transparent")} />)}</div></Row>
+            <Row label="Accent colour"><div className="flex gap-2">{(["indigo", "emerald", "blue"] as const).map((a) => <Button size="icon" key={a} title={a} aria-label={a} onClick={() => p({ accent: a })} data-swatch={a} className={cn("size-9 rounded-full border-4 border-card ring-2 transition", s.accent === a ? "ring-foreground" : "ring-transparent")} />)}</div></Row>
             <Row label="Density" hint="Compact shows more on screen"><Choice value={s.density} onChange={(v) => p({ density: v })} options={[["comfortable", "Comfortable"], ["compact", "Compact"]] as const} /></Row>
           </>}
           {sec === "datetime" && <>

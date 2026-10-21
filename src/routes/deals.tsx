@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Plus, Wallet, ChevronDown } from "lucide-react";
+import { Plus, Wallet, ChevronDown, IndianRupee, Target, AlertCircle, Percent, ArrowDownLeft } from "lucide-react";
 import { Shell, Stat, Empty, selectCls } from "@/components/crm/Shell";
 import { useCRM } from "@/lib/crm/store";
 import { financeSummary, dealCollected, dealOutstanding, dealPaymentStatus } from "@/lib/crm/finance";
@@ -41,16 +41,17 @@ function Deals() {
 
   return (
     <Shell title="Deals & Payments" subtitle={`${deals.length} deals · CRM clients and other clients`} actions={<Button onClick={() => setAddDeal(true)}><Plus className="size-4" />New deal</Button>}>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Total deal value" value={formatINRCompact(fin.totalValue)} hint="Excludes cancelled" />
-        <Stat label="Money received" value={formatINRCompact(fin.collected)} hint={`${formatPct(fin.collectionRate)} collected`} tone="success" />
-        <Stat label="Outstanding" value={formatINRCompact(fin.outstanding)} tone="warning" />
-        <Stat label="Overdue" value={formatINRCompact(fin.overdue)} tone="destructive" />
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
+        <Stat label="Total deal value" value={formatINRCompact(fin.totalValue)} hint="Excludes cancelled" icon={<IndianRupee />} />
+        <Stat label="Money received" value={formatINRCompact(fin.collected)} hint={`${formatPct(fin.collectionRate)} collected`} tone="success" icon={<Wallet />} />
+        <Stat label="Outstanding" value={formatINRCompact(fin.outstanding)} tone="warning" icon={<Target />} />
+        <Stat label="Overdue" value={formatINRCompact(fin.overdue)} tone="destructive" icon={<AlertCircle />} />
+        <Stat label="Collection rate" value={formatPct(fin.collectionRate)} tone="teal" icon={<Percent />} />
       </div>
       <div className="mt-6 mb-3 flex gap-1 rounded-lg bg-muted p-1 sm:inline-flex">
-        {(["all", "due", "overdue", "paid"] as const).map((f) => <button key={f} onClick={() => setFilter(f)} className={cn("rounded-md px-3 py-1.5 text-sm font-medium capitalize", filter === f ? "bg-card shadow-card" : "text-muted-foreground")}>{f}</button>)}
+        {(["all", "due", "overdue", "paid"] as const).map((f) => <Button variant="ghost" size="sm" key={f} onClick={() => setFilter(f)} className={cn("rounded-md px-3 py-1.5 text-sm font-medium capitalize", filter === f ? "bg-card shadow-card" : "text-muted-foreground")}>{f === "all" ? "All deals" : f === "due" ? "Payment due" : f}</Button>)}
       </div>
-      <div className="grid gap-3">
+      <div className="grid gap-4">
         {list.length === 0 && <div className="surface"><Empty icon={<Wallet />} title="No deals here" /></div>}
         {list.map((d) => {
           const st = dealPaymentStatus(d, payments);
@@ -59,10 +60,10 @@ function Deals() {
           const pct = d.finalAmount ? Math.min(got / d.finalAmount, 1) : 0;
           const hist = payments.filter((p) => p.dealId === d.id).sort((a, b) => b.date.localeCompare(a.date));
           return (
-            <div key={d.id} className="surface p-4">
+            <div key={d.id} className="deal-card surface surface-hover">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <div className="font-semibold">{d.name}</div>
+                  <div className="mb-3 flex items-center gap-3"><div className="grid size-10 place-items-center rounded-lg bg-teal-soft text-teal"><Wallet className="size-5" /></div><div><div className="font-display font-bold">{d.name}</div><div className="mt-0.5 text-xs text-muted-foreground">{d.clientName}{d.company ? ` · ${d.company}` : ""}</div></div></div>
                   <div className="text-sm text-muted-foreground">
                     {d.leadId ? <Link to="/leads/$id" params={{ id: d.leadId }} className="hover:text-primary">{d.clientName}</Link> : d.clientName}
                     {d.company ? ` · ${d.company}` : ""} · {d.clientType === "crm" ? "CRM client" : "Other client"} · due {formatDate(d.dueDate)} · {DEAL_STATUS_LABEL[d.status]}
@@ -70,7 +71,8 @@ function Deals() {
                 </div>
                 <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold capitalize", TONE[st])}>{st}</span>
               </div>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-success transition-all" style={{ width: `${pct * 100}%` }} /></div>
+              <div className="mt-5 grid grid-cols-3 gap-4 border-t pt-4"><div><span className="text-[10px] uppercase text-muted-foreground">Contract value</span><div className="num mt-1 text-lg font-bold">{formatINR(d.finalAmount)}</div></div><div><span className="text-[10px] uppercase text-muted-foreground">Received</span><div className="num mt-1 text-lg font-bold text-success">{formatINR(got)}</div></div><div><span className="text-[10px] uppercase text-muted-foreground">Outstanding</span><div className="num mt-1 text-lg font-bold text-warning">{formatINR(out)}</div></div></div>
+              <div className="deal-progress mt-4 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-success transition-all" style={{ width: `${pct * 100}%` }} /></div>
               <div className="num mt-2 flex flex-wrap items-center justify-between gap-2 text-sm">
                 <span><b>{formatINR(got)}</b> of {formatINR(d.finalAmount)} <span className="text-muted-foreground">· quoted {formatINR(d.quotedAmount)} · {formatINR(out)} due</span></span>
                 <div className="flex gap-2">
@@ -101,7 +103,7 @@ function PaymentRow({ id }: { id: string }) {
   return (
     <li className={cn("num flex items-center justify-between gap-2 p-3", p.voided && "text-muted-foreground line-through")}>
       <span>{formatDate(p.date, { day: "numeric", month: "short", year: "numeric" })} · {p.method} · <span className="capitalize">{p.type}</span>{p.reference ? ` · ${p.reference}` : ""}</span>
-      <span className="flex items-center gap-3"><b>{formatINR(p.amount)}</b>{!p.voided && <button className="text-xs text-muted-foreground hover:text-destructive" onClick={() => { if (window.confirm("Void this payment?")) { voidPayment(p.id); toast.success("Payment voided"); } }}>Void</button>}</span>
+      <span className="flex items-center gap-3"><b>{formatINR(p.amount)}</b>{!p.voided && <Button size="sm" variant="ghost" className="text-xs text-muted-foreground hover:text-destructive" onClick={() => { if (window.confirm("Void this payment?")) { voidPayment(p.id); toast.success("Payment voided"); } }}>Void</Button>}</span>
     </li>
   );
 }
@@ -127,7 +129,7 @@ function PaymentDialog({ deal, onClose }: { deal: Deal; onClose: () => void }) {
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader><DialogTitle>Record payment · {deal.name}</DialogTitle></DialogHeader>
-        <p className="num text-sm text-muted-foreground">Outstanding: <b className="text-foreground">{formatINR(out)}</b></p>
+        <div className="rounded-lg border border-teal/20 bg-teal-soft p-4"><div className="flex items-center gap-2 text-xs text-teal"><ArrowDownLeft className="size-4" />Payment for {deal.clientName}</div><div className="num mt-2 text-2xl font-extrabold text-foreground">{formatINR(out)}</div><div className="mt-1 text-xs text-muted-foreground">Outstanding balance</div></div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5"><Label htmlFor="pay-amount">Amount (₹)</Label><Input id="pay-amount" type="number" min={1} max={out} value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
           <div className="grid gap-1.5"><Label htmlFor="pay-date">Date</Label><Input id="pay-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
@@ -162,7 +164,7 @@ function NewDealDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o
       <DialogContent className="sm:max-w-xl">
         <DialogHeader><DialogTitle>New deal</DialogTitle></DialogHeader>
         <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
-          {(["crm", "other"] as const).map((t) => <button key={t} onClick={() => setType(t)} className={cn("rounded-md py-1.5 text-sm font-medium", type === t ? "bg-card shadow-card" : "text-muted-foreground")}>{t === "crm" ? "CRM lead" : "Other client"}</button>)}
+          {(["crm", "other"] as const).map((t) => <Button variant="ghost" key={t} onClick={() => setType(t)} className={cn("rounded-md py-1.5 text-sm font-medium", type === t ? "bg-card shadow-card" : "text-muted-foreground")}>{t === "crm" ? "CRM lead" : "Other client"}</Button>)}
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           {type === "crm" ? (

@@ -78,25 +78,25 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Add lead</DialogTitle>
-          <DialogDescription>Paste details for a quick structure, or fill the form manually.</DialogDescription>
+          <DialogDescription>A new opportunity starts here.</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1" role="tablist">
           {([["ai", "Quick AI Entry", Sparkles], ["manual", "Manual Entry", PenLine]] as const).map(([m, label, Icon]) => (
-            <button key={m} role="tab" aria-selected={mode === m} onClick={() => setMode(m)} className={cn("flex items-center justify-center gap-2 rounded-md py-1.5 text-sm font-medium transition-colors", mode === m ? "bg-card text-foreground shadow-card" : "text-muted-foreground hover:text-foreground")}>
+            <Button variant="ghost" key={m} role="tab" aria-selected={mode === m} onClick={() => setMode(m)} className={cn("flex items-center justify-center gap-2 rounded-md py-1.5 text-sm font-medium transition-colors", mode === m ? "bg-card text-foreground shadow-card" : "text-muted-foreground hover:text-foreground")}>
               <Icon className="size-4" />{label}
-            </button>
+            </Button>
           ))}
         </div>
 
         {mode === "ai" && (
-          <div className="grid gap-2">
+          <div className="grid gap-3 rounded-lg border border-primary/20 bg-primary-soft/40 p-4">
             <div className="flex items-center justify-between">
               <Label htmlFor="raw">Lead details</Label>
               <span className="rounded-full bg-warning-soft px-2 py-0.5 text-[10px] font-semibold text-warning uppercase">Demo parser · not real AI</span>
             </div>
-            <Textarea id="raw" rows={4} value={raw} onChange={(e) => setRaw(e.target.value)} placeholder={SAMPLE} />
+            <Textarea id="raw" rows={5} value={raw} onChange={(e) => setRaw(e.target.value)} placeholder={SAMPLE} />
             <div className="flex flex-wrap justify-between gap-2">
-              <button className="text-xs text-primary hover:underline" onClick={() => setRaw(SAMPLE)}>Use example</button>
+              <Button variant="link" size="sm" onClick={() => setRaw(SAMPLE)}>Use example</Button>
               <Button onClick={structure}><Sparkles className="size-4" />Structure lead</Button>
             </div>
             {structured && <p className="text-xs text-muted-foreground">Review the fields below. Anything not found was left empty — nothing is guessed.</p>}
@@ -104,7 +104,7 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
         )}
 
         {showForm && (
-          <div className="grid gap-3 border-t pt-4 sm:grid-cols-2">
+          <div className="grid gap-4 border-t pt-5 sm:grid-cols-2">
             {field("name", "Full name *")}
             {field("phone", "Phone *", { inputMode: "tel" })}
             {dup && (

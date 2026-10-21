@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Search, Trash2, Pin, Users } from "lucide-react";
-import { Shell, PriorityBadge, Empty, selectCls } from "@/components/crm/Shell";
+import { Shell, PriorityBadge, Empty, Identity, selectCls } from "@/components/crm/Shell";
 import { AddLeadDialog } from "@/components/crm/AddLeadDialog";
 import { LostReasonDialog } from "@/components/crm/Dialogs";
 import { useCRM } from "@/lib/crm/store";
@@ -50,7 +50,8 @@ function Leads() {
 
   return (
     <Shell title="Leads" subtitle={`${rows.length} of ${leads.length} leads`} actions={<Button onClick={() => setOpen(true)}><Plus className="size-4" />Add lead</Button>}>
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-5 flex max-w-full gap-1 overflow-x-auto border-b pb-3 scrollbar-thin">{(["all", ...LEAD_STATUSES] as const).map(s => <Button key={s} size="sm" variant="ghost" onClick={() => setStatus(s)} className={cn("shrink-0", status === s ? "bg-primary-soft text-primary" : "text-muted-foreground")}>{s === "all" ? "All leads" : STATUS_LABEL[s]}<span className="ml-1 text-[10px] opacity-70">{s === "all" ? leads.length : leads.filter(l => l.status === s).length}</span></Button>)}</div>
+      <div className="mb-5 flex flex-wrap gap-2">
         <div className="relative min-w-56 flex-1"><Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" /><Input className="pl-8" placeholder="Search name, company, phone or email" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <select aria-label="Status filter" className={selectCls} value={status} onChange={(e) => setStatus(e.target.value as typeof status)}><option value="all">All stages</option>{LEAD_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select>
         <select aria-label="Source filter" className={selectCls} value={source} onChange={(e) => setSource(e.target.value as typeof source)}><option value="all">All sources</option>{LEAD_SOURCES.map((s) => <option key={s}>{s}</option>)}</select>
@@ -61,13 +62,13 @@ function Leads() {
         {rows.length === 0 ? (
           <Empty icon={<Users />} title="No leads match" hint="Try clearing a filter or add a new lead." action={<Button variant="outline" onClick={() => { setQ(""); setStatus("all"); setSource("all"); setPrio("all"); }}>Clear filters</Button>} />
         ) : (
-          <table className="w-full min-w-[820px] text-sm">
+          <table className="w-full min-w-[1120px] text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
             <thead className="bg-muted/50 text-left text-xs text-muted-foreground"><tr>{["", "Lead", "Phone", "Source", "Priority", "Score", "Quoted", "Stage", "Updated", ""].map((h, i) => <th key={i} className="px-3 py-2.5 font-medium">{h}</th>)}</tr></thead>
             <tbody>
               {rows.map((l) => (
                 <tr key={l.id} className="border-t transition-colors hover:bg-muted/40">
-                  <td className="pl-3"><button aria-label={l.pinned ? "Unpin" : "Pin"} onClick={() => updateLead(l.id, { pinned: !l.pinned })} className={cn("rounded p-1", l.pinned ? "text-primary" : "text-muted-foreground/40 hover:text-muted-foreground")}><Pin className="size-3.5" /></button></td>
-                  <td className="px-3 py-3"><Link to="/leads/$id" params={{ id: l.id }} className="font-medium text-foreground hover:text-primary">{l.name}</Link><div className="text-xs text-muted-foreground">{l.company ?? "—"}</div></td>
+                  <td className="pl-3"><Button size="icon" variant="ghost" title={l.pinned ? "Unpin" : "Pin"} aria-label={l.pinned ? "Unpin" : "Pin"} onClick={() => updateLead(l.id, { pinned: !l.pinned })} className={cn("rounded p-1", l.pinned ? "text-primary" : "text-muted-foreground/40 hover:text-muted-foreground")}><Pin className="size-3.5" /></Button></td>
+                  <td className="min-w-52 px-3 py-3"><Link to="/leads/$id" params={{ id: l.id }} className="text-foreground hover:text-primary"><Identity name={l.name} company={l.company} /></Link></td>
                   <td className="num px-3 py-3 text-muted-foreground">{l.phone}</td>
                   <td className="px-3 py-3">{l.source}</td>
                   <td className="px-3 py-3"><PriorityBadge p={l.priority} /></td>
@@ -75,7 +76,7 @@ function Leads() {
                   <td className="num px-3 py-3">{formatINR(l.quotedAmount)}</td>
                   <td className="px-3 py-3"><select aria-label="Stage" className={cn(selectCls, "h-8")} value={l.status} onChange={(e) => changeStatus(l.id, e.target.value as LeadStatus)}>{LEAD_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select></td>
                   <td className="px-3 py-3 text-xs text-muted-foreground">{relative(l.updatedAt)}</td>
-                  <td className="pr-3"><button aria-label="Delete lead" className="rounded p-1 text-muted-foreground hover:text-destructive" onClick={() => { if (window.confirm(`Delete ${l.name}?`)) { deleteLead(l.id); toast.success("Lead deleted"); } }}><Trash2 className="size-4" /></button></td>
+                  <td className="pr-3"><Button size="icon" variant="ghost" title="Delete lead" aria-label="Delete lead" className="rounded p-1 text-muted-foreground hover:text-destructive" onClick={() => { if (window.confirm(`Delete ${l.name}?`)) { deleteLead(l.id); toast.success("Lead deleted"); } }}><Trash2 className="size-4" /></Button></td>
                 </tr>
               ))}
             </tbody>

@@ -70,13 +70,13 @@ function Briefing() {
 
   return (
     <Shell title="Daily Briefing" subtitle="Your sales plan for today">
-      <section className="relative overflow-hidden rounded-2xl bg-hero-gradient p-6 text-hero-foreground sm:p-8">
+      <section className="briefing-banner relative overflow-hidden p-6 text-hero-foreground sm:p-8">
         <div className="text-xs font-medium tracking-wider text-hero-muted uppercase">{formatDate(now.toISOString(), { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div>
         <h2 className="mt-2 font-display text-3xl font-bold sm:text-4xl">{greeting()}, {owner}.</h2>
         <p className="mt-2 max-w-xl text-sm text-hero-muted">You have <b className="text-hero-foreground">{counts.critical} critical</b> and <b className="text-hero-foreground">{counts.important} important</b> actions today, across <b className="text-hero-foreground">{formatINRCompact(d.openValue)}</b> of open opportunity.</p>
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[["Hot leads", d.hot.length], ["Follow-ups today", d.todayFu.length], ["Overdue", d.overdueFu.length], ["Open value", formatINRCompact(d.openValue)]].map(([l, v]) => (
-            <div key={l as string} className="rounded-xl border border-hero-foreground/10 bg-hero-foreground/5 p-3"><div className="num font-display text-2xl font-bold">{v}</div><div className="text-xs text-hero-muted">{l}</div></div>
+            <div key={l as string} className="border-l border-hero-foreground/20 pl-4"><div className="num font-display text-2xl font-bold">{v}</div><div className="text-xs text-hero-muted">{l}</div></div>
           ))}
         </div>
       </section>
@@ -95,7 +95,7 @@ function Briefing() {
             {top.map((t, i) => <li key={t.key} className="rounded-lg border p-3 text-sm"><div className="text-xs text-muted-foreground">Priority {i + 1}</div><div className="font-medium">{t.lead.name}</div><div className="text-xs text-muted-foreground">{t.action}</div></li>)}
           </ol>
         )}
-        <button onClick={() => setExpanded(!expanded)} className="mt-3 flex items-center gap-1 text-xs font-medium text-primary">How these are chosen<ChevronDown className={cn("size-3.5 transition-transform", expanded && "rotate-180")} /></button>
+        <Button variant="link" size="sm" onClick={() => setExpanded(!expanded)} className="mt-3 flex items-center gap-1 text-xs font-medium text-primary">How these are chosen<ChevronDown className={cn("size-3.5 transition-transform", expanded && "rotate-180")} /></Button>
         {expanded && <ul className="mt-2 list-disc pl-5 text-xs text-muted-foreground"><li>Critical: overdue follow-ups, or a hot lead's follow-up due today.</li><li>Important: follow-ups due today, proposals with nothing scheduled, hot leads without a plan.</li><li>Normal: new leads not yet contacted. Ties are broken by opportunity value.</li><li>These rules run on your demo data only — no AI service is connected yet.</li></ul>}
       </section>
 
@@ -105,12 +105,12 @@ function Briefing() {
         ))}
       </div>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_340px]">
+      <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
         <section className="surface p-5">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-semibold">Today's priorities</h2>
             <div className="flex flex-wrap items-center gap-1">
-              {(["all", "critical", "important", "normal", "done"] as const).map((f) => <button key={f} onClick={() => setFilter(f)} className={cn("rounded-full px-3 py-1 text-xs font-medium capitalize", filter === f ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground")}>{f}</button>)}
+              {(["all", "critical", "important", "normal", "done"] as const).map((f) => <Button variant="ghost" size="sm" key={f} onClick={() => setFilter(f)} className={cn("rounded-full px-3 py-1 text-xs font-medium capitalize", filter === f ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground")}>{f}</Button>)}
               <Button size="sm" variant="ghost" onClick={() => { resetBriefing(); toast.success("Checklist reset"); }}><RotateCcw className="size-3.5" />Reset</Button>
             </div>
           </div>
@@ -119,7 +119,7 @@ function Briefing() {
             {items.map((i) => {
               const done = briefingDone.includes(i.key);
               return (
-                <li key={i.key} className={cn("rounded-xl border p-4 transition-colors hover:border-primary/40", done && "opacity-60")}>
+                <li key={i.key} className={cn("rounded-lg border border-border bg-card p-5 shadow-card transition-colors hover:border-primary/40", done && "opacity-60")}>
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <div className="flex flex-wrap items-center gap-2"><span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold uppercase", SEV[i.severity])}>{i.severity}</span><span className="font-medium">{i.lead.name}</span>{i.lead.company && <span className="text-sm text-muted-foreground">· {i.lead.company}</span>}</div>

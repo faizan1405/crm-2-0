@@ -10,8 +10,8 @@
  */
 
 @theme inline {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Manrope", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Manrope", ui-sans-serif, system-ui, sans-serif;
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -29,6 +29,8 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-soft: var(--primary-soft);
+  --color-primary-hover: var(--primary-hover);
+  --color-overlay: var(--overlay);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -74,23 +76,23 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(0.981 0.003 248);
-  --foreground: oklch(0.245 0.03 255);
+  --radius: 0.375rem;
+  --background: oklch(0.975 0.007 260);
+  --foreground: oklch(0.265 0.049 263);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.245 0.03 255);
+  --card-foreground: oklch(0.265 0.049 263);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.245 0.03 255);
-  --primary: oklch(0.56 0.2 270);
+  --primary: oklch(0.585 0.216 266);
   --primary-foreground: oklch(0.99 0.005 270);
-  --primary-soft: oklch(0.95 0.03 270);
+  --primary-soft: oklch(0.962 0.019 265);
   --secondary: oklch(0.962 0.006 255);
   --secondary-foreground: oklch(0.245 0.03 255);
   --muted: oklch(0.962 0.006 255);
-  --muted-foreground: oklch(0.554 0.041 257);
+  --muted-foreground: oklch(0.552 0.033 263);
   --accent: oklch(0.955 0.012 265);
   --accent-foreground: oklch(0.245 0.03 255);
-  --teal: oklch(0.65 0.11 185);
+  --teal: oklch(0.61 0.113 183);
   --teal-soft: oklch(0.95 0.03 185);
   --success: oklch(0.596 0.127 163);
   --success-soft: oklch(0.95 0.04 163);
@@ -101,31 +103,30 @@
   --destructive-foreground: oklch(0.99 0 0);
   --info-soft: oklch(0.95 0.03 240);
   --neutral-soft: oklch(0.95 0.005 255);
-  --border: oklch(0.938 0.008 255);
-  --input: oklch(0.91 0.01 255);
+  --border: oklch(0.933 0.012 260);
+  --input: oklch(0.917 0.015 260);
   --ring: oklch(0.56 0.2 270 / 45%);
-  --chart-1: oklch(0.56 0.2 270);
+  --chart-1: oklch(0.585 0.216 266);
   --chart-2: oklch(0.65 0.11 185);
   --chart-3: oklch(0.666 0.157 58);
   --chart-4: oklch(0.596 0.127 163);
   --chart-5: oklch(0.63 0.18 15);
   --chart-6: oklch(0.72 0.03 257);
-  --sidebar: oklch(0.21 0.032 265);
+  --sidebar: oklch(0.225 0.046 264);
   --sidebar-foreground: oklch(0.93 0.01 260);
-  --sidebar-muted: oklch(0.66 0.025 260);
-  --sidebar-primary: oklch(0.68 0.16 270);
+  --sidebar-muted: oklch(0.72 0.025 260);
+  --sidebar-primary: oklch(0.625 0.185 264);
   --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.27 0.035 265);
+  --sidebar-accent: oklch(0.31 0.059 264);
   --sidebar-accent-foreground: oklch(0.98 0.005 260);
   --sidebar-border: oklch(0.3 0.03 265);
   --sidebar-ring: oklch(0.68 0.16 270);
   --hero: oklch(0.21 0.032 265);
   --hero-foreground: oklch(0.97 0.006 260);
   --hero-muted: oklch(0.72 0.025 260);
-  --gradient-hero:
-    radial-gradient(120% 140% at 100% 0%, oklch(0.56 0.2 270 / 35%) 0%, transparent 55%),
-    radial-gradient(90% 120% at 0% 100%, oklch(0.65 0.11 185 / 22%) 0%, transparent 60%),
-    linear-gradient(160deg, oklch(0.23 0.035 265), oklch(0.18 0.03 265));
+  --gradient-hero: linear-gradient(115deg, var(--hero), var(--sidebar-accent));
+  --overlay: oklch(0.15 0.03 265 / 45%);
+  --primary-hover: oklch(0.51 0.218 266);
   --shadow-card: 0 1px 2px oklch(0.245 0.03 255 / 5%), 0 1px 1px oklch(0.245 0.03 255 / 3%);
   --shadow-lift: 0 8px 24px -10px oklch(0.245 0.03 255 / 18%), 0 2px 4px oklch(0.245 0.03 255 / 4%);
   --shadow-pop: 0 20px 50px -18px oklch(0.245 0.03 255 / 30%);
@@ -200,7 +201,7 @@
 @utility surface {
   background-color: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
+  border-radius: 8px;
   box-shadow: var(--shadow-card);
 }
 
@@ -230,13 +231,13 @@
 }
 
 @utility page-enter {
-  animation: page-in 220ms ease-out both;
+  animation: page-in 260ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
 @keyframes page-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -249,8 +250,80 @@ html[data-accent="emerald"] { --primary: oklch(0.6 0.14 163); --primary-soft: ok
 html[data-accent="blue"] { --primary: oklch(0.58 0.17 245); --primary-soft: oklch(0.95 0.03 245); --ring: oklch(0.58 0.17 245 / 45%); --sidebar-primary: oklch(0.66 0.15 245); --chart-1: oklch(0.58 0.17 245); }
 html.dark[data-accent="emerald"] { --primary-soft: oklch(0.3 0.06 163); }
 html.dark[data-accent="blue"] { --primary-soft: oklch(0.3 0.06 245); }
-[data-swatch="indigo"] { background: oklch(0.56 0.2 270); }
+[data-swatch="indigo"] { background: var(--chart-1); }
 [data-swatch="emerald"] { background: oklch(0.6 0.14 163); }
 [data-swatch="blue"] { background: oklch(0.58 0.17 245); }
 /* Density preference */
 html[data-density="compact"] { font-size: 14.5px; }
+
+/* Scale Flow premium workspace: shared presentation, never business rules. */
+.workspace-sidebar { width: 244px; transition: width 220ms ease; }
+.workspace-sidebar.is-collapsed { width: 80px; }
+.workspace-sidebar.is-collapsed .sidebar-label { display: none; }
+.workspace-sidebar.is-collapsed .sidebar-brand { padding-inline: 22px; }
+.workspace-sidebar.is-collapsed .sidebar-link { justify-content: center; padding-inline: 8px; }
+.workspace-sidebar.is-collapsed .sidebar-create { padding-inline: 0; }
+.sidebar-link:hover svg { transform: translateY(-1px); }
+.sidebar-link svg { transition: transform 160ms ease; }
+.sidebar-link.is-active::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; background: var(--sidebar-primary); border-radius: 3px; }
+.workspace-topbar { backdrop-filter: blur(8px); }
+.search-section { margin-top: 12px; padding: 6px 10px; font-size: 10px; text-transform: uppercase; font-weight: 700; color: var(--muted-foreground); }
+.search-result { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-radius: 6px; padding: 10px; }
+.search-result:hover { background: var(--accent); }
+.stat-card { overflow: hidden; }
+.stat-card::after { content: ""; position: absolute; inset: auto 20px 0; height: 2px; background: var(--primary); opacity: .45; }
+.stat-card[data-tone="success"]::after { background: var(--success); }
+.stat-card[data-tone="warning"]::after { background: var(--warning); }
+.stat-card[data-tone="destructive"]::after { background: var(--destructive); }
+.stat-card[data-tone="teal"]::after { background: var(--teal); }
+main > .grid > .stat-card { animation: metric-in 300ms ease-out both; }
+main > .grid > .stat-card:nth-child(2) { animation-delay: 35ms; }
+main > .grid > .stat-card:nth-child(3) { animation-delay: 70ms; }
+main > .grid > .stat-card:nth-child(4) { animation-delay: 105ms; }
+@keyframes metric-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+main section.surface { background: transparent; border: 0; border-top: 1px solid var(--border); border-radius: 0; box-shadow: none; padding-inline: 0; padding-top: 22px; }
+main section.surface h2, main section.surface h3 { font-family: var(--font-display); }
+main table thead { background: var(--secondary); }
+main table th { padding-top: 15px; padding-bottom: 15px; text-transform: uppercase; font-size: 10px; font-weight: 700; }
+main table tbody td { padding-top: 17px; padding-bottom: 17px; }
+main table tr { transition: background 150ms ease; }
+main input, main textarea { background-color: var(--card); }
+main input[type="checkbox"] { accent-color: var(--primary); width: 16px; height: 16px; }
+main [data-page] { min-width: 0; }
+.pipeline-board { display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 32px) / 3); overflow-x: auto; align-items: start; gap: 16px; padding-bottom: 18px; scroll-snap-type: x proximity; }
+.pipeline-column { scroll-snap-align: start; min-width: 0; background: var(--secondary); border: 1px solid var(--border); border-radius: 8px; padding: 14px; transition: border-color 140ms ease, background 140ms ease; }
+.pipeline-column.is-over { background: var(--primary-soft); border-color: var(--primary); }
+.pipeline-card { transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease; }
+.pipeline-card.is-dragging { opacity: .55; transform: rotate(-1deg) scale(.98); box-shadow: var(--shadow-pop); }
+.pipeline-card:hover { border-color: var(--input); }
+.pipeline-scroll { max-height: 650px; }
+.note-card { border-top: 3px solid var(--teal); }
+.note-card.is-pinned { border-top-color: var(--primary); }
+.note-editor { box-shadow: none; border: 0; background: transparent; padding: 0; }
+.note-editor textarea { min-height: 240px; line-height: 1.8; resize: vertical; }
+.deal-card { padding: 22px; }
+.deal-progress { height: 5px; }
+.followup-row { border-left: 3px solid var(--primary); background: var(--card); border-radius: 6px; margin-bottom: 10px; box-shadow: var(--shadow-card); transition: transform 150ms ease; }
+.followup-row.is-overdue { border-left-color: var(--destructive); }
+.followup-row:hover { transform: translateX(2px); }
+.briefing-banner { border-left: 4px solid var(--teal); border-radius: 8px; background: var(--hero); }
+.recharts-tooltip-wrapper { outline: none; }
+.recharts-default-tooltip { box-shadow: var(--shadow-pop); }
+.recharts-legend-wrapper { padding-top: 6px; }
+@media (min-width: 768px) and (max-width: 1023px) {
+  .workspace-sidebar { width: 76px; }
+  .workspace-sidebar .sidebar-label { display: none; }
+  .workspace-sidebar .sidebar-brand { padding-inline: 19px; }
+  .workspace-sidebar .sidebar-create { padding-inline: 0; }
+  .workspace-sidebar .sidebar-link { justify-content: center; padding-inline: 8px; }
+}
+@media (max-width: 1023px) { .pipeline-board { grid-auto-columns: calc((100% - 16px) / 2); } }
+@media (max-width: 639px) {
+  .pipeline-board { grid-auto-columns: 86%; }
+  .workspace-heading { padding-top: 24px; }
+  .workspace-heading h1 { font-size: 24px; }
+  .stat-card { padding: 16px; }
+  .stat-card .num { font-size: 24px; }
+  .deal-card { padding: 16px; }
+  .mobile-navigation { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+}

@@ -10,6 +10,7 @@ Standalone frontend-only CRM demo. The original production CRM is untouched.
 - [Data/action contracts](docs/DATA_CONTRACTS.md)
 - [Independent backend checklist](docs/INTEGRATION_TODO.md)
 - [Phase 2.5 audit, results and remaining gaps](docs/PHASE_2_5_AUDIT.md)
+- [Premium redesign, page changes and verification report](docs/PREMIUM_REDESIGN.md)
 
 Run the business tests with `bunx vitest run`. Demo records/preferences persist only in this browser; real authentication, AI, notifications and database persistence are not implemented.
 

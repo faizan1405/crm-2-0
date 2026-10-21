@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ArrowLeft, Phone, MessageCircle, Mail, CalendarPlus, Check, Pencil } from "lucide-react";
-import { Shell, PriorityBadge, selectCls } from "@/components/crm/Shell";
+import { Shell, PriorityBadge, selectCls, Identity } from "@/components/crm/Shell";
 import { FollowUpDialog, LostReasonDialog } from "@/components/crm/Dialogs";
 import { useCRM } from "@/lib/crm/store";
 import { formatINR, formatDateTime, relative, digits } from "@/lib/crm/format";
@@ -49,15 +49,16 @@ function LeadDetail() {
         <Button onClick={() => setFu(true)}><CalendarPlus className="size-4" />Follow-up</Button>
       </div>}>
       <Link to="/leads" className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All leads</Link>
-      <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="grid gap-5">
+          <div className="mb-2 border-b pb-5"><Identity name={lead.name} company={lead.company} className="[&_.identity-avatar]:size-14 [&_.identity-avatar]:text-lg" /></div>
           <section className="surface p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold">Details</h2>
               {!edit && <Button size="sm" variant="ghost" onClick={() => setEdit(true)}><Pencil className="size-4" />Edit</Button>}
             </div>
             {edit ? <EditLead lead={lead} onDone={() => setEdit(false)} /> : (
-              <dl className="grid gap-4 text-sm sm:grid-cols-3">
+              <dl className="grid gap-6 text-sm sm:grid-cols-3">
                 {[["Phone", lead.phone], ["Email", lead.email ?? "—"], ["Source", lead.source], ["Budget", formatINR(lead.budget)], ["Quoted", formatINR(lead.quotedAmount)], ["Score", lead.aiScore ?? "—"], ["Last contact", relative(lead.lastContact)], ["Next follow-up", formatDateTime(lead.nextFollowUp)], ["Requirement", lead.requirement ?? "—"]].map(([k, v]) => (
                   <div key={k as string}><dt className="text-xs text-muted-foreground">{k}</dt><dd className="mt-0.5 break-words font-medium">{v}</dd></div>
                 ))}
