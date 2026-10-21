@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Shell, PriorityBadge, Identity } from "@/components/crm/Shell";
 import { LostReasonDialog } from "@/components/crm/Dialogs";
@@ -25,6 +27,7 @@ export const Route = createFileRoute("/pipeline")({
 const DOT: Record<LeadStatus, string> = { new: "bg-chart-6", contacted: "bg-chart-2", qualified: "bg-chart-1", proposal: "bg-chart-3", won: "bg-success", lost: "bg-destructive" };
 
 function Pipeline() {
+  const board = useRef<HTMLDivElement>(null);
   const { leads, updateLead } = useCRM();
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<LeadStatus | null>(null);
@@ -41,8 +44,8 @@ function Pipeline() {
 
   return (
     <Shell title="Pipeline" subtitle={`${open.length} open · ${formatINRCompact(open.reduce((a, l) => a + (l.quotedAmount ?? 0), 0))} in open opportunities`}>
-      <div className="mb-6 flex flex-wrap items-center gap-5 border-b pb-4 text-xs text-muted-foreground"><span><b className="text-foreground">{leads.length}</b> total leads</span><span><b className="text-success">{leads.filter(l => l.status === "won").length}</b> won</span><span><b className="text-primary">{leads.filter(l => l.status === "proposal").length}</b> proposals sent</span></div>
-      <div className="pipeline-board scrollbar-thin">
+      <div className="mb-6 flex flex-wrap items-center gap-5 border-b pb-4 text-xs text-muted-foreground"><span><b className="text-foreground">{leads.length}</b> total leads</span><span><b className="text-success">{leads.filter(l => l.status === "won").length}</b> won</span><span><b className="text-primary">{leads.filter(l => l.status === "proposal").length}</b> proposals sent</span><div className="ml-auto flex gap-1"><Button variant="outline" size="icon" aria-label="Previous stages" title="Previous stages" onClick={() => board.current?.scrollBy({ left: -(board.current?.clientWidth ?? 300), behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" })}><ChevronLeft /></Button><Button variant="outline" size="icon" aria-label="Next stages" title="Next stages" onClick={() => board.current?.scrollBy({ left: board.current?.clientWidth ?? 300, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" })}><ChevronRight /></Button></div></div>
+      <div ref={board} className="pipeline-board scrollbar-thin">
         {LEAD_STATUSES.map((s) => {
           const col = leads.filter((l) => l.status === s);
           return (
