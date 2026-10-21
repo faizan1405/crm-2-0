@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 import { useCRM } from "./store";
-import { suggestFollowUp, suggestAll, activeFollowUp, nextSlot, isPending } from "./followups";
+import { suggestFollowUp, suggestAll, activeFollowUp, nextSlot, isPending, followUpBucket } from "./followups";
 import { buildPriorities } from "./insights";
 import type { Lead } from "./types";
 
@@ -150,4 +150,13 @@ describe("call log save and undo", () => {
     S().addFollowUp({ leadId: id, type: "call", dueAt: "2026-10-25T05:30:00Z" }, { replaceId: a.id });
     expect(buildPriorities(S().leads, S().followUps, now).some((p) => p.key?.includes(a.id))).toBe(false);
   });
+});
+
+describe("follow-up overdue classification (India time)", () => {
+  const f = (dueAt: string) => ({ id: "x", leadId: "l", type: "call", dueAt } as never);
+  const now = new Date("2026-10-21T08:30:00Z"); // 14:00 IST
+  it("a follow-up earlier today whose time has passed is overdue", () => { expect(followUpBucket(f("2026-10-21T05:30:00Z"), now)).toBe("overdue"); });
+  it("a follow-up later today is today", () => { expect(followUpBucket(f("2026-10-21T12:00:00Z"), now)).toBe("today"); });
+  it("23:30 IST tonight is still today, not tomorrow", () => { expect(followUpBucket(f("2026-10-21T18:00:00Z"), now)).toBe("today"); });
+  it("00:30 IST tomorrow is upcoming", () => { expect(followUpBucket(f("2026-10-21T19:00:00Z"), now)).toBe("upcoming"); });
 });
