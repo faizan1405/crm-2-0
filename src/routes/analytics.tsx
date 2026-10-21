@@ -40,7 +40,8 @@ function Analytics() {
 
   const data = useMemo(() => {
     const rLeads = leads.filter((l) => inRange(l.createdAt));
-    const rPayments = payments.filter((p) => !p.voided && inRange(p.date));
+    const eligibleIds = new Set(deals.filter((d) => d.status !== "cancelled").map((d) => d.id));
+    const rPayments = payments.filter((p) => !p.voided && eligibleIds.has(p.dealId) && inRange(p.date));
     const fin = financeSummary(deals, payments);
     const won = rLeads.filter((l) => l.status === "won").length;
     const lost = rLeads.filter((l) => l.status === "lost").length;
@@ -74,7 +75,7 @@ function Analytics() {
   return (
     <Shell title="Analytics" subtitle={`${formatDate(start === "0000-01-01" ? undefined : start, { day: "numeric", month: "short", year: "numeric" })} – ${formatDate(end, { day: "numeric", month: "short", year: "numeric" })}`}
       actions={<div className="flex flex-wrap items-center gap-2">
-        <div className="flex gap-1 rounded-lg bg-muted p-1">
+        <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
           {([["today", "Today"], ["7d", "7 days"], ["30d", "30 days"], ["month", "This month"], ["custom", "Custom"]] as const).map(([k, l]) => (
             <Button size="sm" variant="ghost" key={k} onClick={() => setRange(k)} className={cn("rounded-md px-2.5 py-1 text-xs font-medium", range === k ? "bg-card text-foreground shadow-card" : "text-muted-foreground hover:text-foreground")}>{l}</Button>
           ))}
