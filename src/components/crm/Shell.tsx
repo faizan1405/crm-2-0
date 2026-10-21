@@ -52,6 +52,10 @@ export function Shell({ title, subtitle, actions, children }: { title: string; s
   const [add, setAdd] = useState(false);
   usePreferenceEffects();
   const dark = theme === "dark";
+  // Demo data lives in this browser, so render pages after mount (avoids server/browser mismatches).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return <div className="flex min-h-screen bg-background"><aside className="hidden w-60 shrink-0 bg-sidebar md:block" /><div className="flex-1 p-8"><div className="h-7 w-48 animate-pulse rounded-md bg-muted" /><div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">{[0, 1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse rounded-xl bg-muted" />)}</div></div></div>;
 
   return (
     <div className="flex min-h-screen bg-background">

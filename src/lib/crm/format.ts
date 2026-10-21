@@ -12,7 +12,16 @@ const inrCompact = new Intl.NumberFormat("en-IN", {
 });
 
 export const formatINR = (n: number | undefined | null) => (n == null ? "—" : inr.format(n));
-export const formatINRCompact = (n: number) => inrCompact.format(n);
+/** ₹ in Indian units (K, L, Cr) — locale-independent so server and browser match. */
+export const formatINRCompact = (n: number) => {
+  const a = Math.abs(n), sign = n < 0 ? "-" : "";
+  const f = (v: number, u: string) => `${sign}₹${(Math.round(v * 10) / 10).toString()}${u}`;
+  if (a >= 1e7) return f(a / 1e7, "Cr");
+  if (a >= 1e5) return f(a / 1e5, "L");
+  if (a >= 1e3) return f(a / 1e3, "K");
+  return `${sign}₹${Math.round(a)}`;
+};
+void inrCompact;
 export const formatPct = (n: number | null) => (n == null ? "—" : `${Math.round(n * 100)}%`);
 
 /** yyyy-mm-dd in the business timezone */
