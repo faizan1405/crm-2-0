@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
 import { cn } from "@/lib/utils";
-import { initials } from "@/lib/crm/format";
+import { initials, displayPrefs } from "@/lib/crm/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { AddLeadDialog } from "./AddLeadDialog";
@@ -26,7 +26,9 @@ const MOBILE_MAIN = ["/", "/leads", "/pipeline", "/daily-briefing"];
 
 /** Applies theme / accent / density preferences to <html>. */
 function usePreferenceEffects() {
-  const { theme, accent, density } = useCRM();
+  const { theme, accent, density, timeFormat, dateStyle } = useCRM();
+  displayPrefs.hour12 = timeFormat === "12h";
+  displayPrefs.longDate = dateStyle === "long";
   useEffect(() => { useCRM.persist.rehydrate(); }, []);
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
