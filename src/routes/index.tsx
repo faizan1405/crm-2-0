@@ -41,7 +41,7 @@ function Num({ value, money }: { value: number; money?: boolean }) {
   return <span title={money ? formatINR(value) : undefined}>{money ? formatINRCompact(Math.round(v)) : Math.round(v)}</span>;
 }
 
-type Task = { key: string; kind: "overdue" | "today" | "hot" | "money"; leadId?: string; title: string; detail: string; when: string; followUpId?: string; phone?: string; amount?: number };
+type Task = { key: string; kind: "overdue" | "today" | "hot" | "money"; leadId?: string; title: string; detail: string; when: string; followUpId?: string; phone?: string | undefined; amount?: number };
 const TABS = [["all", "All"], ["overdue", "Overdue"], ["today", "Today"], ["hot", "Hot leads"], ["money", "Collections"]] as const;
 const KIND_ICON = { overdue: AlarmClock, today: CalendarClock, hot: Flame, money: Wallet };
 
