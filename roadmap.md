@@ -13,3 +13,11 @@ Frontend-only demo. No backend; production CRM untouched.
 - [ ] Backend phase (Antigravity) — real auth, database, AI extraction, notifications (waiting on backend setup)
 
 - [x] Call workflow completion + premium card redesign (Pipeline Call, confirmed Won/Lost, saved pending call, card system, motion)
+
+## V1 parity (see docs/V1_PARITY_CHECKLIST.md)
+- [x] Batch 1 Advanced Lead Management
+- [ ] Batch 2 Smart Sales Workflows
+- [ ] Batch 3 WhatsApp tools
+- [ ] Batch 4 AI features
+- [ ] Batch 5 Deals & Payments advanced
+- [ ] Batch 6 Notifications & productivity
