@@ -8,3 +8,9 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+## Architecture rules
+- All CRM data and preferences live in one zustand store (`src/lib/crm/store.ts`, persisted to localStorage); pages derive everything from it — it is the single swap point for a real backend.
+- Business rules live in pure modules (`finance.ts`, `insights.ts`, `parse.ts`) with vitest tests — keeps logic testable and backend-agnostic.
+- CRM pages render after mount inside `Shell` — data is browser-local, so this avoids server/browser render mismatches.
+- `formatINRCompact` is hand-rolled (K/L/Cr) — Intl compact output differs between server and browser.

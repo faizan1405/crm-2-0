@@ -1,11 +1,7 @@
-# Scale Flow CRM 2.0 — Build Roadmap
+# Scale Flow CRM 2.0 — Roadmap
 
-Frontend-only demo prototype per the master brief. No backend, no production connections.
+Frontend-only demo. No backend; production CRM untouched.
 
-- [x] Stage 1a — Design tokens (src/styles.css), entity types, format & finance helpers
-- [x] Stage 1b — Demo dataset + zustand store (localStorage persistence)
-- [x] Stage 1c — App shell: dark sidebar, top bar, mobile nav, command palette, Toaster
-- [x] Stage 2 — Dashboard, Leads (table + filters + Add Lead modal w/ simulated Quick AI), Lead drawer, Pipeline (kanban + drag), Follow-ups
-- [ ] Stage 3 — Deals & Payments, Daily Briefing, Personal Notes
-- [ ] Stage 4 — Analytics, Settings, global search polish, docs (DESIGN_SYSTEM, FEATURE_INVENTORY, DATA_CONTRACTS, INTEGRATION_TODO)
-- [ ] Verify: build clean, tests pass, end-to-end preview check
+- [x] Phase 1 — Dashboard, Leads, Pipeline, Follow-ups, Deals & Payments, Notes
+- [x] Phase 2 — Analytics, Daily Briefing, Settings, Quick AI (demo parser) + Manual entry, lead details/edit, duplicate handling, unified store, browser tests
+- [ ] Backend phase (Antigravity) — real auth, database, AI extraction, notifications (waiting on backend setup)
