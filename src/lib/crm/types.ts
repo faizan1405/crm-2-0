@@ -61,8 +61,8 @@ export interface FollowUp {
   note?: string;
   completedAt?: string;
   /** Set when replaced/cancelled — kept for history, never pending. */
-  cancelledAt?: string;
-  replacedBy?: string;
+  cancelledAt?: string | undefined;
+  replacedBy?: string | undefined;
   opId?: string;
 }
 

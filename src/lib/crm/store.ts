@@ -21,7 +21,7 @@ export interface CallLogInput {
   /** Required when the lead already has an active follow-up and followUp is set. */
   onConflict?: "keep" | "replace";
 }
-type LeadSnap = Pick<Lead, "status" | "lostReason" | "lastContact" | "nextFollowUp" | "quickStatus">;
+type LeadSnap = { status: Lead["status"]; lostReason: string | undefined; lastContact: string | undefined; nextFollowUp: string | undefined; quickStatus: Lead["quickStatus"] };
 export interface CallOp {
   id: string;
   leadId: string;
