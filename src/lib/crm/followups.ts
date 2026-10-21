@@ -77,3 +77,11 @@ export function suggestFollowUp(lead: Lead, followUps: FollowUp[], activities: L
 export function suggestAll(leads: Lead[], followUps: FollowUp[], activities: LeadActivity[], now: Date): Suggestion[] {
   return leads.map((l) => suggestFollowUp(l, followUps, activities, now)).filter((s): s is Suggestion => !!s).sort((a, b) => Number(b.urgent) - Number(a.urgent) || a.at.localeCompare(b.at));
 }
+
+/** Overdue means the scheduled time has passed (not just the day); "today" is the rest of today in India time. */
+export function followUpBucket(f: FollowUp, now: Date): "done" | "overdue" | "today" | "upcoming" {
+  if (!isPending(f)) return "done";
+  if (new Date(f.dueAt).getTime() < now.getTime()) return "overdue";
+  return dayKeyIST(f.dueAt) === dayKeyIST(now) ? "today" : "upcoming";
+}
+const dayKeyIST = (d: Date | string) => new Date(new Date(d).getTime() + IST_MS).toISOString().slice(0, 10);

@@ -1,10 +1,10 @@
 import { isPending } from "@/lib/crm/followups";
 import { PostCallDialog, openCallLog } from "@/components/crm/PostCallDialog";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   LayoutDashboard, Users, KanbanSquare, CalendarClock, Wallet, StickyNote, Moon, Sun,
-  BarChart3, Sunrise, Settings, MoreHorizontal, Plus, Search, Bell, ArrowUpRight, PhoneCall,
+  BarChart3, Sunrise, Settings, MoreHorizontal, Plus, Search, Bell, ArrowUpRight, PhoneCall, Menu, ChevronRight, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
 import { cn } from "@/lib/utils";
@@ -48,15 +48,25 @@ export function ScaleMark({ className }: { className?: string }) {
   return <svg viewBox="0 0 32 32" fill="none" aria-hidden="true" className={cn("size-8", className)}><path d="M5 23V14l7-5v9l-7 5Zm10-5V9l7-5v9l-7 5Zm0 10v-7l12-8v7l-12 8Z" fill="currentColor" /></svg>;
 }
 
-/** Sliding pill that follows the active top-nav link. */
-function useNavPill(path: string) {
-  const ref = useRef<HTMLElement>(null);
-  const [pill, setPill] = useState<{ x: number; w: number } | null>(null);
-  useLayoutEffect(() => {
-    const measure = () => { const a = ref.current?.querySelector<HTMLElement>('a[aria-current="page"]'); setPill(a ? { x: a.offsetLeft, w: a.offsetWidth } : null); };
-    measure(); window.addEventListener("resize", measure); return () => window.removeEventListener("resize", measure);
-  }, [path]);
-  return { ref, pill };
+const GROUPS = [
+  { label: "Workspace", items: ["/", "/leads", "/pipeline", "/follow-ups"] },
+  { label: "Business", items: ["/deals", "/analytics", "/daily-briefing"] },
+  { label: "Personal", items: ["/notes"] },
+  { label: "System", items: ["/settings"] },
+] as const;
+const COLLAPSE_KEY = "scale-flow-sidebar-collapsed";
+
+function SideNav({ path, collapsed, badge, onNavigate }: { path: string; collapsed: boolean; badge: number; onNavigate?: () => void }) {
+  return <nav aria-label="Main navigation" className="sb-nav">
+    {GROUPS.map(g => <div key={g.label} className="sb-group">
+      <div className="sb-group-label" aria-hidden={collapsed}>{g.label}</div>
+      {g.items.map(to => { const n = NAV.find(x => x.to === to)!; const active = isActive(path, to);
+        return <Link key={to} to={to} onClick={onNavigate} aria-current={active ? "page" : undefined} title={collapsed ? n.label : undefined} aria-label={collapsed ? n.label : undefined} className="sb-link">
+          <n.icon className="sb-icon" /><span className="sb-label">{n.label}</span>
+          {to === "/follow-ups" && badge > 0 && <span className="sb-badge num">{badge}</span>}
+        </Link>; })}
+    </div>)}
+  </nav>;
 }
 
 export function Shell({ title, subtitle, actions, children }: { title: string; subtitle?: string; actions?: ReactNode; children: ReactNode }) {
@@ -65,54 +75,63 @@ export function Shell({ title, subtitle, actions, children }: { title: string; s
   const [more, setMore] = useState(false), [add, setAdd] = useState(false), [schedule, setSchedule] = useState(false);
   const [search, setSearch] = useState(false), [query, setQuery] = useState(""), [alerts, setAlerts] = useState(false);
   const [callPick, setCallPick] = useState(false), [callQ, setCallQ] = useState("");
+  const [collapsed, setCollapsed] = useState(false), [drawer, setDrawer] = useState(false);
   usePreferenceEffects();
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  useEffect(() => { setMounted(true); setCollapsed(localStorage.getItem(COLLAPSE_KEY) === "1"); }, []);
+  const toggleCollapse = () => setCollapsed(c => { localStorage.setItem(COLLAPSE_KEY, c ? "0" : "1"); return !c; });
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setSearch(true); } };
     window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
   }, []);
-  const { ref: navRef, pill } = useNavPill(mounted ? path : "");
   const dark = theme === "dark";
-  const today = dayKey(new Date());
-  const attention = followUps.filter(f => isPending(f) && dayKey(f.dueAt) <= today).sort((a,b) => a.dueAt.localeCompare(b.dueAt));
+  const attention = followUps.filter(f => isPending(f) && dayKey(f.dueAt) <= dayKey(new Date())).sort((a,b) => a.dueAt.localeCompare(b.dueAt));
   const matches = (text: string) => text.toLowerCase().includes(query.toLowerCase());
   const current = NAV.find(n => isActive(path, n.to));
+  const group = GROUPS.find(g => current && (g.items as readonly string[]).includes(current.to))?.label ?? "Workspace";
   const callable = leads.filter(l => !["won","lost"].includes(l.status) && `${l.name} ${l.company ?? ""} ${l.phone}`.toLowerCase().includes(callQ.toLowerCase()));
-  if (!mounted) return <div className="min-h-screen bg-background"><div className="h-16 border-b" /><div className="mx-auto max-w-[1440px] p-8"><div className="h-12 w-72 animate-pulse rounded-md bg-muted" /><div className="mt-8 h-64 animate-pulse rounded-2xl bg-muted" /></div></div>;
+  if (!mounted) return <div className="flex min-h-screen bg-background"><div className="hidden w-[248px] shrink-0 bg-sidebar md:block" /><div className="flex-1 p-8"><div className="h-10 w-72 animate-pulse rounded-md bg-muted" /><div className="mt-8 grid gap-4 sm:grid-cols-3">{[0,1,2].map(i => <div key={i} className="h-28 animate-pulse rounded-xl bg-muted" />)}</div><div className="mt-6 h-64 animate-pulse rounded-xl bg-muted" /></div></div>;
   return (
-    <div className="crm-workspace flex min-h-screen flex-col bg-background">
-      <header className="os-bar sticky top-0 z-30 border-b">
-        <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-3 px-4 sm:px-6 lg:px-8">
-          <Link to="/" className="flex shrink-0 items-center gap-2.5" title={business}><span className="os-brand-mark"><ScaleMark className="size-5" /></span><span className="hidden leading-none sm:block"><span className="block text-sm font-semibold tracking-tight">{business}</span><span className="eyebrow mt-1 block">Sales OS</span></span></Link>
-          <button type="button" onClick={() => setSearch(true)} aria-label="Search workspace" className="os-command ml-auto min-w-0 sm:ml-6 sm:w-72 lg:w-96"><Search className="size-4 shrink-0" /><span className="hidden flex-1 truncate text-left sm:inline">Search leads, deals, notes…</span><span className="os-kbd hidden sm:inline">⌘K</span></button>
-          <div className="flex shrink-0 items-center gap-1 sm:ml-auto sm:gap-2">
-            <button type="button" onClick={() => setCallPick(true)} className="os-calllog" aria-label="Instant call log"><PhoneCall className="size-4" /><span className="hidden md:inline">Call log</span></button>
-            <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" aria-label="Quick create" className="h-9 rounded-full px-3"><Plus className="size-4" /><span className="hidden text-xs lg:inline">New</span></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => setAdd(true)}><Users />Add lead</DropdownMenuItem><DropdownMenuItem onSelect={() => setSchedule(true)}><CalendarClock />Schedule follow-up</DropdownMenuItem><DropdownMenuItem asChild><Link to="/deals"><Wallet />Deals & Payments</Link></DropdownMenuItem><DropdownMenuItem asChild><Link to="/notes"><StickyNote />New note</Link></DropdownMenuItem></DropdownMenuContent></DropdownMenu>
-            <Button variant="ghost" size="icon" title="Toggle theme" aria-label="Toggle theme" onClick={() => preferences({theme: dark ? "light" : "dark"})} className="hidden rounded-full text-muted-foreground sm:inline-flex">{dark ? <Sun /> : <Moon />}</Button>
-            <Button variant="ghost" size="icon" title="Notifications" aria-label="Notifications" onClick={() => setAlerts(true)} className="relative rounded-full text-muted-foreground"><Bell />{attention.length > 0 && <span className="absolute top-1.5 right-2 size-1.5 rounded-full bg-destructive" />}</Button>
-            <Link to="/settings" title="Profile settings" className="hidden size-9 place-items-center rounded-full bg-clay-soft text-xs font-semibold sm:grid">{initials(owner)}</Link>
-          </div>
+    <div className="crm-workspace flex min-h-screen bg-background" data-collapsed={collapsed ? "true" : "false"}>
+      <aside className="sb hidden md:flex" aria-label="Sidebar">
+        <div className="sb-brand">
+          <Link to="/" className="flex min-w-0 items-center gap-2.5" title={business}><span className="sb-mark"><ScaleMark className="size-[18px]" /></span><span className="sb-label min-w-0 leading-none"><span className="block truncate text-[15px] font-semibold tracking-tight">Scale Flow</span><span className="sb-os mt-1 block">Sales OS</span></span></Link>
         </div>
-        <div className="mx-auto hidden max-w-[1440px] overflow-x-auto px-6 pb-3 scrollbar-thin md:block lg:px-8">
-          <nav ref={navRef} className="os-nav w-max" aria-label="Main navigation">
-            {pill && <span aria-hidden className="os-nav-pill" style={{ width: pill.w, transform: `translateX(${pill.x}px)` }} />}
-            {NAV.map(n => <Link key={n.to} to={n.to} aria-current={isActive(path,n.to) ? "page" : undefined}><n.icon />{n.label}{n.to === "/follow-ups" && attention.length > 0 && <span className="num rounded-full bg-lime px-1.5 text-[10px] text-lime-foreground">{attention.length}</span>}</Link>)}
-          </nav>
+        <SideNav path={path} collapsed={collapsed} badge={attention.length} />
+        <div className="sb-foot">
+          <Link to="/settings" className="sb-user" title={collapsed ? `${owner} · Settings` : undefined} aria-label={collapsed ? `${owner}, open settings` : undefined}>
+            <span className="sb-avatar">{initials(owner)}</span>
+            <span className="sb-label min-w-0 leading-tight"><span className="block truncate text-[13px] font-medium">{owner}</span><span className="block truncate text-[11px] opacity-60">{business} · local demo</span></span>
+            <Settings className="sb-label ml-auto size-4 opacity-60" />
+          </Link>
+          <button type="button" onClick={toggleCollapse} className="sb-collapse" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!collapsed} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>{collapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}<span className="sb-label text-xs">Collapse</span></button>
         </div>
-      </header>
+      </aside>
       <div className="flex min-w-0 flex-1 flex-col pb-28 md:pb-0">
-        <header className="os-heading mx-auto flex w-full max-w-[1440px] flex-wrap items-end justify-between gap-4 px-4 pt-8 pb-7 sm:px-6 lg:px-8 lg:pt-12">
-          <div className="min-w-0"><div className="eyebrow mb-3">{current?.section || "Workspace"} / {current?.label ?? "Lead details"}</div><h1 className="text-[40px] text-foreground sm:text-[54px]">{title}</h1>{subtitle && <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">{subtitle}</p>}</div>{actions}
+        <header className="topbar sticky top-0 z-30 border-b">
+          <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-2 px-4 sm:px-6 lg:px-8">
+            <button type="button" className="topbar-icon md:!hidden" aria-label="Open navigation" onClick={() => setDrawer(true)}><Menu className="size-5" /></button>
+            <Link to="/" className="flex items-center gap-2 md:hidden" aria-label="Dashboard"><span className="sb-mark sb-mark-light"><ScaleMark className="size-4" /></span></Link>
+            <div className="crumb hidden min-w-0 items-center gap-1.5 text-[13px] sm:flex"><span className="text-muted-foreground">{group}</span><ChevronRight className="size-3.5 text-muted-foreground" /><span className="truncate font-medium">{current?.label ?? "Lead details"}</span></div>
+            <button type="button" onClick={() => setSearch(true)} aria-label="Search workspace" className="os-command ml-auto min-w-0 sm:w-64 lg:w-80"><Search className="size-4 shrink-0" /><span className="hidden flex-1 truncate text-left sm:inline">Search…</span><span className="os-kbd hidden sm:inline">⌘K</span></button>
+            <button type="button" onClick={() => setCallPick(true)} className="os-calllog" aria-label="Instant call log"><PhoneCall className="size-4" /><span className="hidden lg:inline">Call log</span></button>
+            <DropdownMenu><DropdownMenuTrigger asChild><button type="button" aria-label="Quick add" className="topbar-icon"><Plus className="size-[18px]" /></button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => setAdd(true)}><Users />Add lead</DropdownMenuItem><DropdownMenuItem onSelect={() => setSchedule(true)}><CalendarClock />Schedule follow-up</DropdownMenuItem><DropdownMenuItem asChild><Link to="/deals"><Wallet />Deals & Payments</Link></DropdownMenuItem><DropdownMenuItem asChild><Link to="/notes"><StickyNote />New note</Link></DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+            <button type="button" title="Notifications" aria-label="Notifications" onClick={() => setAlerts(true)} className="topbar-icon relative"><Bell className="size-[18px]" />{attention.length > 0 && <span className="absolute top-2 right-2 size-1.5 rounded-full bg-destructive" />}</button>
+            <button type="button" title="Toggle theme" aria-label="Toggle theme" onClick={() => preferences({theme: dark ? "light" : "dark"})} className="topbar-icon !hidden sm:!grid">{dark ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}</button>
+          </div>
         </header>
-        <main key={path} data-page={current?.to ?? "detail"} className="page-enter mx-auto w-full max-w-[1440px] flex-1 px-4 pb-12 sm:px-6 lg:px-8">{children}</main>
-        <footer className="mx-auto mt-auto flex w-full max-w-[1440px] items-center justify-between gap-2 border-t px-4 py-4 sm:px-6 lg:px-8"><span className="eyebrow">Scale Flow · Sales OS 2.0</span><span className="eyebrow">Local demo · {formatDate(new Date().toISOString(),{day:"numeric",month:"short",year:"numeric"})}</span></footer>
+        <div className="os-heading mx-auto flex w-full max-w-[1400px] flex-wrap items-end justify-between gap-4 px-4 pt-6 pb-5 sm:px-6 lg:px-8 lg:pt-8">
+          <div className="min-w-0"><h1 className="text-[26px] font-semibold tracking-tight text-foreground sm:text-[30px]">{title}</h1>{subtitle && <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">{subtitle}</p>}</div>{actions}
+        </div>
+        <main key={path} data-page={current?.to ?? "detail"} className="page-enter mx-auto w-full max-w-[1400px] flex-1 px-4 pb-12 sm:px-6 lg:px-8">{children}</main>
+        <footer className="mx-auto mt-auto flex w-full max-w-[1400px] items-center justify-between gap-2 border-t px-4 py-4 sm:px-6 lg:px-8"><span className="eyebrow">Scale Flow · Sales OS 3.0</span><span className="eyebrow">Local demo · {formatDate(new Date().toISOString(),{day:"numeric",month:"short",year:"numeric"})}</span></footer>
       </div>
       <nav aria-label="Mobile navigation" className="os-mobile-bar fixed inset-x-3 bottom-3 z-40 flex items-center justify-around rounded-[22px] px-1.5 py-1.5 shadow-[var(--shadow-pop)] md:hidden">
         {NAV.filter(n => MOBILE_MAIN.includes(n.to)).map(n => <Link key={n.to} to={n.to} aria-current={isActive(path,n.to) ? "page" : undefined} className="flex min-h-12 min-w-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl text-[10px] font-medium transition-colors"><n.icon className="size-5" />{n.mobile}</Link>)}
         <button type="button" aria-label="More" onClick={() => setMore(true)} className="flex min-h-12 min-w-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl text-[10px] font-medium"><MoreHorizontal className="size-5" />More</button>
       </nav>
-      <Sheet open={more} onOpenChange={setMore}><SheetContent side="bottom" className="max-h-[85dvh] overflow-y-auto rounded-t-3xl"><SheetHeader><SheetTitle className="editorial text-3xl">Workspace</SheetTitle></SheetHeader><div className="mt-5 grid grid-cols-3 gap-2">{NAV.map(n => <Link key={n.to} to={n.to} onClick={() => setMore(false)} className={cn("flex min-h-20 flex-col items-center justify-center gap-2 rounded-2xl border p-2 text-center text-xs",isActive(path,n.to) ? "border-foreground bg-primary text-primary-foreground" : "text-foreground")}><n.icon className="size-5" />{n.label}</Link>)}</div><div className="mt-4 flex gap-2"><Button className="flex-1" onClick={() => {setMore(false);setAdd(true);}}><Plus />Add lead</Button><Button variant="outline" onClick={() => {setMore(false);setCallPick(true);}}><PhoneCall />Call log</Button><Button variant="outline" title="Toggle theme" aria-label="Toggle theme" onClick={() => preferences({theme:dark ? "light":"dark"})}>{dark ? <Sun />:<Moon />}</Button></div></SheetContent></Sheet>
+      <Sheet open={drawer} onOpenChange={setDrawer}><SheetContent side="left" className="sb-drawer w-[280px] border-0 p-0"><SheetHeader className="sr-only"><SheetTitle>Navigation</SheetTitle></SheetHeader><div className="sb flex h-full w-full"><div className="sb-brand"><span className="sb-mark"><ScaleMark className="size-[18px]" /></span><span className="leading-none"><span className="block text-[15px] font-semibold">Scale Flow</span><span className="sb-os mt-1 block">Sales OS</span></span></div><SideNav path={path} collapsed={false} badge={attention.length} onNavigate={() => setDrawer(false)} /><div className="sb-foot"><Link to="/settings" onClick={() => setDrawer(false)} className="sb-user"><span className="sb-avatar">{initials(owner)}</span><span className="min-w-0 leading-tight"><span className="block truncate text-[13px] font-medium">{owner}</span><span className="block truncate text-[11px] opacity-60">{business} · local demo</span></span></Link></div></div></SheetContent></Sheet>
+      <Sheet open={more} onOpenChange={setMore}><SheetContent side="bottom" className="max-h-[85dvh] overflow-y-auto rounded-t-3xl"><SheetHeader><SheetTitle className="text-xl font-semibold">Workspace</SheetTitle></SheetHeader><div className="mt-5 grid grid-cols-3 gap-2">{NAV.map(n => <Link key={n.to} to={n.to} onClick={() => setMore(false)} className={cn("flex min-h-20 flex-col items-center justify-center gap-2 rounded-2xl border p-2 text-center text-xs",isActive(path,n.to) ? "border-foreground bg-primary text-primary-foreground" : "text-foreground")}><n.icon className="size-5" />{n.label}</Link>)}</div><div className="mt-4 flex gap-2"><Button className="flex-1" onClick={() => {setMore(false);setAdd(true);}}><Plus />Add lead</Button><Button variant="outline" onClick={() => {setMore(false);setCallPick(true);}}><PhoneCall />Call log</Button><Button variant="outline" title="Toggle theme" aria-label="Toggle theme" onClick={() => preferences({theme:dark ? "light":"dark"})}>{dark ? <Sun />:<Moon />}</Button></div></SheetContent></Sheet>
       <Dialog open={search} onOpenChange={setSearch}><DialogContent className="sm:max-w-xl"><DialogHeader><DialogTitle>Search workspace</DialogTitle><DialogDescription>Leads, deals and personal notes</DialogDescription></DialogHeader><Input autoFocus aria-label="Global search" placeholder="Search name, company, deal or note…" value={query} onChange={e => setQuery(e.target.value)} /><div className="grid max-h-[55vh] gap-1 overflow-y-auto">
         <div className="search-section">Leads</div>{leads.filter(l => matches(`${l.name} ${l.company ?? ""} ${l.phone}`)).slice(0,6).map(l => <Link key={l.id} to="/leads/$id" params={{id:l.id}} onClick={() => setSearch(false)} className="search-result"><Identity name={l.name} company={l.company} /><ArrowUpRight className="size-4 text-muted-foreground" /></Link>)}
         <div className="search-section">Deals</div>{deals.filter(d => matches(`${d.name} ${d.clientName}`)).slice(0,4).map(d => <Link key={d.id} to="/deals" onClick={() => setSearch(false)} className="search-result"><Wallet className="size-4 text-teal" /><span className="flex-1 text-sm">{d.name}<span className="block text-xs text-muted-foreground">{d.clientName}</span></span><ArrowUpRight className="size-4" /></Link>)}

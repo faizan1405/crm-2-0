@@ -24,3 +24,7 @@ Frontend-only demo. No backend; production CRM untouched.
 - [ ] Batch 4 AI features
 - [ ] Batch 5 Deals & Payments advanced
 - [ ] Batch 6 Notifications & productivity
+
+## Sales OS 3.0 — Phase 1
+- [x] Collapsible sidebar, utility bar, new tokens, Dashboard command center, overdue-by-time fix
+- [ ] Phase 2: redesign Leads, Pipeline, Deals, Follow-ups, Briefing, Analytics, Notes, Settings (awaiting your approval)
