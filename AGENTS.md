@@ -15,6 +15,6 @@
 - Store actions enforce edit/stage and payment validation and synchronize related records; datetime-local inputs use explicit business-zone conversion — keeps pages consistent regardless of device timezone.
 - CRM pages render after mount inside `Shell` — data is browser-local, so this avoids server/browser render mismatches.
 - `formatINRCompact` is hand-rolled (K/L/Cr) — Intl compact output differs between server and browser.
-- Navigation is a horizontal top bar in Shell (no sidebar) with a persistent Instant Call Log launcher; mobile uses a floating bottom bar + More sheet — keeps every destination one tap away.
+- Navigation is a collapsible graphite left sidebar in Shell (grouped Workspace/Business/Personal/System; collapse state in its own localStorage key) plus a minimal top utility bar for global actions; mobile uses a slide-out drawer, floating bottom bar and More sheet — primary nav and global actions stay separate.
 - Shared CRM presentation belongs in Shell and semantic global CSS; page components preserve store actions and pure calculations so visual redesigns cannot change business behavior.
 - The pipeline uses native drag-and-drop with named stage targets and horizontally scrollable columns; mobile stage selectors provide an equivalent touch interaction.
