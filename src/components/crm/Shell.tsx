@@ -1,3 +1,4 @@
+import { WhatsAppComposer } from "@/components/crm/WhatsAppComposer";
 import { isPending } from "@/lib/crm/followups";
 import { PostCallDialog, openCallLog } from "@/components/crm/PostCallDialog";
 import { Link, useRouterState } from "@tanstack/react-router";
@@ -140,7 +141,7 @@ export function Shell({ title, subtitle, actions, children }: { title: string; s
       </div></DialogContent></Dialog>
       <Dialog open={callPick} onOpenChange={setCallPick}><DialogContent className="sm:max-w-lg"><DialogHeader><DialogTitle>Instant call log</DialogTitle><DialogDescription>Pick who you just spoke with — the log opens without dialling.</DialogDescription></DialogHeader><Input autoFocus aria-label="Find lead to log" placeholder="Name, company or phone…" value={callQ} onChange={e => setCallQ(e.target.value)} /><div className="grid max-h-[50vh] gap-1 overflow-y-auto">{callable.slice(0,8).map(l => <button key={l.id} type="button" className="search-result text-left" onClick={() => { setCallPick(false); setCallQ(""); openCallLog(l.id, "Command bar"); }}><Identity name={l.name} company={l.company} /><span className="num text-xs text-muted-foreground">{l.phone}</span></button>)}{!callable.length && <p className="py-6 text-center text-sm text-muted-foreground">No open leads match.</p>}</div></DialogContent></Dialog>
       <Sheet open={alerts} onOpenChange={setAlerts}><SheetContent className="w-full sm:max-w-md"><SheetHeader><SheetTitle>Notifications</SheetTitle></SheetHeader><p className="mt-2 text-xs text-muted-foreground">From local demo records · no live delivery</p><div className="mt-6 grid gap-3">{attention.map(f => <Link key={f.id} to="/leads/$id" params={{id:f.leadId}} onClick={() => setAlerts(false)} className="rounded-2xl border p-4"><span className="text-sm font-semibold">{leads.find(l => l.id === f.leadId)?.name ?? "Lead"}</span><span className="mt-1 block text-xs text-muted-foreground">{f.note ?? "Follow-up due"} · {formatDateTime(f.dueAt)}</span></Link>)}{!attention.length && <Empty icon={<Bell />} title="All caught up" />}</div></SheetContent></Sheet>
-      <AddLeadDialog open={add} onOpenChange={setAdd} /><FollowUpDialog open={schedule} onOpenChange={setSchedule} /><PostCallDialog />
+      <AddLeadDialog open={add} onOpenChange={setAdd} /><FollowUpDialog open={schedule} onOpenChange={setSchedule} /><PostCallDialog /><WhatsAppComposer />
     </div>
   );
 }
