@@ -26,7 +26,7 @@ export interface Lead {
   aiScore?: number; // 0-100, simulated in demo
   quotedAmount?: number;
   budget?: number;
-  lastContact?: string; // ISO
+  lastContact?: string | undefined; // ISO
   nextFollowUp?: string | undefined; // ISO; cleared when no follow-ups remain
   notes?: string;
   pinned: boolean;
