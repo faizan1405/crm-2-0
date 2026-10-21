@@ -28,3 +28,8 @@ Frontend-only demo. No backend; production CRM untouched.
 ## Sales OS 3.0 — Phase 1
 - [x] Collapsible sidebar, utility bar, new tokens, Dashboard command center, overdue-by-time fix
 - [ ] Phase 2: redesign Leads, Pipeline, Deals, Follow-ups, Briefing, Analytics, Notes, Settings (awaiting your approval)
+
+## Sales OS 3.0 Phase 2A — done
+- [x] WhatsApp composer at every WhatsApp button
+- [x] Follow-ups agenda + client inspector
+- [ ] Phase 2B Pipeline inspector / 2C payment proof / 2D notes (waiting for approval)
