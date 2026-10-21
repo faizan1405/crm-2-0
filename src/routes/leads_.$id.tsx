@@ -1,3 +1,4 @@
+import { startCall } from "@/components/crm/PostCallDialog";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -44,7 +45,7 @@ function LeadDetail() {
   return (
     <Shell title={lead.name} subtitle={[lead.company, STATUS_LABEL[lead.status]].filter(Boolean).join(" · ")}
       actions={<div className="flex flex-wrap gap-2">
-        <Button variant="outline" asChild><a href={`tel:${lead.phone}`} onClick={() => addActivity(id, "Called lead", "call")}><Phone className="size-4" />Call</a></Button>
+        <Button variant="outline" asChild><a href={`tel:${lead.phone}`} onClick={() => startCall(id, "Lead detail")}><Phone className="size-4" />Call</a></Button>
         <Button variant="outline" asChild><a href={`https://wa.me/91${digits(lead.phone)}`} target="_blank" rel="noreferrer" onClick={() => addActivity(id, "Opened WhatsApp chat", "whatsapp")}><MessageCircle className="size-4" />WhatsApp</a></Button>
         <Button onClick={() => setFu(true)}><CalendarPlus className="size-4" />Follow-up</Button>
       </div>}>
