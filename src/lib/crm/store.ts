@@ -261,7 +261,8 @@ export const useCRM = create<CRMState>()(
           ...(q ? { quickStatus: q } : {}),
         };
         const next = { ...lead, ...patch, ...(patch.status && patch.status !== "lost" ? { lostReason: undefined } : {}) };
-        if (leadEditError(get().leads, lead.id, next)) return { ok: false, error: leadEditError(get().leads, lead.id, next) };
+        const editErr = leadEditError(get().leads, lead.id, next);
+        if (editErr) return { ok: false, error: editErr };
         const activityId = uid("activity");
         const notes = i.notes?.trim();
         const add = i.followUp && !(active && i.onConflict === "keep");

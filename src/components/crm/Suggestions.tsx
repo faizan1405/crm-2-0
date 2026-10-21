@@ -10,7 +10,7 @@ import { FollowUpDialog } from "@/components/crm/Dialogs";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-function Row({ s, name, onReview }: { s: Suggestion; name?: string; onReview: () => void }) {
+function Row({ s, name, onReview }: { s: Suggestion; name?: string | undefined; onReview: () => void }) {
   return (
     <div className={cn("suggestion-row flex flex-wrap items-center gap-3 rounded-xl border p-3", s.urgent && "border-destructive/30 bg-destructive-soft/40")}>
       <span className={cn("grid size-8 shrink-0 place-items-center rounded-lg", s.urgent ? "bg-destructive-soft text-destructive" : "bg-primary-soft text-primary")}>{s.urgent ? <AlertCircle className="size-4" /> : <Sparkles className="size-4" />}</span>
