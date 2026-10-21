@@ -19,7 +19,7 @@ All activity used fresh isolated local browser demo state at localhost, not prod
 | Missing optional fields save, cancellation without save, explicit duplicate checkbox creation | Passed in follow-up runner |
 | Reversed custom date range | Passed: visible validation error |
 | 9 pages × 360/390/768/1024/1440 widths using baseline demo | 45 checks; Settings 768 overflow found and corrected |
-| Same widths/routes with 300 leads, long unbroken name and 15,000-character note; themes, mobile menu, add-lead dialog bounds | Long-content overflow found and corrected; final rerun recorded separately below |
+| Same widths/routes with 300 leads, long unbroken name and 15,000-character note; themes, mobile menu, add-lead dialog bounds | Final 45-check rerun passed with zero document overflow and zero runtime errors |
 
 Initial runner failures were selector/navigation issues (ambiguous Done button, sidebar New lead unavailable after navigation, target selector, absent localStorage before first mutation), not product failures. Corrected runners re-exercised those paths. No page runtime errors in the completed interaction/stress runs. This is Chromium testing, not cross-browser certification.
 
