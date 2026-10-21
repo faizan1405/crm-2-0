@@ -30,12 +30,14 @@ export interface Lead {
   nextFollowUp?: string | undefined; // ISO; cleared when no follow-ups remain
   notes?: string;
   pinned: boolean;
+  /** Call-level quick status, independent of the pipeline stage. */
+  quickStatus?: import("./leadtools").QuickStatus | undefined;
   lostReason?: string | undefined;
   createdAt: string;
   updatedAt: string;
 }
 
-export type ActivityType = "created" | "call" | "whatsapp" | "email" | "meeting" | "note" | "status" | "payment" | "followup";
+export type ActivityType = "created" | "merged" | "waste" | "restored" | "quick" | "call" | "whatsapp" | "email" | "meeting" | "note" | "status" | "payment" | "followup";
 
 export interface LeadActivity {
   id: string;
@@ -143,3 +145,14 @@ export const DEAL_STATUS_LABEL: Record<DealStatus, string> = {
   on_hold: "On hold",
   cancelled: "Cancelled",
 };
+
+/** A lead moved out of the active list: "waste" (junk/unqualified) or "deleted" (Recently Deleted). */
+export interface BinEntry {
+  id: string;
+  kind: "waste" | "deleted";
+  at: string;
+  reason?: string;
+  lead: Lead;
+  followUps: FollowUp[];
+  activities: LeadActivity[];
+}

@@ -2,7 +2,9 @@
 // Integration point: replace these actions with API calls in the backend phase.
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import type { Lead, Deal, Payment, FollowUp, Note, LeadActivity } from "./types";
+import type { Lead, Deal, Payment, FollowUp, Note, LeadActivity, BinEntry } from "./types";
+import { mergePatch, QUICK_LABEL, type QuickStatus } from "./leadtools";
+import type { ParsedLead } from "./parse";
 import { demoLeads, demoDeals, demoPayments, demoFollowUps, demoNotes, demoActivities } from "./demo";
 import { uid, digits, dayKey } from "./format";
 import { dealOutstanding } from "./finance";
@@ -31,12 +33,22 @@ interface CRMState extends Prefs {
   followUps: FollowUp[];
   notes: Note[];
   activities: LeadActivity[];
+  /** Waste + Recently Deleted leads, restorable. */
+  bin: BinEntry[];
   /** Briefing checklist item keys marked done today (does not touch lead data). */
   briefingDone: string[];
   briefingDate: string;
   addLead: (lead: Omit<Lead, "id" | "createdAt" | "updatedAt">) => string;
   updateLead: (id: string, patch: Partial<Lead>) => boolean;
+  /** Soft delete into Recently Deleted. */
   deleteLead: (id: string) => void;
+  wasteLead: (id: string, reason?: string) => void;
+  /** Returns an error message, or undefined on success. */
+  restoreLead: (binId: string) => string | undefined;
+  purgeBin: (binId: string) => void;
+  emptyBin: (kind: BinEntry["kind"]) => void;
+  mergeIntoLead: (id: string, incoming: ParsedLead, mode: "fill" | "overwrite") => boolean;
+  setQuickStatus: (id: string, q: QuickStatus | undefined) => void;
   addActivity: (leadId: string, text: string, type?: LeadActivity["type"]) => void;
   addDeal: (deal: Omit<Deal, "id" | "createdAt">) => void;
   addPayment: (payment: Omit<Payment, "id">) => boolean;
@@ -79,13 +91,27 @@ const initialData = {
   followUps: demoFollowUps,
   notes: demoNotes,
   activities: demoActivities,
+  bin: [] as BinEntry[],
   briefingDone: [] as string[],
   briefingDate: "",
 };
 
 export const useCRM = create<CRMState>()(
   persist(
-    (set, get) => ({
+    (set, get) => {
+      const moveToBin = (id: string, kind: BinEntry["kind"], reason?: string) => {
+        const lead = get().leads.find((l) => l.id === id);
+        if (!lead) return;
+        const at = new Date().toISOString();
+        const acts = [{ id: uid("activity"), leadId: id, type: kind === "waste" ? "waste" : "note", text: kind === "waste" ? `Moved to Waste${reason ? `: ${reason}` : ""}` : "Lead deleted", at } as LeadActivity, ...get().activities.filter((a) => a.leadId === id)];
+        set((s) => ({
+          bin: [{ id: uid("bin"), kind, at, ...(reason ? { reason } : {}), lead, followUps: s.followUps.filter((f) => f.leadId === id), activities: acts }, ...s.bin],
+          leads: s.leads.filter((l) => l.id !== id),
+          followUps: s.followUps.filter((f) => f.leadId !== id),
+          activities: s.activities.filter((a) => a.leadId !== id),
+        }));
+      };
+      return {
       ...initialData,
       ...defaultPrefs,
       addLead: (lead) => {
@@ -107,12 +133,38 @@ export const useCRM = create<CRMState>()(
         if (patch.status && prev && prev.status !== patch.status) get().addActivity(id, `Status changed to ${patch.status}`, "status");
         return true;
       },
-      deleteLead: (id) =>
+      deleteLead: (id) => moveToBin(id, "deleted"),
+      wasteLead: (id, reason) => moveToBin(id, "waste", reason),
+      restoreLead: (binId) => {
+        const e = get().bin.find((b) => b.id === binId);
+        if (!e) return "Not found";
+        if (duplicatePhone(get().leads, e.lead.phone)) return "An active lead already uses this phone — merge or edit it first";
+        const at = new Date().toISOString();
         set((s) => ({
-          leads: s.leads.filter((l) => l.id !== id),
-          followUps: s.followUps.filter((f) => f.leadId !== id),
-          activities: s.activities.filter((a) => a.leadId !== id),
-        })),
+          bin: s.bin.filter((b) => b.id !== binId),
+          leads: [{ ...e.lead, updatedAt: at }, ...s.leads],
+          followUps: [...e.followUps, ...s.followUps],
+          activities: [{ id: uid("activity"), leadId: e.lead.id, type: "restored", text: `Restored from ${e.kind === "waste" ? "Waste" : "Recently Deleted"}`, at }, ...e.activities, ...s.activities],
+        }));
+        return undefined;
+      },
+      purgeBin: (binId) => set((s) => ({ bin: s.bin.filter((b) => b.id !== binId) })),
+      emptyBin: (kind) => set((s) => ({ bin: s.bin.filter((b) => b.kind !== kind) })),
+      mergeIntoLead: (id, incoming, mode) => {
+        const lead = get().leads.find((l) => l.id === id);
+        if (!lead) return false;
+        const patch = mergePatch(lead, incoming, mode);
+        if (Object.keys(patch).length && !get().updateLead(id, patch)) return false;
+        const fields = Object.keys(patch).filter((k) => k !== "notes");
+        get().addActivity(id, fields.length || patch.notes ? `Merged new details (${[...fields, ...(patch.notes ? ["notes"] : [])].join(", ")})` : "Duplicate entry checked — nothing new to merge", "merged");
+        return true;
+      },
+      setQuickStatus: (id, q) => {
+        const lead = get().leads.find((l) => l.id === id);
+        if (!lead || lead.quickStatus === q) return;
+        set((s) => ({ leads: s.leads.map((l) => (l.id === id ? { ...l, quickStatus: q, updatedAt: new Date().toISOString() } : l)) }));
+        get().addActivity(id, q ? `Quick status: ${QUICK_LABEL[q]}` : "Quick status cleared", "quick");
+      },
       addActivity: (leadId, text, type = "note") =>
         set((s) => ({ activities: [{ id: uid("activity"), leadId, type, text, at: new Date().toISOString() }, ...s.activities] })),
       addDeal: (deal) => set((s) => ({ deals: [{ ...deal, id: uid("deal"), createdAt: new Date().toISOString() }, ...s.deals] })),
@@ -161,7 +213,8 @@ export const useCRM = create<CRMState>()(
       resetBriefing: () => set({ briefingDone: [], briefingDate: dayKey(new Date()) }),
       preferences: (patch) => set(patch),
       reset: () => set({ ...initialData }),
-    }),
+    };
+    },
     { name: "scale-flow-crm-2-demo", version: 2, storage: createJSONStorage(() => localStorage), skipHydration: true },
   ),
 );

@@ -9,6 +9,8 @@ import { FollowUpDialog, LostReasonDialog } from "@/components/crm/Dialogs";
 import { useCRM } from "@/lib/crm/store";
 import { formatINR, formatDateTime, relative, digits } from "@/lib/crm/format";
 import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, FOLLOWUP_LABEL, type Lead, type LeadStatus } from "@/lib/crm/types";
+import { QUICK_STATUSES, QUICK_LABEL, staleDays, type QuickStatus } from "@/lib/crm/leadtools";
+import { useNavigate } from "@tanstack/react-router";
 import { leadEditError } from "@/lib/crm/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +33,8 @@ export const Route = createFileRoute("/leads_/$id")({
 
 function LeadDetail() {
   const { id } = Route.useParams();
-  const { leads, activities, followUps, deals, updateLead, completeFollowUp, addActivity } = useCRM();
+  const { leads, activities, followUps, deals, updateLead, completeFollowUp, addActivity, setQuickStatus, wasteLead, deleteLead } = useCRM();
+  const navigate = useNavigate();
   const lead = leads.find((l) => l.id === id);
   const [edit, setEdit] = useState(false);
   const [fu, setFu] = useState(false);
@@ -85,6 +88,13 @@ function LeadDetail() {
           <section className="surface p-5">
             <div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">Stage</h2><PriorityBadge p={lead.priority} /></div>
             <select aria-label="Stage" className={`${selectCls} w-full`} value={lead.status} onChange={(e) => setStatus(e.target.value as LeadStatus)}>{LEAD_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select>
+            <h3 className="mt-4 mb-2 text-xs font-semibold text-muted-foreground">Quick status <span className="font-normal">(does not change stage)</span></h3>
+            <div className="flex flex-wrap gap-1.5">{QUICK_STATUSES.map((q) => <button key={q} type="button" aria-pressed={lead.quickStatus === q} onClick={() => setQuickStatus(id, lead.quickStatus === q ? undefined : (q as QuickStatus))} className={`rounded-full border px-2.5 py-1 text-xs ${lead.quickStatus === q ? "border-primary bg-primary-soft text-primary" : "text-muted-foreground"}`}>{QUICK_LABEL[q]}</button>)}</div>
+            {staleDays(lead, new Date()) !== undefined && <p className="mt-3 rounded-lg bg-warning/15 p-2 text-xs text-warning">Stale — no contact for {staleDays(lead, new Date())} days and no upcoming follow-up.</p>}
+            <div className="mt-4 flex gap-2 border-t pt-4">
+              <Button size="sm" variant="outline" className="flex-1" onClick={() => { const r = window.prompt("Reason for moving to Waste (optional)") ; if (r === null) return; wasteLead(id, r.trim() || undefined); toast.success("Moved to Waste"); navigate({ to: "/leads" }); }}>Move to Waste</Button>
+              <Button size="sm" variant="ghost" className="flex-1 text-destructive" onClick={() => { deleteLead(id); toast.success("Deleted — restore from Recently Deleted"); navigate({ to: "/leads" }); }}>Delete</Button>
+            </div>
           </section>
           <section className="surface p-5">
             <h2 className="mb-3 font-semibold">Follow-ups</h2>
