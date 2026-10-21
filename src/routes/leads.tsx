@@ -62,13 +62,13 @@ function Leads() {
         {rows.length === 0 ? (
           <Empty icon={<Users />} title="No leads match" hint="Try clearing a filter or add a new lead." action={<Button variant="outline" onClick={() => { setQ(""); setStatus("all"); setSource("all"); setPrio("all"); }}>Clear filters</Button>} />
         ) : (
-          <table className="w-full min-w-[820px] text-sm">
+          <table className="w-full min-w-[1120px] text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
             <thead className="bg-muted/50 text-left text-xs text-muted-foreground"><tr>{["", "Lead", "Phone", "Source", "Priority", "Score", "Quoted", "Stage", "Updated", ""].map((h, i) => <th key={i} className="px-3 py-2.5 font-medium">{h}</th>)}</tr></thead>
             <tbody>
               {rows.map((l) => (
                 <tr key={l.id} className="border-t transition-colors hover:bg-muted/40">
                   <td className="pl-3"><Button size="icon" variant="ghost" title={l.pinned ? "Unpin" : "Pin"} aria-label={l.pinned ? "Unpin" : "Pin"} onClick={() => updateLead(l.id, { pinned: !l.pinned })} className={cn("rounded p-1", l.pinned ? "text-primary" : "text-muted-foreground/40 hover:text-muted-foreground")}><Pin className="size-3.5" /></Button></td>
-                  <td className="px-3 py-3"><Link to="/leads/$id" params={{ id: l.id }} className="text-foreground hover:text-primary"><Identity name={l.name} company={l.company} /></Link></td>
+                  <td className="min-w-52 px-3 py-3"><Link to="/leads/$id" params={{ id: l.id }} className="text-foreground hover:text-primary"><Identity name={l.name} company={l.company} /></Link></td>
                   <td className="num px-3 py-3 text-muted-foreground">{l.phone}</td>
                   <td className="px-3 py-3">{l.source}</td>
                   <td className="px-3 py-3"><PriorityBadge p={l.priority} /></td>
