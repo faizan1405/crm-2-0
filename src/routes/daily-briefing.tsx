@@ -1,3 +1,4 @@
+import { SuggestionList } from "@/components/crm/Suggestions";
 import { isPending } from "@/lib/crm/followups";
 import { CallButton } from "@/components/crm/CallButton";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -83,6 +84,7 @@ function Briefing() {
         </div>
       </section>
 
+      <section className="surface mt-5 p-5"><h2 className="mb-3 text-base font-bold">Suggested follow-ups</h2><SuggestionList limit={3} /></section>
       <section className="surface mt-5 p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2"><Sparkles className="size-4 text-primary" /><h2 className="font-semibold">Daily intelligence</h2><span className="rounded-full bg-warning-soft px-2 py-0.5 text-[10px] font-semibold text-warning uppercase">Simulated · rule-based</span></div>
