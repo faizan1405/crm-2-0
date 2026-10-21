@@ -38,8 +38,8 @@ function usePreferenceEffects() {
     return () => mq.removeEventListener("change", apply);
   }, [theme]);
   useEffect(() => {
-    document.documentElement.dataset.accent = accent;
-    document.documentElement.dataset.density = density;
+    document.documentElement.dataset["accent"] = accent;
+    document.documentElement.dataset["density"] = density;
   }, [accent, density]);
 }
 

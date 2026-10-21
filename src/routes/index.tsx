@@ -26,7 +26,7 @@ function Dashboard() {
   const leadName = (id: string) => leads.find((l) => l.id === id)?.name ?? "—";
 
   return (
-    <Shell title={`${greeting()}, ${owner}`} subtitle="Here's what needs your attention today.">
+    <Shell title={`${greeting()}, ${owner}`} subtitle="Here's what needs your attention today." actions={<Link to="/daily-briefing" className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">Open daily briefing</Link>}>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Open leads" value={String(open.length)} hint={`${leads.length} total`} />
         <Stat label="Collected" value={formatINRCompact(fin.collected)} hint={`${formatPct(fin.collectionRate)} of deal value`} tone="success" />
@@ -39,7 +39,7 @@ function Dashboard() {
           <ul className="divide-y">
             {pending.slice(0, 5).map((f) => (
               <li key={f.id} className="flex items-center justify-between py-2.5 text-sm">
-                <div><div className="font-medium">{leadName(f.leadId)}</div><div className="text-xs text-muted-foreground">{FOLLOWUP_LABEL[f.type]} · {f.note}</div></div>
+                <div><Link to="/leads/$id" params={{ id: f.leadId }} className="font-medium hover:text-primary">{leadName(f.leadId)}</Link><div className="text-xs text-muted-foreground">{FOLLOWUP_LABEL[f.type]} · {f.note}</div></div>
                 <span className="num text-xs text-muted-foreground">{formatDateTime(f.dueAt)}</span>
               </li>
             ))}
@@ -51,7 +51,7 @@ function Dashboard() {
           <ul className="divide-y">
             {hot.map((l) => (
               <li key={l.id} className="flex items-center justify-between py-2.5 text-sm">
-                <div><div className="font-medium">{l.name}</div><div className="text-xs text-muted-foreground">{l.company}</div></div>
+                <div><Link to="/leads/$id" params={{ id: l.id }} className="font-medium hover:text-primary">{l.name}</Link><div className="text-xs text-muted-foreground">{l.company}</div></div>
                 <div className="flex items-center gap-2"><PriorityBadge p={l.priority} /><span className="num w-8 text-right font-semibold text-primary">{l.aiScore}</span></div>
               </li>
             ))}
