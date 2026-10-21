@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Search, Trash2, Pin, Users, LayoutGrid, List, Phone, MessageCircle, CalendarPlus, ArrowUpRight } from "lucide-react";
 import { startCall } from "@/components/crm/PostCallDialog";
+import { CallButton } from "@/components/crm/CallButton";
 import { Shell, PriorityBadge, Empty, Identity, selectCls } from "@/components/crm/Shell";
 import { AddLeadDialog } from "@/components/crm/AddLeadDialog";
 import { LostReasonDialog, FollowUpDialog } from "@/components/crm/Dialogs";
@@ -65,20 +66,20 @@ function Leads() {
       {view === "cards" && rows.length > 0 ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {rows.map((l) => (
-            <article key={l.id} className={cn("surface surface-hover flex flex-col gap-4 p-5", l.pinned && "ring-1 ring-primary/40")}>
+            <article key={l.id} data-priority={l.priority} style={{ ["--i" as string]: Math.min(rows.indexOf(l), 12) }} className={cn("lead-card flex flex-col gap-4 p-5", l.pinned && "is-pinned")}>
               <div className="flex items-start justify-between gap-2">
                 <Link to="/leads/$id" params={{ id: l.id }} className="min-w-0 hover:text-primary"><Identity name={l.name} company={l.company} /></Link>
                 <Button size="icon" variant="ghost" aria-label={l.pinned ? "Unpin" : "Pin"} onClick={() => updateLead(l.id, { pinned: !l.pinned })} className={cn("size-8 shrink-0", l.pinned ? "text-primary" : "text-muted-foreground/50")}><Pin className="size-4" /></Button>
               </div>
-              <div className="flex flex-wrap items-center gap-1.5"><PriorityBadge p={l.priority} /><span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">{STATUS_LABEL[l.status]}</span><span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{l.source}</span></div>
-              <dl className="grid grid-cols-2 gap-3 border-y py-3 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5"><PriorityBadge p={l.priority} /><span className="stage-chip" data-stage={l.status}>{STATUS_LABEL[l.status]}</span><span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{l.source}</span></div>
+              <dl className="card-metric-grid grid grid-cols-2 gap-3 text-xs">
                 <div><dt className="text-muted-foreground">{l.quotedAmount ? "Quoted" : "Budget"}</dt><dd className="num mt-0.5 text-base font-bold">{formatINR(l.quotedAmount ?? l.budget)}</dd></div>
                 <div><dt className="text-muted-foreground">Phone</dt><dd className="num mt-0.5 font-medium">{l.phone}</dd></div>
                 <div><dt className="text-muted-foreground">Next follow-up</dt><dd className="mt-0.5 font-medium">{l.nextFollowUp ? formatDateTime(l.nextFollowUp) : "—"}</dd></div>
                 <div><dt className="text-muted-foreground">Updated</dt><dd className="mt-0.5 font-medium">{relative(l.updatedAt)}</dd></div>
               </dl>
-              <div className="mt-auto flex items-center gap-1">
-                <Button size="sm" variant="outline" asChild><a href={`tel:${l.phone}`} onClick={() => startCall(l.id, "Leads")}><Phone className="size-3.5" />Call</a></Button>
+              <div className="card-actions mt-auto flex items-center gap-1">
+                <CallButton leadId={l.id} phone={l.phone} name={l.name} source="Leads cards" />
                 <Button size="icon" variant="ghost" asChild className="size-8"><a href={`https://wa.me/91${digits(l.phone)}`} target="_blank" rel="noreferrer" aria-label={`WhatsApp ${l.name}`}><MessageCircle className="size-4 text-success" /></a></Button>
                 <Button size="icon" variant="ghost" className="size-8" aria-label="Schedule follow-up" onClick={() => setFu(l.id)}><CalendarPlus className="size-4 text-teal" /></Button>
                 <Button size="icon" variant="ghost" className="size-8" aria-label="Delete lead" onClick={() => { if (window.confirm(`Delete ${l.name}?`)) { deleteLead(l.id); toast.success("Lead deleted"); } }}><Trash2 className="size-4 text-muted-foreground" /></Button>

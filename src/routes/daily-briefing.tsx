@@ -102,7 +102,7 @@ function Briefing() {
 
       <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {snap.map((s) => (
-          <div key={s.label} className="surface p-4"><div className={cn("grid size-8 place-items-center rounded-lg", s.tone)}><s.icon className="size-4" /></div><div className="num mt-3 font-display text-xl font-bold">{s.value}</div><div className="text-xs text-muted-foreground">{s.label}</div></div>
+          <div key={s.label} className="briefing-stat p-4"><div className={cn("grid size-8 place-items-center rounded-lg", s.tone)}><s.icon className="size-4" /></div><div className="num mt-3 font-display text-xl font-bold">{s.value}</div><div className="text-xs text-muted-foreground">{s.label}</div></div>
         ))}
       </div>
 
@@ -120,7 +120,7 @@ function Briefing() {
             {items.map((i) => {
               const done = briefingDone.includes(i.key);
               return (
-                <li key={i.key} className={cn("rounded-lg border border-border bg-card p-5 shadow-card transition-colors hover:border-primary/40", done && "opacity-60")}>
+                <li key={i.key} data-severity={i.severity} className={cn("briefing-item p-5", done && "is-done")}>
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <div className="flex flex-wrap items-center gap-2"><span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold uppercase", SEV[i.severity])}>{i.severity}</span><span className="font-medium">{i.lead.name}</span>{i.lead.company && <span className="text-sm text-muted-foreground">· {i.lead.company}</span>}</div>
