@@ -611,3 +611,4 @@ main input[type="checkbox"] { accent-color: var(--foreground); width: 16px; heig
 .fu-facts dt { color: var(--muted-foreground); }
 .fu-facts dd { text-align: right; font-weight: 500; }
 @media (prefers-reduced-motion: reduce) { .wa-composer, .wa-editor, .fu-card { animation: none; } .wa-btn, .wa-purpose, .fu-metric, .fu-card { transition: none; } }
+.fu-side .suggestion-row > .min-w-0 { flex-basis: calc(100% - 44px); }

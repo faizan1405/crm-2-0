@@ -94,7 +94,7 @@ function FollowUps() {
           })}
           {list.length === 0 && <div className="surface"><Empty icon={tab === "done" ? <CheckCircle2 /> : <CalendarClock />} title={tab === "done" ? "No history yet" : tab === "overdue" ? "Nothing overdue" : "Nothing here"} hint={tab === "overdue" ? "You're on top of everything." : "Schedule a follow-up to keep deals moving."} /></div>}
         </div>
-        <aside className="surface h-fit p-5"><h2 className="mb-1 flex items-center gap-2 text-sm font-semibold"><Sparkles className="size-4 text-primary" />Suggested next actions</h2><p className="mb-3 text-xs text-muted-foreground">From stage, quick status, last call and dates. Nothing saves until you review the time.</p><SuggestionList limit={4} /></aside>
+        <aside className="fu-side surface h-fit p-5"><h2 className="mb-1 flex items-center gap-2 text-sm font-semibold"><Sparkles className="size-4 text-primary" />Suggested next actions</h2><p className="mb-3 text-xs text-muted-foreground">From stage, quick status, last call and dates. Nothing saves until you review the time.</p><SuggestionList limit={4} /></aside>
       </div>
 
       <FollowUpDialog open={add} onOpenChange={setAdd} />
