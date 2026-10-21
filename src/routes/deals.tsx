@@ -5,7 +5,7 @@ import { Plus, Wallet, ChevronDown } from "lucide-react";
 import { Shell, Stat, Empty, selectCls } from "@/components/crm/Shell";
 import { useCRM } from "@/lib/crm/store";
 import { financeSummary, dealCollected, dealOutstanding, dealPaymentStatus } from "@/lib/crm/finance";
-import { formatINR, formatINRCompact, formatPct, formatDate } from "@/lib/crm/format";
+import { formatINR, formatINRCompact, formatPct, formatDate, dayKey } from "@/lib/crm/format";
 import { DEAL_STATUS_LABEL, type Deal, type PaymentMethod, type PaymentType, type DealStatus } from "@/lib/crm/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,8 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/deals")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Deals & Payments · Scale Flow CRM" },
       { name: "description", content: "Track deal value, collections and overdue balances." },
       { property: "og:title", content: "Deals & Payments · Scale Flow CRM" },
@@ -94,7 +96,8 @@ function Deals() {
 
 function PaymentRow({ id }: { id: string }) {
   const { payments, voidPayment } = useCRM();
-  const p = payments.find((x) => x.id === id)!;
+  const p = payments.find((x) => x.id === id);
+  if (!p) return null;
   return (
     <li className={cn("num flex items-center justify-between gap-2 p-3", p.voided && "text-muted-foreground line-through")}>
       <span>{formatDate(p.date, { day: "numeric", month: "short", year: "numeric" })} · {p.method} · <span className="capitalize">{p.type}</span>{p.reference ? ` · ${p.reference}` : ""}</span>
@@ -109,13 +112,14 @@ function PaymentDialog({ deal, onClose }: { deal: Deal; onClose: () => void }) {
   const [amount, setAmount] = useState(String(out));
   const [method, setMethod] = useState<PaymentMethod>("UPI");
   const [type, setType] = useState<PaymentType>("milestone");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(dayKey(new Date()));
   const [ref, setRef] = useState("");
   const save = () => {
     const n = Number(amount);
-    if (!(n > 0)) { toast.error("Enter a valid amount"); return; }
+    if (!Number.isFinite(n) || !(n > 0)) { toast.error("Enter a valid amount"); return; }
     if (n > out) { toast.error(`Amount exceeds the ${formatINR(out)} outstanding`); return; }
-    addPayment({ dealId: deal.id, amount: n, date, method, type: n === out ? "final" : type, ...(ref ? { reference: ref } : {}) });
+    const saved = addPayment({ dealId: deal.id, amount: n, date, method, type: n === out ? "final" : type, ...(ref ? { reference: ref } : {}) });
+    if (!saved) { toast.error("Payment could not be recorded; check the balance and date"); return; }
     toast.success(`${formatINR(n)} recorded for ${deal.clientName}`);
     onClose();
   };
@@ -125,11 +129,11 @@ function PaymentDialog({ deal, onClose }: { deal: Deal; onClose: () => void }) {
         <DialogHeader><DialogTitle>Record payment · {deal.name}</DialogTitle></DialogHeader>
         <p className="num text-sm text-muted-foreground">Outstanding: <b className="text-foreground">{formatINR(out)}</b></p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="grid gap-1.5"><Label>Amount (₹)</Label><Input type="number" min={1} max={out} value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
-          <div className="grid gap-1.5"><Label>Date</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
-          <div className="grid gap-1.5"><Label>Method</Label><select className={selectCls} value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)}>{METHODS.map((m) => <option key={m}>{m}</option>)}</select></div>
-          <div className="grid gap-1.5"><Label>Type</Label><select className={selectCls} value={type} onChange={(e) => setType(e.target.value as PaymentType)}>{["advance", "milestone", "final", "other"].map((t) => <option key={t} value={t}>{t[0]!.toUpperCase() + t.slice(1)}</option>)}</select></div>
-          <div className="grid gap-1.5 sm:col-span-2"><Label>Reference</Label><Input placeholder="UTR / cheque no. (optional)" value={ref} onChange={(e) => setRef(e.target.value)} /></div>
+          <div className="grid gap-1.5"><Label htmlFor="pay-amount">Amount (₹)</Label><Input id="pay-amount" type="number" min={1} max={out} value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
+          <div className="grid gap-1.5"><Label htmlFor="pay-date">Date</Label><Input id="pay-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+          <div className="grid gap-1.5"><Label htmlFor="pay-method">Method</Label><select id="pay-method" className={selectCls} value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)}>{METHODS.map((m) => <option key={m}>{m}</option>)}</select></div>
+          <div className="grid gap-1.5"><Label htmlFor="pay-type">Type</Label><select id="pay-type" className={selectCls} value={type} onChange={(e) => setType(e.target.value as PaymentType)}>{["advance", "milestone", "final", "other"].map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}</select></div>
+          <div className="grid gap-1.5 sm:col-span-2"><Label htmlFor="pay-ref">Reference</Label><Input id="pay-ref" placeholder="UTR / cheque no. (optional)" value={ref} onChange={(e) => setRef(e.target.value)} /></div>
         </div>
         <DialogFooter><Button variant="ghost" onClick={onClose}>Cancel</Button><Button onClick={save}>Save payment</Button></DialogFooter>
       </DialogContent>
@@ -162,17 +166,17 @@ function NewDealDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           {type === "crm" ? (
-            <div className="grid gap-1.5 sm:col-span-2"><Label>Lead</Label><select className={selectCls} value={leadId} onChange={(e) => setLeadId(e.target.value)}><option value="">Select lead…</option>{leads.map((l) => <option key={l.id} value={l.id}>{l.name}{l.company ? ` · ${l.company}` : ""}</option>)}</select></div>
+            <div className="grid gap-1.5 sm:col-span-2"><Label htmlFor="deal-lead">Lead</Label><select id="deal-lead" className={selectCls} value={leadId} onChange={(e) => setLeadId(e.target.value)}><option value="">Select lead…</option>{leads.map((l) => <option key={l.id} value={l.id}>{l.name}{l.company ? ` · ${l.company}` : ""}</option>)}</select></div>
           ) : (<>
-            <div className="grid gap-1.5"><Label>Client name</Label><Input value={f.clientName} onChange={set("clientName")} /></div>
-            <div className="grid gap-1.5"><Label>Company</Label><Input value={f.company} onChange={set("company")} /></div>
-            <div className="grid gap-1.5 sm:col-span-2"><Label>Phone</Label><Input value={f.phone} onChange={set("phone")} /></div>
+            <div className="grid gap-1.5"><Label htmlFor="deal-client">Client name</Label><Input id="deal-client" value={f.clientName} onChange={set("clientName")} /></div>
+            <div className="grid gap-1.5"><Label htmlFor="deal-company">Company</Label><Input id="deal-company" value={f.company} onChange={set("company")} /></div>
+            <div className="grid gap-1.5 sm:col-span-2"><Label htmlFor="deal-phone">Phone</Label><Input id="deal-phone" value={f.phone} onChange={set("phone")} /></div>
           </>)}
-          <div className="grid gap-1.5 sm:col-span-2"><Label>Deal name</Label><Input placeholder="e.g. Website redesign" value={f.name} onChange={set("name")} /></div>
-          <div className="grid gap-1.5"><Label>Quoted (₹)</Label><Input type="number" value={f.quoted} onChange={set("quoted")} /></div>
-          <div className="grid gap-1.5"><Label>Final amount (₹)</Label><Input type="number" value={f.final} onChange={set("final")} /></div>
-          <div className="grid gap-1.5"><Label>Due date</Label><Input type="date" value={f.due} onChange={set("due")} /></div>
-          <div className="grid gap-1.5"><Label>Status</Label><select className={selectCls} value={f.status} onChange={set("status")}>{Object.entries(DEAL_STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
+          <div className="grid gap-1.5 sm:col-span-2"><Label htmlFor="deal-name">Deal name</Label><Input id="deal-name" placeholder="e.g. Website redesign" value={f.name} onChange={set("name")} /></div>
+          <div className="grid gap-1.5"><Label htmlFor="deal-quoted">Quoted (₹)</Label><Input id="deal-quoted" type="number" value={f.quoted} onChange={set("quoted")} /></div>
+          <div className="grid gap-1.5"><Label htmlFor="deal-final">Final amount (₹)</Label><Input id="deal-final" type="number" value={f.final} onChange={set("final")} /></div>
+          <div className="grid gap-1.5"><Label htmlFor="deal-due">Due date</Label><Input id="deal-due" type="date" value={f.due} onChange={set("due")} /></div>
+          <div className="grid gap-1.5"><Label htmlFor="deal-status">Status</Label><select id="deal-status" className={selectCls} value={f.status} onChange={set("status")}>{Object.entries(DEAL_STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
         </div>
         <DialogFooter><Button onClick={save}>Create deal</Button></DialogFooter>
       </DialogContent>

@@ -4,7 +4,9 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { Lead, Deal, Payment, FollowUp, Note, LeadActivity } from "./types";
 import { demoLeads, demoDeals, demoPayments, demoFollowUps, demoNotes, demoActivities } from "./demo";
-import { uid, digits } from "./format";
+import { uid, digits, dayKey } from "./format";
+import { dealOutstanding } from "./finance";
+import { leadEditError } from "./validation";
 
 export type ThemePref = "light" | "dark" | "system";
 export interface Prefs {
@@ -31,12 +33,13 @@ interface CRMState extends Prefs {
   activities: LeadActivity[];
   /** Briefing checklist item keys marked done today (does not touch lead data). */
   briefingDone: string[];
+  briefingDate: string;
   addLead: (lead: Omit<Lead, "id" | "createdAt" | "updatedAt">) => string;
-  updateLead: (id: string, patch: Partial<Lead>) => void;
+  updateLead: (id: string, patch: Partial<Lead>) => boolean;
   deleteLead: (id: string) => void;
   addActivity: (leadId: string, text: string, type?: LeadActivity["type"]) => void;
   addDeal: (deal: Omit<Deal, "id" | "createdAt">) => void;
-  addPayment: (payment: Omit<Payment, "id">) => void;
+  addPayment: (payment: Omit<Payment, "id">) => boolean;
   voidPayment: (id: string) => void;
   addFollowUp: (followUp: Omit<FollowUp, "id">) => void;
   completeFollowUp: (id: string) => void;
@@ -77,6 +80,7 @@ const initialData = {
   notes: demoNotes,
   activities: demoActivities,
   briefingDone: [] as string[],
+  briefingDate: "",
 };
 
 export const useCRM = create<CRMState>()(
@@ -94,9 +98,14 @@ export const useCRM = create<CRMState>()(
         return id;
       },
       updateLead: (id, patch) => {
+        if (leadEditError(get().leads, id, patch)) return false;
         const prev = get().leads.find((l) => l.id === id);
-        set((s) => ({ leads: s.leads.map((l) => (l.id === id ? { ...l, ...patch, updatedAt: new Date().toISOString() } : l)) }));
+        set((s) => ({
+          leads: s.leads.map((l) => (l.id === id ? { ...l, ...patch, ...(patch.status && patch.status !== "lost" ? { lostReason: undefined } : {}), updatedAt: new Date().toISOString() } : l)),
+          deals: s.deals.map((d) => d.leadId === id ? { ...d, ...(patch.name !== undefined ? { clientName: patch.name } : {}), ...(patch.company !== undefined ? { company: patch.company } : {}) } : d),
+        }));
         if (patch.status && prev && prev.status !== patch.status) get().addActivity(id, `Status changed to ${patch.status}`, "status");
+        return true;
       },
       deleteLead: (id) =>
         set((s) => ({
@@ -108,31 +117,48 @@ export const useCRM = create<CRMState>()(
         set((s) => ({ activities: [{ id: uid("activity"), leadId, type, text, at: new Date().toISOString() }, ...s.activities] })),
       addDeal: (deal) => set((s) => ({ deals: [{ ...deal, id: uid("deal"), createdAt: new Date().toISOString() }, ...s.deals] })),
       addPayment: (payment) => {
+        const target = get().deals.find((d) => d.id === payment.dealId);
+        if (!target || !Number.isFinite(payment.amount) || payment.amount <= 0 || payment.amount > dealOutstanding(target, get().payments) || !/^\d{4}-\d{2}-\d{2}$/.test(payment.date)) return false;
         set((s) => ({ payments: [{ ...payment, id: uid("payment") }, ...s.payments] }));
         const deal = get().deals.find((d) => d.id === payment.dealId);
         if (deal?.leadId) get().addActivity(deal.leadId, `Payment of ₹${payment.amount.toLocaleString("en-IN")} recorded`, "payment");
+        return true;
       },
       voidPayment: (id) => set((s) => ({ payments: s.payments.map((p) => (p.id === id ? { ...p, voided: true } : p)) })),
       addFollowUp: (f) => {
+        if (!get().leads.some((l) => l.id === f.leadId) || !Number.isFinite(new Date(f.dueAt).getTime())) return;
         set((s) => ({ followUps: [{ ...f, id: uid("followup") }, ...s.followUps] }));
-        get().updateLead(f.leadId, { nextFollowUp: f.dueAt });
+        const next = get().followUps.filter((x) => x.leadId === f.leadId && !x.completedAt).map((x) => x.dueAt).sort()[0];
+        get().updateLead(f.leadId, { nextFollowUp: next });
         get().addActivity(f.leadId, `Follow-up scheduled (${f.type})`, "followup");
       },
       completeFollowUp: (id) => {
         const f = get().followUps.find((x) => x.id === id);
         set((s) => ({ followUps: s.followUps.map((x) => (x.id === id ? { ...x, completedAt: new Date().toISOString() } : x)) }));
         if (f) {
-          get().updateLead(f.leadId, { lastContact: new Date().toISOString() });
+          const next = get().followUps.filter((x) => x.leadId === f.leadId && !x.completedAt).map((x) => x.dueAt).sort()[0];
+          get().updateLead(f.leadId, { lastContact: new Date().toISOString(), nextFollowUp: next });
           get().addActivity(f.leadId, `Follow-up completed (${f.type})`, "followup");
         }
       },
-      rescheduleFollowUp: (id, dueAt) => set((s) => ({ followUps: s.followUps.map((f) => (f.id === id ? { ...f, dueAt } : f)) })),
+      rescheduleFollowUp: (id, dueAt) => {
+        const f = get().followUps.find((x) => x.id === id);
+        if (!f || f.completedAt || !Number.isFinite(new Date(dueAt).getTime())) return;
+        set((s) => ({ followUps: s.followUps.map((x) => (x.id === id ? { ...x, dueAt } : x)) }));
+        const next = get().followUps.filter((x) => x.leadId === f.leadId && !x.completedAt).map((x) => x.dueAt).sort()[0];
+        get().updateLead(f.leadId, { nextFollowUp: next });
+        get().addActivity(f.leadId, "Follow-up rescheduled", "followup");
+      },
       saveNote: (note) =>
         set((s) => ({ notes: s.notes.some((n) => n.id === note.id) ? s.notes.map((n) => (n.id === note.id ? note : n)) : [note, ...s.notes] })),
       deleteNote: (id) => set((s) => ({ notes: s.notes.filter((n) => n.id !== id) })),
       toggleBriefing: (key) =>
-        set((s) => ({ briefingDone: s.briefingDone.includes(key) ? s.briefingDone.filter((k) => k !== key) : [...s.briefingDone, key] })),
-      resetBriefing: () => set({ briefingDone: [] }),
+        set((s) => {
+          const today = dayKey(new Date());
+          const done = s.briefingDate === today ? s.briefingDone : [];
+          return { briefingDate: today, briefingDone: done.includes(key) ? done.filter((k) => k !== key) : [...done, key] };
+        }),
+      resetBriefing: () => set({ briefingDone: [], briefingDate: dayKey(new Date()) }),
       preferences: (patch) => set(patch),
       reset: () => set({ ...initialData }),
     }),

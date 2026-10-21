@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/follow-ups")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Follow-ups · Scale Flow CRM" },
       { name: "description", content: "Calls, meetings and messages due across your leads." },
       { property: "og:title", content: "Follow-ups · Scale Flow CRM" },

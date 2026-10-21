@@ -3,6 +3,8 @@ import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Sparkles, AlertTriangle, PenLine } from "lucide-react";
 import { useCRM, duplicatePhone } from "@/lib/crm/store";
+import { validPhone } from "@/lib/crm/validation";
+import { businessDateTime } from "@/lib/crm/dates";
 import { structureLead } from "@/lib/crm/parse";
 import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, type LeadPriority, type LeadSource, type LeadStatus, type Lead } from "@/lib/crm/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -46,7 +48,7 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const save = () => {
     const e: typeof errors = {};
     if (!f.name.trim()) e.name = "Name is required";
-    if (f.phone.replace(/\D/g, "").length < 10) e.phone = "Enter a 10-digit phone number";
+    if (!validPhone(f.phone)) e.phone = "Enter a 10-digit phone number";
     if (f.email && !/^\S+@\S+\.\S+$/.test(f.email)) e.email = "Invalid email";
     setErrors(e);
     if (Object.keys(e).length) return;
@@ -60,7 +62,7 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
       ...(budget ? { budget } : {}), ...(quoted ? { quotedAmount: quoted } : {}), ...(f.notes ? { notes: f.notes } : {}),
     };
     const id = addLead(lead);
-    if (f.followUp) addFollowUp({ leadId: id, type: "call", dueAt: new Date(f.followUp).toISOString(), note: "First follow-up" });
+    if (f.followUp) addFollowUp({ leadId: id, type: "call", dueAt: businessDateTime(f.followUp), note: "First follow-up" });
     toast.success(`${lead.name} added to Leads and Pipeline`);
     close();
   };
@@ -121,7 +123,7 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
             {field("quotedAmount", "Quoted amount (₹)", { type: "number", min: 0 })}
             <div className="grid gap-1.5"><Label>Source</Label><select className={selectCls} value={f.source} onChange={set("source")}>{LEAD_SOURCES.map((s) => <option key={s}>{s}</option>)}</select></div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-1.5"><Label>Priority</Label><select className={selectCls} value={f.priority} onChange={set("priority")}>{["hot", "warm", "cold"].map((s) => <option key={s} value={s}>{s[0]!.toUpperCase() + s.slice(1)}</option>)}</select></div>
+              <div className="grid gap-1.5"><Label>Priority</Label><select className={selectCls} value={f.priority} onChange={set("priority")}>{["hot", "warm", "cold"].map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}</select></div>
               <div className="grid gap-1.5"><Label>Stage</Label><select className={selectCls} value={f.status} onChange={set("status")}>{LEAD_STATUSES.filter((s) => s !== "lost").map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select></div>
             </div>
             <div className="grid gap-1.5 sm:col-span-2">

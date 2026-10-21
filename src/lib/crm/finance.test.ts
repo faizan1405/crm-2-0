@@ -52,4 +52,15 @@ describe("finance rules", () => {
   it("collection rate is null when there is no contracted value", () => {
     expect(financeSummary([], []).collectionRate).toBeNull();
   });
+  it("separates multiple deals for one client including an independent client", () => {
+    const deals = [base({ id: "a", finalAmount: 100000 }), base({ id: "b", finalAmount: 200000 }), base({ id: "c", finalAmount: 50000, clientName: "Independent" })];
+    const payments = [pay("a", 40000), pay("a", 10000), pay("b", 200000)];
+    expect(financeSummary(deals, payments).collected).toBe(250000);
+    expect(financeSummary(deals, payments).outstanding).toBe(100000);
+    expect(dealOutstanding(deals[2] ?? base({}), payments)).toBe(50000);
+  });
+  it("a deal without a due date is unpaid but never overdue", () => {
+    expect(isDealOverdue(base({}), [], new Date("2026-10-21"))).toBe(false);
+    expect(dealOutstanding(base({}), [])).toBe(100000);
+  });
 });

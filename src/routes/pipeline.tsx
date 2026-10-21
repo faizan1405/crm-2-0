@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/pipeline")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Pipeline · Scale Flow CRM" },
       { name: "description", content: "Drag leads through every stage of your sales pipeline." },
       { property: "og:title", content: "Pipeline · Scale Flow CRM" },
@@ -71,7 +73,7 @@ function Pipeline() {
           );
         })}
       </div>
-      <LostReasonDialog open={!!pendingLost} {...(lostLead ? { leadName: lostLead.name } : {})} onCancel={() => setPendingLost(null)} onConfirm={(r) => { updateLead(pendingLost!, { status: "lost", lostReason: r }); toast.success("Marked as lost"); setPendingLost(null); }} />
+      <LostReasonDialog open={!!pendingLost} {...(lostLead ? { leadName: lostLead.name } : {})} onCancel={() => setPendingLost(null)} onConfirm={(r) => { if (!pendingLost) return; updateLead(pendingLost, { status: "lost", lostReason: r }); toast.success("Marked as lost"); setPendingLost(null); }} />
     </Shell>
   );
 }
