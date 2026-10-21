@@ -13,7 +13,7 @@ import { selectCls } from "@/components/crm/Shell";
 import { useCRM } from "@/lib/crm/store";
 import { activeFollowUp } from "@/lib/crm/followups";
 import { uid, formatDateTime } from "@/lib/crm/format";
-import { CALL_OUTCOMES, DATE_SHORTCUTS, callLogError, isConnectedOutcome, needsStageConfirm, outcomeStage, shortcutValue, toISO, type CallOutcome } from "@/lib/crm/calllog";
+import { CALL_OUTCOMES, DATE_SHORTCUTS, callLogError, needsStageConfirm, outcomeStage, shortcutValue, toISO, type CallOutcome } from "@/lib/crm/calllog";
 import { LEAD_STATUSES, STATUS_LABEL, type LeadStatus } from "@/lib/crm/types";
 import { cn } from "@/lib/utils";
 

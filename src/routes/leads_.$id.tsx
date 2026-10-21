@@ -11,6 +11,7 @@ import { formatINR, formatDateTime, relative, digits } from "@/lib/crm/format";
 import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, FOLLOWUP_LABEL, type Lead, type LeadStatus } from "@/lib/crm/types";
 import { QUICK_STATUSES, QUICK_LABEL, staleDays, type QuickStatus } from "@/lib/crm/leadtools";
 import { useNavigate } from "@tanstack/react-router";
+import { SuggestionList } from "@/components/crm/Suggestions";
 import { leadEditError } from "@/lib/crm/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -98,12 +99,13 @@ function LeadDetail() {
           </section>
           <section className="surface p-5">
             <h2 className="mb-3 font-semibold">Follow-ups</h2>
+            <div className="mb-3"><SuggestionList leadId={id} /></div>
             {fus.length === 0 && <p className="text-sm text-muted-foreground">None scheduled.</p>}
             <ul className="grid gap-2">
               {fus.map((f) => (
                 <li key={f.id} className="flex items-center justify-between gap-2 rounded-lg border p-2.5 text-sm">
-                  <div><div className={f.completedAt ? "text-muted-foreground line-through" : "font-medium"}>{FOLLOWUP_LABEL[f.type]} · {formatDateTime(f.dueAt)}</div>{f.note && <div className="text-xs text-muted-foreground">{f.note}</div>}</div>
-                  {!f.completedAt && <Button size="sm" variant="ghost" aria-label="Complete" onClick={() => { completeFollowUp(f.id); toast.success("Follow-up completed"); }}><Check className="size-4" /></Button>}
+                  <div><div className={f.completedAt || f.cancelledAt ? "text-muted-foreground line-through" : "font-medium"}>{FOLLOWUP_LABEL[f.type]} · {formatDateTime(f.dueAt)}{f.cancelledAt ? " · replaced" : f.completedAt ? " · done" : ""}</div>{f.note && <div className="text-xs text-muted-foreground">{f.note}</div>}</div>
+                  {!f.completedAt && !f.cancelledAt && <Button size="sm" variant="ghost" aria-label="Complete" onClick={() => { completeFollowUp(f.id); toast.success("Follow-up completed"); }}><Check className="size-4" /></Button>}
                 </li>
               ))}
             </ul>
