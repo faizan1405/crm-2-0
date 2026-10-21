@@ -2,6 +2,7 @@
 import { dayKey } from "./format";
 import { shiftDay, businessDateTime } from "./dates";
 import type { LeadStatus } from "./types";
+import type { QuickStatus } from "./leadtools";
 
 export const CALL_OUTCOMES = ["Connected", "Not picked", "Busy", "Call back later", "Interested", "Not interested", "Qualified", "Proposal Sent", "Won", "Lost"] as const;
 export type CallOutcome = (typeof CALL_OUTCOMES)[number];
@@ -12,6 +13,11 @@ export function outcomeStage(outcome: CallOutcome, current: LeadStatus): LeadSta
   if (map[outcome]) return map[outcome]!;
   if ((outcome === "Connected" || outcome === "Interested") && current === "new") return "contacted";
   return current;
+}
+
+/** Quick status implied by an outcome (attempts and intent), independent of stage. */
+export function outcomeQuick(o: CallOutcome): QuickStatus | undefined {
+  return ({ "Not picked": "not_picked", Busy: "busy", "Call back later": "callback", Interested: "interested", "Not interested": "not_interested" } as Partial<Record<CallOutcome, QuickStatus>>)[o];
 }
 
 export const DATE_SHORTCUTS = ["Tonight", "Tomorrow", "After 2 days", "Next week"] as const;

@@ -11,7 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { selectCls } from "@/components/crm/Shell";
 import { useCRM } from "@/lib/crm/store";
-import { CALL_OUTCOMES, DATE_SHORTCUTS, callLogError, isConnectedOutcome, needsStageConfirm, outcomeStage, shortcutValue, toISO, type CallOutcome } from "@/lib/crm/calllog";
+import { activeFollowUp } from "@/lib/crm/followups";
+import { uid, formatDateTime } from "@/lib/crm/format";
+import { CALL_OUTCOMES, DATE_SHORTCUTS, callLogError, needsStageConfirm, outcomeStage, shortcutValue, toISO, type CallOutcome } from "@/lib/crm/calllog";
 import { LEAD_STATUSES, STATUS_LABEL, type LeadStatus } from "@/lib/crm/types";
 import { cn } from "@/lib/utils";
 
@@ -46,7 +48,9 @@ export function startCall(leadId: string, source: string) {
 
 export function PostCallDialog() {
   const { leadId, pending, open: openLog, close } = useCallLog();
-  const { leads, updateLead, addActivity, addFollowUp } = useCRM();
+  const { leads, followUps, logCall, undoCall } = useCRM();
+  const [conflictChoice, setConflictChoice] = useState<"keep" | "replace" | null>(null);
+  const opId = useRef("");
   const lead = leads.find((l) => l.id === leadId);
   const navigate = useNavigate();
   const [outcome, setOutcome] = useState<CallOutcome | null>(null);
@@ -74,7 +78,7 @@ export function PostCallDialog() {
   useEffect(() => {
     if (!lead) return;
     setOutcome(null); setNotes(""); setNeedFollow(true); setWhen(shortcutValue("Tomorrow")); setStage(lead.status);
-    setConfirmed(false); setLostReason(""); setSaving(false); savingRef.current = false;
+    setConfirmed(false); setLostReason(""); setSaving(false); savingRef.current = false; setConflictChoice(null); opId.current = uid("op");
   }, [leadId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pick = (o: CallOutcome) => {
@@ -84,23 +88,20 @@ export function PostCallDialog() {
   };
   const changeStage = (s: LeadStatus) => { setStage(s); setConfirmed(false); };
 
+  const active = lead ? activeFollowUp(followUps, lead.id) : undefined;
   const confirmNeeded = !!lead && needsStageConfirm(stage, lead.status);
 
   const save = (andOpen: boolean) => {
     if (!lead || savingRef.current) return;
     const err = callLogError({ outcome, stage, current: lead.status, confirmed, lostReason });
     if (err) { toast.error(err); return; }
+    if (needFollow && when && active && !conflictChoice) { toast.error("Choose Keep existing or Replace for the follow-up"); return; }
     savingRef.current = true; setSaving(true);
-    const o = outcome!;
     const source = pending?.leadId === lead.id ? pending.source : "CRM";
-    if (stage !== lead.status) {
-      const ok = updateLead(lead.id, { status: stage, ...(stage === "lost" ? { lostReason: lostReason.trim() } : {}) });
-      if (!ok) { toast.error("Could not update stage"); savingRef.current = false; setSaving(false); return; }
-    }
-    if (isConnectedOutcome(o)) updateLead(lead.id, { lastContact: new Date().toISOString() });
-    addActivity(lead.id, `${isConnectedOutcome(o) ? "Call" : "Call attempt"} (${source}): ${o}${notes.trim() ? ` — ${notes.trim()}` : ""}`, "call");
-    if (needFollow && when) addFollowUp({ leadId: lead.id, type: "call", dueAt: toISO(when), note: notes.trim() || `After call: ${o}` });
-    toast.success("Call logged");
+    const r = logCall({ opId: opId.current, leadId: lead.id, outcome: outcome!, notes, stage, lostReason, source, ...(needFollow && when ? { followUp: { dueAt: toISO(when), type: "call" as const } } : {}), ...(conflictChoice ? { onConflict: conflictChoice } : {}) });
+    if (!r.ok) { toast.error(r.error ?? "Resolve the follow-up conflict first"); savingRef.current = false; setSaving(false); return; }
+    const done = r.opId;
+    toast.success("Call outcome saved", { duration: 8000, action: { label: "Undo", onClick: () => { const e = undoCall(done); if (e) toast.error(e); else toast.success("Call log undone"); } } });
     const id = lead.id;
     close();
     if (andOpen) navigate({ to: "/leads/$id", params: { id } });
@@ -130,6 +131,11 @@ export function PostCallDialog() {
             {needFollow && <div className="mt-3 grid gap-2">
               <div className="flex flex-wrap gap-1.5">{DATE_SHORTCUTS.map((s) => { const v = shortcutValue(s); return <button key={s} type="button" onClick={() => setWhen(v)} className={cn("rounded-md border px-2.5 py-1 text-xs transition-colors active:scale-95", when === v ? "border-teal bg-teal-soft text-teal" : "hover:bg-muted")}>{s}</button>; })}</div>
               <Input type="datetime-local" aria-label="Follow-up date and time" value={when} onChange={(e) => setWhen(e.target.value)} />
+              {active && when && <div className="fu-conflict grid gap-2 rounded-lg border border-warning/40 bg-warning/10 p-2.5 text-xs">
+                <div className="flex items-center gap-1.5 font-semibold"><AlertTriangle className="size-3.5 text-warning" />Already has a {active.type} follow-up · {formatDateTime(active.dueAt)}</div>
+                {active.note && <div className="text-muted-foreground">{active.note}</div>}
+                <div className="flex gap-1.5">{([["keep", "Keep existing"], ["replace", `Replace with ${formatDateTime(toISO(when))}`]] as const).map(([k, l]) => <button key={k} type="button" aria-pressed={conflictChoice === k} onClick={() => setConflictChoice(k)} className={cn("rounded-md border px-2.5 py-1", conflictChoice === k ? "border-primary bg-primary-soft text-primary" : "bg-card hover:bg-muted")}>{l}</button>)}</div>
+              </div>}
             </div>}
           </div>
         </div>

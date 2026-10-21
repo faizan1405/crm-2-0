@@ -5,6 +5,36 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type { Lead, Deal, Payment, FollowUp, Note, LeadActivity, BinEntry } from "./types";
 import { mergePatch, QUICK_LABEL, type QuickStatus } from "./leadtools";
 import type { ParsedLead } from "./parse";
+import { isPending, activeFollowUp } from "./followups";
+import { isConnectedOutcome, outcomeQuick, type CallOutcome } from "./calllog";
+
+export type FollowUpResult = { ok: true; id: string } | { ok: false; conflict?: FollowUp; error?: string };
+export interface CallLogInput {
+  opId: string;
+  leadId: string;
+  outcome: CallOutcome;
+  notes?: string;
+  stage: Lead["status"];
+  lostReason?: string;
+  source: string;
+  followUp?: { dueAt: string; type: FollowUp["type"]; note?: string };
+  /** Required when the lead already has an active follow-up and followUp is set. */
+  onConflict?: "keep" | "replace";
+}
+type LeadSnap = { status: Lead["status"]; lostReason: string | undefined; lastContact: string | undefined; nextFollowUp: string | undefined; quickStatus: Lead["quickStatus"] };
+export interface CallOp {
+  id: string;
+  leadId: string;
+  at: string;
+  before: LeadSnap;
+  after: LeadSnap;
+  activityId: string;
+  followUpId?: string;
+  followUpDueAt?: string;
+  replacedId?: string;
+  undone?: boolean;
+}
+export type CallLogResult = { ok: true; opId: string } | { ok: false; conflict?: FollowUp; error?: string };
 import { demoLeads, demoDeals, demoPayments, demoFollowUps, demoNotes, demoActivities } from "./demo";
 import { uid, digits, dayKey } from "./format";
 import { dealOutstanding } from "./finance";
@@ -53,7 +83,12 @@ interface CRMState extends Prefs {
   addDeal: (deal: Omit<Deal, "id" | "createdAt">) => void;
   addPayment: (payment: Omit<Payment, "id">) => boolean;
   voidPayment: (id: string) => void;
-  addFollowUp: (followUp: Omit<FollowUp, "id">) => void;
+  /** One active follow-up per lead: returns a conflict unless replaceId names the active one. Same opId never saves twice. */
+  addFollowUp: (followUp: Omit<FollowUp, "id">, opts?: { replaceId?: string }) => FollowUpResult;
+  callOps: CallOp[];
+  logCall: (input: CallLogInput) => CallLogResult;
+  /** Returns an explanation when undo is not safe, else undefined. */
+  undoCall: (opId: string) => string | undefined;
   completeFollowUp: (id: string) => void;
   rescheduleFollowUp: (id: string, date: string) => void;
   saveNote: (note: Note) => void;
@@ -92,6 +127,7 @@ const initialData = {
   notes: demoNotes,
   activities: demoActivities,
   bin: [] as BinEntry[],
+  callOps: [] as CallOp[],
   briefingDone: [] as string[],
   briefingDate: "",
 };
@@ -99,6 +135,10 @@ const initialData = {
 export const useCRM = create<CRMState>()(
   persist(
     (set, get) => {
+      const syncNext = (leadId: string) => {
+        const next = get().followUps.filter((x) => x.leadId === leadId && isPending(x)).map((x) => x.dueAt).sort()[0];
+        set((s) => ({ leads: s.leads.map((l) => (l.id === leadId ? { ...l, nextFollowUp: next } : l)) }));
+      };
       const moveToBin = (id: string, kind: BinEntry["kind"], reason?: string) => {
         const lead = get().leads.find((l) => l.id === id);
         if (!lead) return;
@@ -177,29 +217,94 @@ export const useCRM = create<CRMState>()(
         return true;
       },
       voidPayment: (id) => set((s) => ({ payments: s.payments.map((p) => (p.id === id ? { ...p, voided: true } : p)) })),
-      addFollowUp: (f) => {
-        if (!get().leads.some((l) => l.id === f.leadId) || !Number.isFinite(new Date(f.dueAt).getTime())) return;
-        set((s) => ({ followUps: [{ ...f, id: uid("followup") }, ...s.followUps] }));
-        const next = get().followUps.filter((x) => x.leadId === f.leadId && !x.completedAt).map((x) => x.dueAt).sort()[0];
-        get().updateLead(f.leadId, { nextFollowUp: next });
-        get().addActivity(f.leadId, `Follow-up scheduled (${f.type})`, "followup");
+      addFollowUp: (f, opts) => {
+        if (f.opId) { const dup = get().followUps.find((x) => x.opId === f.opId); if (dup) return { ok: true, id: dup.id }; }
+        if (!get().leads.some((l) => l.id === f.leadId)) return { ok: false, error: "Lead not found" };
+        if (!Number.isFinite(new Date(f.dueAt).getTime())) return { ok: false, error: "Choose a valid date and time" };
+        const active = activeFollowUp(get().followUps, f.leadId);
+        if (active && opts?.replaceId !== active.id) return { ok: false, conflict: active };
+        const id = uid("followup"); const at = new Date().toISOString();
+        set((s) => ({ followUps: [{ ...f, id }, ...s.followUps.map((x) => (active && x.id === active.id ? { ...x, cancelledAt: at, replacedBy: id } : x))] }));
+        syncNext(f.leadId);
+        get().addActivity(f.leadId, active ? `Follow-up replaced (${f.type})` : `Follow-up scheduled (${f.type})`, "followup");
+        return { ok: true, id };
       },
       completeFollowUp: (id) => {
         const f = get().followUps.find((x) => x.id === id);
+        if (!f || !isPending(f)) return;
         set((s) => ({ followUps: s.followUps.map((x) => (x.id === id ? { ...x, completedAt: new Date().toISOString() } : x)) }));
-        if (f) {
-          const next = get().followUps.filter((x) => x.leadId === f.leadId && !x.completedAt).map((x) => x.dueAt).sort()[0];
-          get().updateLead(f.leadId, { lastContact: new Date().toISOString(), nextFollowUp: next });
-          get().addActivity(f.leadId, `Follow-up completed (${f.type})`, "followup");
-        }
+        get().updateLead(f.leadId, { lastContact: new Date().toISOString() });
+        syncNext(f.leadId);
+        get().addActivity(f.leadId, `Follow-up completed (${f.type})`, "followup");
       },
       rescheduleFollowUp: (id, dueAt) => {
         const f = get().followUps.find((x) => x.id === id);
-        if (!f || f.completedAt || !Number.isFinite(new Date(dueAt).getTime())) return;
+        if (!f || !isPending(f) || !Number.isFinite(new Date(dueAt).getTime())) return;
         set((s) => ({ followUps: s.followUps.map((x) => (x.id === id ? { ...x, dueAt } : x)) }));
-        const next = get().followUps.filter((x) => x.leadId === f.leadId && !x.completedAt).map((x) => x.dueAt).sort()[0];
-        get().updateLead(f.leadId, { nextFollowUp: next });
+        syncNext(f.leadId);
         get().addActivity(f.leadId, "Follow-up rescheduled", "followup");
+      },
+      logCall: (i) => {
+        if (get().callOps.some((o) => o.id === i.opId)) return { ok: true, opId: i.opId };
+        const lead = get().leads.find((l) => l.id === i.leadId);
+        if (!lead) return { ok: false, error: "Lead not found" };
+        if (i.stage === "lost" && lead.status !== "lost" && !i.lostReason?.trim()) return { ok: false, error: "Add a lost reason" };
+        const active = activeFollowUp(get().followUps, i.leadId);
+        if (i.followUp && active && !i.onConflict) return { ok: false, conflict: active };
+        if (i.followUp && !Number.isFinite(new Date(i.followUp.dueAt).getTime())) return { ok: false, error: "Choose a valid follow-up time" };
+        const at = new Date().toISOString();
+        const before: LeadSnap = { status: lead.status, lostReason: lead.lostReason, lastContact: lead.lastContact, nextFollowUp: lead.nextFollowUp, quickStatus: lead.quickStatus };
+        const q = outcomeQuick(i.outcome);
+        const patch: Partial<Lead> = {
+          ...(i.stage !== lead.status ? { status: i.stage, ...(i.stage === "lost" ? { lostReason: i.lostReason!.trim() } : {}) } : {}),
+          ...(isConnectedOutcome(i.outcome) ? { lastContact: at } : {}),
+          ...(q ? { quickStatus: q } : {}),
+        };
+        const next = { ...lead, ...patch, ...(patch.status && patch.status !== "lost" ? { lostReason: undefined } : {}) };
+        const editErr = leadEditError(get().leads, lead.id, next);
+        if (editErr) return { ok: false, error: editErr };
+        const activityId = uid("activity");
+        const notes = i.notes?.trim();
+        const add = i.followUp && !(active && i.onConflict === "keep");
+        const followUpId = add ? uid("followup") : undefined;
+        const replacedId = add && active ? active.id : undefined;
+        set((s) => {
+          const fus = s.followUps.map((x) => (x.id === replacedId ? { ...x, cancelledAt: at, replacedBy: followUpId } : x));
+          if (followUpId && i.followUp) fus.unshift({ id: followUpId, leadId: lead.id, type: i.followUp.type, dueAt: i.followUp.dueAt, note: i.followUp.note || notes || `After call: ${i.outcome}`, opId: i.opId });
+          const nextDue = fus.filter((x) => x.leadId === lead.id && isPending(x)).map((x) => x.dueAt).sort()[0];
+          const updated = { ...next, nextFollowUp: nextDue, updatedAt: at };
+          const statusAct: LeadActivity[] = patch.status ? [{ id: uid("activity"), leadId: lead.id, type: "status", text: `Status changed to ${patch.status}`, at, opId: i.opId }] : [];
+          return {
+            followUps: fus,
+            leads: s.leads.map((l) => (l.id === lead.id ? updated : l)),
+            activities: [{ id: activityId, leadId: lead.id, type: "call", outcome: i.outcome, opId: i.opId, at, text: `${isConnectedOutcome(i.outcome) ? "Call" : "Call attempt"} (${i.source}): ${i.outcome}${notes ? ` — ${notes}` : ""}${followUpId ? replacedId ? " · follow-up replaced" : " · follow-up scheduled" : ""}` }, ...statusAct, ...s.activities],
+            callOps: [{ id: i.opId, leadId: lead.id, at, before, after: { status: updated.status, lostReason: updated.lostReason, lastContact: updated.lastContact, nextFollowUp: updated.nextFollowUp, quickStatus: updated.quickStatus }, activityId, ...(followUpId ? { followUpId, followUpDueAt: i.followUp!.dueAt } : {}), ...(replacedId ? { replacedId } : {}) }, ...s.callOps].slice(0, 50),
+          };
+        });
+        return { ok: true, opId: i.opId };
+      },
+      undoCall: (opId) => {
+        const op = get().callOps.find((o) => o.id === opId);
+        if (!op) return "This call log can no longer be undone";
+        if (op.undone) return undefined;
+        const lead = get().leads.find((l) => l.id === op.leadId);
+        if (!lead) return "The lead was moved to Waste or deleted after this call — restore it first";
+        if (lead.status !== op.after.status || lead.lastContact !== op.after.lastContact || lead.quickStatus !== op.after.quickStatus) return "The lead changed after this call (stage, contact or quick status), so Undo was stopped to protect the newer change";
+        const fu = op.followUpId ? get().followUps.find((x) => x.id === op.followUpId) : undefined;
+        if (op.followUpId && (!fu || !isPending(fu) || fu.dueAt !== op.followUpDueAt)) return "The follow-up from this call was already completed, moved or replaced — update it directly instead";
+        const replaced = op.replacedId ? get().followUps.find((x) => x.id === op.replacedId) : undefined;
+        const restoreReplaced = replaced && replaced.cancelledAt && replaced.replacedBy === op.followUpId && !replaced.completedAt;
+        set((s) => {
+          const fus = s.followUps.filter((x) => x.id !== op.followUpId).map((x) => (restoreReplaced && x.id === op.replacedId ? { ...x, cancelledAt: undefined, replacedBy: undefined } : x));
+          const nextDue = fus.filter((x) => x.leadId === op.leadId && isPending(x)).map((x) => x.dueAt).sort()[0];
+          return {
+            followUps: fus,
+            leads: s.leads.map((l) => (l.id === op.leadId ? { ...l, status: op.before.status, lostReason: op.before.lostReason, lastContact: op.before.lastContact, quickStatus: op.before.quickStatus, nextFollowUp: nextDue, updatedAt: new Date().toISOString() } : l)),
+            activities: s.activities.filter((a) => a.opId !== opId),
+            callOps: s.callOps.map((o) => (o.id === opId ? { ...o, undone: true } : o)),
+          };
+        });
+        return undefined;
       },
       saveNote: (note) =>
         set((s) => ({ notes: s.notes.some((n) => n.id === note.id) ? s.notes.map((n) => (n.id === note.id ? note : n)) : [note, ...s.notes] })),

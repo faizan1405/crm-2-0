@@ -3,6 +3,12 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Check, Plus, CalendarClock, Phone, CheckCircle2, AlertCircle } from "lucide-react";
 import { Shell, Empty, Identity } from "@/components/crm/Shell";
+import { SuggestionList } from "@/components/crm/Suggestions";
+import { CallButton } from "@/components/crm/CallButton";
+import { MessageCircle, Sparkles } from "lucide-react";
+import { digits } from "@/lib/crm/format";
+import { shiftDay } from "@/lib/crm/dates";
+import { toISO } from "@/lib/crm/calllog";
 import { FollowUpDialog } from "@/components/crm/Dialogs";
 import { useCRM } from "@/lib/crm/store";
 import { formatDateTime, dayKey } from "@/lib/crm/format";
@@ -31,7 +37,7 @@ function FollowUps() {
   const [tab, setTab] = useState<Tab>("today");
   const [add, setAdd] = useState(false);
   const today = dayKey(new Date());
-  const bucket = (f: (typeof followUps)[0]): Tab => (f.completedAt ? "done" : dayKey(f.dueAt) < today ? "overdue" : dayKey(f.dueAt) === today ? "today" : "upcoming");
+  const bucket = (f: (typeof followUps)[0]): Tab => (f.completedAt || f.cancelledAt ? "done" : dayKey(f.dueAt) < today ? "overdue" : dayKey(f.dueAt) === today ? "today" : "upcoming");
   const counts = { overdue: 0, today: 0, upcoming: 0, done: 0 };
   followUps.forEach((f) => counts[bucket(f)]++);
   const list = followUps.filter((f) => bucket(f) === tab).sort((a, b) => (tab === "done" ? b.dueAt.localeCompare(a.dueAt) : a.dueAt.localeCompare(b.dueAt)));
@@ -41,6 +47,7 @@ function FollowUps() {
   return (
     <Shell title="Follow-ups" subtitle={`${counts.overdue + counts.today} need attention today`} actions={<Button onClick={() => setAdd(true)}><Plus className="size-4" />Schedule</Button>}>
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">{([["overdue", "Overdue", AlertCircle, "text-destructive bg-destructive-soft"], ["today", "Today", Phone, "text-primary bg-primary-soft"], ["upcoming", "Upcoming", CalendarClock, "text-teal bg-teal-soft"], ["done", "Completed", CheckCircle2, "text-success bg-success-soft"]] as const).map(([t,label,Icon,tone]) => <Button key={t} variant="outline" onClick={() => setTab(t)} className={cn("surface h-auto justify-start gap-3 p-4",tab === t && "border-primary bg-primary-soft/30")}><span className={cn("grid size-9 place-items-center rounded-lg",tone)}><Icon className="size-4" /></span><span className="text-left"><span className="num block text-xl font-bold">{counts[t]}</span><span className="text-xs text-muted-foreground">{label}</span></span></Button>)}</div>
+      <section className="surface mb-6 p-5"><h2 className="mb-1 flex items-center gap-2 text-base font-bold"><Sparkles className="size-4 text-primary" />Suggested next actions</h2><p className="mb-3 text-xs text-muted-foreground">Worked out from stage, quick status, last call and dates. Nothing is saved until you review the time.</p><SuggestionList /></section>
       <div className="mb-5 flex flex-wrap gap-1 border-b pb-3">
         {(["overdue", "today", "upcoming", "done"] as Tab[]).map((t) => (
           <Button size="sm" variant="ghost" key={t} onClick={() => setTab(t)} className={cn("rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors", tab === t ? "bg-card text-foreground shadow-card" : "text-muted-foreground hover:text-foreground")}>
@@ -54,12 +61,15 @@ function FollowUps() {
           return (
             <div key={f.id} className={cn("followup-row flex flex-wrap items-center justify-between gap-3 p-4",tab === "overdue" && "is-overdue")}>
               <div className="min-w-0">
-                <div className="flex items-center gap-2"><Link to="/leads/$id" params={{ id: f.leadId }} className="hover:text-primary"><Identity name={l?.name ?? "Deleted lead"} company={l?.company} /></Link><span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-medium text-primary">{FOLLOWUP_LABEL[f.type]}</span></div>
+                <div className="flex items-center gap-2"><Link to="/leads/$id" params={{ id: f.leadId }} className="hover:text-primary"><Identity name={l?.name ?? "Deleted lead"} company={l?.company} /></Link><span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-medium text-primary">{FOLLOWUP_LABEL[f.type]}</span>{f.cancelledAt && <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">Replaced</span>}{tab === "overdue" && <span className="rounded-full bg-destructive-soft px-2 py-0.5 text-[11px] font-semibold text-destructive">Overdue — reschedule</span>}</div>
                 <div className="mt-2 text-xs text-muted-foreground">{f.note}</div>
               </div>
               <div className="flex items-center gap-2">
-                <span className={cn("num text-xs", tab === "overdue" ? "font-semibold text-destructive" : "text-muted-foreground")}>{formatDateTime(f.completedAt ?? f.dueAt)}</span>
-                {!f.completedAt && <>
+                <span className={cn("num text-xs", tab === "overdue" ? "font-semibold text-destructive" : "text-muted-foreground")}>{formatDateTime(f.completedAt ?? f.cancelledAt ?? f.dueAt)}</span>
+                {!f.completedAt && !f.cancelledAt && <>
+                  {l && <CallButton leadId={l.id} phone={l.phone} name={l.name} source="Follow-ups" />}
+                  {l && <Button size="icon" variant="ghost" asChild className="size-8"><a href={`https://wa.me/91${digits(l.phone)}`} target="_blank" rel="noreferrer" aria-label={`WhatsApp ${l.name}`}><MessageCircle className="size-4 text-success" /></a></Button>}
+                  <Button size="sm" variant="ghost" onClick={() => { rescheduleFollowUp(f.id, toISO(`${shiftDay(today, 1)}T11:00`)); toast.success("Moved to tomorrow 11:00 AM"); }}>Tomorrow 11 AM</Button>
                   <Button size="sm" variant="ghost" onClick={() => { rescheduleFollowUp(f.id, tomorrow(f.dueAt)); toast.success("Moved by one day"); }}>+1 day</Button>
                   <Button size="sm" variant="outline" onClick={() => { completeFollowUp(f.id); toast.success("Marked done"); }}><Check className="size-4" />Done</Button>
                 </>}

@@ -26,7 +26,7 @@ export interface Lead {
   aiScore?: number; // 0-100, simulated in demo
   quotedAmount?: number;
   budget?: number;
-  lastContact?: string; // ISO
+  lastContact?: string | undefined; // ISO
   nextFollowUp?: string | undefined; // ISO; cleared when no follow-ups remain
   notes?: string;
   pinned: boolean;
@@ -45,6 +45,10 @@ export interface LeadActivity {
   type: ActivityType;
   text: string;
   at: string;
+  /** Call outcome label when type is "call". */
+  outcome?: string;
+  /** Operation that created this entry (used for Undo). */
+  opId?: string;
 }
 
 export type FollowUpType = "call" | "whatsapp" | "meeting" | "email";
@@ -56,6 +60,10 @@ export interface FollowUp {
   dueAt: string;
   note?: string;
   completedAt?: string;
+  /** Set when replaced/cancelled — kept for history, never pending. */
+  cancelledAt?: string | undefined;
+  replacedBy?: string | undefined;
+  opId?: string;
 }
 
 export type DealStatus = "active" | "completed" | "on_hold" | "cancelled";

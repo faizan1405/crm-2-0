@@ -42,15 +42,13 @@ describe("CRM action and persistence contracts", () => {
     useCRM.getState().updateLead(lead.id, { name: "Edited client" });
     expect(useCRM.getState().deals.filter((d) => d.name.startsWith("Audit ")).map((d) => d.clientName)).toEqual(["Edited client", "Edited client"]);
   });
-  it("scheduling, rescheduling and completion keep the earliest pending date on the lead", () => {
+  it("scheduling, rescheduling and completion keep the active date on the lead", () => {
     const id = first().id; useCRM.setState({ followUps: [] });
-    useCRM.getState().addFollowUp({ leadId: id, type: "call", dueAt: "2026-10-21T10:00:00Z" });
-    useCRM.getState().addFollowUp({ leadId: id, type: "email", dueAt: "2026-10-22T10:00:00Z" });
-    const f = useCRM.getState().followUps.find((x) => x.type === "call");
-    if (!f) throw new Error("Missing follow-up");
-    useCRM.getState().rescheduleFollowUp(f.id, "2026-10-23T10:00:00Z");
-    expect(first().nextFollowUp).toBe("2026-10-22T10:00:00Z");
-    for (const x of useCRM.getState().followUps) useCRM.getState().completeFollowUp(x.id);
+    const r = useCRM.getState().addFollowUp({ leadId: id, type: "call", dueAt: "2026-10-21T10:00:00Z" });
+    if (!r.ok) throw new Error("schedule failed");
+    useCRM.getState().rescheduleFollowUp(r.id, "2026-10-23T10:00:00Z");
+    expect(first().nextFollowUp).toBe("2026-10-23T10:00:00Z");
+    useCRM.getState().completeFollowUp(r.id);
     expect(first().nextFollowUp).toBeUndefined();
     expect(first().lastContact).toBeDefined();
   });

@@ -1,3 +1,5 @@
+import { SuggestionList } from "@/components/crm/Suggestions";
+import { isPending } from "@/lib/crm/followups";
 import { CallButton } from "@/components/crm/CallButton";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -39,7 +41,7 @@ function Briefing() {
 
   const d = useMemo(() => {
     const open = leads.filter(isOpen);
-    const pending = followUps.filter((f) => !f.completedAt);
+    const pending = followUps.filter((f) => isPending(f));
     const todayFu = pending.filter((f) => dayKey(f.dueAt) === today);
     const overdueFu = pending.filter((f) => dayKey(f.dueAt) < today);
     return {
@@ -82,6 +84,7 @@ function Briefing() {
         </div>
       </section>
 
+      <section className="surface mt-5 p-5"><h2 className="mb-3 text-base font-bold">Suggested follow-ups</h2><SuggestionList limit={3} /></section>
       <section className="surface mt-5 p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2"><Sparkles className="size-4 text-primary" /><h2 className="font-semibold">Daily intelligence</h2><span className="rounded-full bg-warning-soft px-2 py-0.5 text-[10px] font-semibold text-warning uppercase">Simulated · rule-based</span></div>
@@ -151,7 +154,7 @@ function Briefing() {
           </Widget>
           <Widget title="Proposal stage" count={d.proposals.length}>
             {d.proposals.length === 0 ? <p className="text-sm text-muted-foreground">No leads in Proposal Sent.</p> : d.proposals.map((l) => {
-              const next = followUps.find((f) => f.leadId === l.id && !f.completedAt);
+              const next = followUps.find((f) => f.leadId === l.id && isPending(f));
               return <Link key={l.id} to="/leads/$id" params={{ id: l.id }} className="flex items-center justify-between rounded-lg p-2 text-sm hover:bg-muted"><div><div className="font-medium">{l.name}</div><div className="text-xs text-muted-foreground">{next ? `Next: ${formatDateTime(next.dueAt)}` : "No follow-up scheduled"}</div></div><span className="num text-xs font-semibold">{formatINRCompact(l.quotedAmount ?? 0)}</span></Link>;
             })}
           </Widget>

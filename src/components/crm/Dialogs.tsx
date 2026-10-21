@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { AlertTriangle } from "lucide-react";
+import { uid, formatDateTime } from "@/lib/crm/format";
 import { toast } from "sonner";
 import { useCRM } from "@/lib/crm/store";
-import { FOLLOWUP_LABEL, type FollowUpType } from "@/lib/crm/types";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { FOLLOWUP_LABEL, type FollowUpType, type FollowUp } from "@/lib/crm/types";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,39 +12,70 @@ import { Textarea } from "@/components/ui/textarea";
 import { businessDateTime } from "@/lib/crm/dates";
 import { selectCls } from "./Shell";
 
-export function FollowUpDialog({ open, onOpenChange, leadId }: { open: boolean; onOpenChange: (o: boolean) => void; leadId?: string }) {
-  const { leads, addFollowUp } = useCRM();
+export interface FollowUpDraft { at?: string; type?: FollowUpType; note?: string }
+
+/** Side-by-side existing vs requested follow-up with Keep / Replace / Cancel. */
+export function FollowUpConflict({ existing, requested, onKeep, onReplace, onCancel, compact }: { existing: FollowUp; requested: { dueAt: string; type: FollowUpType; note?: string }; onKeep: () => void; onReplace: () => void; onCancel?: () => void; compact?: boolean }) {
+  const card = (title: string, f: { dueAt: string; type: FollowUpType; note?: string }, tone: string) => (
+    <div className={`rounded-lg border p-3 ${tone}`}><div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</div><div className="mt-1 text-sm font-semibold">{FOLLOWUP_LABEL[f.type]} · {formatDateTime(f.dueAt)}</div><div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{f.note || "No notes"}</div></div>
+  );
+  return (
+    <div role="alertdialog" aria-label="Follow-up conflict" className="fu-conflict grid gap-3 rounded-xl border border-warning/40 bg-warning/10 p-3">
+      <div className="flex items-center gap-2 text-sm font-semibold"><AlertTriangle className="size-4 text-warning" />This lead already has an active follow-up</div>
+      <div className="grid gap-2 sm:grid-cols-2">{card("Existing", existing, "bg-card")}{card("New", requested, "border-primary/40 bg-card")}</div>
+      <div className={`flex flex-wrap gap-2 ${compact ? "" : "justify-end"}`}>
+        {onCancel && <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>}
+        <Button size="sm" variant="outline" onClick={onKeep}>Keep existing</Button>
+        <Button size="sm" onClick={onReplace}>Replace with new</Button>
+      </div>
+    </div>
+  );
+}
+
+export function FollowUpDialog({ open, onOpenChange, leadId, initial, rescheduleId }: { open: boolean; onOpenChange: (o: boolean) => void; leadId?: string; initial?: FollowUpDraft; rescheduleId?: string }) {
+  const { leads, addFollowUp, rescheduleFollowUp } = useCRM();
   const [lead, setLead] = useState(leadId ?? "");
   const [type, setType] = useState<FollowUpType>("call");
   const [at, setAt] = useState("");
   const [note, setNote] = useState("");
+  const [conflict, setConflict] = useState<FollowUp | null>(null);
+  const opId = useRef(uid("op"));
+  useEffect(() => {
+    if (!open) return;
+    opId.current = uid("op"); setConflict(null);
+    setType(initial?.type ?? "call"); setAt(initial?.at ?? ""); setNote(initial?.note ?? "");
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   const target = leadId ?? lead;
-  const save = () => {
+  const done = (msg: string) => { toast.success(msg); setAt(""); setNote(""); setConflict(null); onOpenChange(false); };
+  const save = (replaceId?: string) => {
     if (!target || !at) { toast.error("Choose a lead and a date/time"); return; }
-    addFollowUp({ leadId: target, type, dueAt: businessDateTime(at), ...(note ? { note } : {}) });
-    toast.success("Follow-up scheduled");
-    setAt(""); setNote(""); onOpenChange(false);
+    if (rescheduleId) { rescheduleFollowUp(rescheduleId, businessDateTime(at)); done("Follow-up rescheduled"); return; }
+    const r = addFollowUp({ leadId: target, type, dueAt: businessDateTime(at), opId: opId.current, ...(note ? { note } : {}) }, replaceId ? { replaceId } : undefined);
+    if (r.ok) done(replaceId ? "Follow-up replaced" : "Follow-up scheduled");
+    else if (r.conflict) setConflict(r.conflict);
+    else toast.error(r.error ?? "Could not schedule");
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader><DialogTitle>Schedule follow-up</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{rescheduleId ? "Reschedule follow-up" : "Schedule follow-up"}</DialogTitle>{initial?.at && <DialogDescription>Suggested time — review and change before saving. Times are India time (IST).</DialogDescription>}</DialogHeader>
         <div className="grid gap-3">
           {!leadId && (
             <div className="grid gap-1.5"><Label htmlFor="fu-lead">Lead</Label>
-              <select id="fu-lead" className={selectCls} value={lead} onChange={(e) => setLead(e.target.value)}>
+              <select id="fu-lead" className={selectCls} value={lead} onChange={(e) => { setLead(e.target.value); setConflict(null); }}>
                 <option value="">Select a lead…</option>
                 {leads.map((l) => <option key={l.id} value={l.id}>{l.name}{l.company ? ` · ${l.company}` : ""}</option>)}
               </select>
             </div>
           )}
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="grid gap-1.5"><Label htmlFor="fu-type">Type</Label><select id="fu-type" className={selectCls} value={type} onChange={(e) => setType(e.target.value as FollowUpType)}>{Object.entries(FOLLOWUP_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
-            <div className="grid gap-1.5"><Label htmlFor="fu-at">When</Label><Input id="fu-at" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} /></div>
+            <div className="grid gap-1.5"><Label htmlFor="fu-type">Type</Label><select id="fu-type" disabled={!!rescheduleId} className={selectCls} value={type} onChange={(e) => setType(e.target.value as FollowUpType)}>{Object.entries(FOLLOWUP_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
+            <div className="grid gap-1.5"><Label htmlFor="fu-at">When (IST)</Label><Input id="fu-at" type="datetime-local" value={at} onChange={(e) => { setAt(e.target.value); setConflict(null); }} /></div>
           </div>
-          <div className="grid gap-1.5"><Label htmlFor="fu-note">Note</Label><Textarea id="fu-note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} /></div>
+          {!rescheduleId && <div className="grid gap-1.5"><Label htmlFor="fu-note">Note</Label><Textarea id="fu-note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} /></div>}
+          {conflict && at && <FollowUpConflict existing={conflict} requested={{ dueAt: businessDateTime(at), type, note }} onCancel={() => onOpenChange(false)} onKeep={() => done("Kept the existing follow-up")} onReplace={() => save(conflict.id)} />}
         </div>
-        <DialogFooter><Button onClick={save}>Schedule</Button></DialogFooter>
+        {!conflict && <DialogFooter><Button onClick={() => save()}>{rescheduleId ? "Reschedule" : "Schedule"}</Button></DialogFooter>}
       </DialogContent>
     </Dialog>
   );
