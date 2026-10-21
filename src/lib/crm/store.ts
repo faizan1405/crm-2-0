@@ -39,6 +39,7 @@ import { demoLeads, demoDeals, demoPayments, demoFollowUps, demoNotes, demoActiv
 import { uid, digits, dayKey } from "./format";
 import { dealOutstanding } from "./finance";
 import { leadEditError } from "./validation";
+import { builtInTemplates, DEFAULT_DEMO_CATEGORIES, nextQuoteNumber, quoteError, quoteTotals, safeUrl, type BusinessProfile, type Demo, type Quotation, type QuoteStatus, type WaTemplate } from "./studio";
 
 export type ThemePref = "light" | "dark" | "system";
 export interface Prefs {
@@ -97,6 +98,25 @@ interface CRMState extends Prefs {
   resetBriefing: () => void;
   preferences: (patch: Partial<Prefs>) => void;
   reset: () => void;
+  // Sales Studio — one shared source for quotations, templates and demos (not cleared by reset()).
+  quotations: Quotation[];
+  waTemplates: WaTemplate[];
+  demos: Demo[];
+  demoCategories: string[];
+  businessProfile: BusinessProfile;
+  saveQuotation: (q: Quotation) => string | null;
+  duplicateQuotation: (id: string) => string | undefined;
+  deleteQuotation: (id: string) => void;
+  setQuoteStatus: (id: string, status: QuoteStatus) => void;
+  saveTemplate: (t: WaTemplate) => void;
+  deleteTemplate: (id: string) => void;
+  setDefaultTemplate: (id: string) => void;
+  resetTemplates: () => void;
+  saveDemo: (d: Demo) => boolean;
+  deleteDemo: (id: string) => void;
+  moveDemo: (id: string, dir: -1 | 1) => void;
+  addDemoCategory: (name: string) => void;
+  saveBusinessProfile: (p: BusinessProfile) => void;
 }
 
 export function duplicatePhone(leads: Lead[], phone: string): Lead | undefined {
@@ -318,6 +338,69 @@ export const useCRM = create<CRMState>()(
       resetBriefing: () => set({ briefingDone: [], briefingDate: dayKey(new Date()) }),
       preferences: (patch) => set(patch),
       reset: () => set({ ...initialData }),
+      quotations: [],
+      waTemplates: builtInTemplates(),
+      demos: [],
+      demoCategories: DEFAULT_DEMO_CATEGORIES,
+      businessProfile: { name: "" },
+      saveQuotation: (q) => {
+        const err = quoteError(q);
+        if (err) return null;
+        const at = new Date().toISOString();
+        const prev = get().quotations.find((x) => x.id === q.id);
+        const total = quoteTotals(q).total;
+        if (!prev) {
+          const number = q.number || nextQuoteNumber(get().quotations, Number(q.issueDate.slice(0, 4)));
+          const row: Quotation = { ...q, number, revision: 1, history: [{ revision: 1, at, total, title: q.title }], createdAt: at, updatedAt: at };
+          set((s) => ({ quotations: [row, ...s.quotations] }));
+          return row.id;
+        }
+        const changed = quoteTotals(prev).total !== total || prev.title !== q.title || JSON.stringify(prev.items) !== JSON.stringify(q.items);
+        const revision = changed ? prev.revision + 1 : prev.revision;
+        const row: Quotation = { ...q, createdAt: prev.createdAt, number: prev.number, revision, history: changed ? [...prev.history, { revision, at, total, title: q.title }] : prev.history, updatedAt: at };
+        // Deals and payments are deliberately untouched: a quotation is never a confirmed amount.
+        set((s) => ({ quotations: s.quotations.map((x) => (x.id === q.id ? row : x)) }));
+        return row.id;
+      },
+      duplicateQuotation: (id) => {
+        const src = get().quotations.find((x) => x.id === id);
+        if (!src) return undefined;
+        const at = new Date().toISOString();
+        const copy: Quotation = { ...src, id: uid("quo"), number: nextQuoteNumber(get().quotations, Number(at.slice(0, 4))), title: `${src.title} (copy)`, status: "draft", sharedAt: undefined, items: src.items.map((i) => ({ ...i, id: uid("qi") })), revision: 1, history: [{ revision: 1, at, total: quoteTotals(src).total, title: `${src.title} (copy)` }], createdAt: at, updatedAt: at };
+        set((s) => ({ quotations: [copy, ...s.quotations] }));
+        return copy.id;
+      },
+      deleteQuotation: (id) => set((s) => ({ quotations: s.quotations.filter((x) => x.id !== id) })),
+      setQuoteStatus: (id, status) => set((s) => ({ quotations: s.quotations.map((x) => (x.id === id ? { ...x, status, updatedAt: new Date().toISOString(), ...(status === "shared" ? { sharedAt: new Date().toISOString() } : {}) } : x)) })),
+      saveTemplate: (t) => set((s) => {
+        const row = { ...t, updatedAt: new Date().toISOString() };
+        const exists = s.waTemplates.some((x) => x.id === t.id);
+        let list = exists ? s.waTemplates.map((x) => (x.id === t.id ? row : x)) : [...s.waTemplates, row];
+        if (row.isDefault) list = list.map((x) => (x.purpose === row.purpose && x.id !== row.id ? { ...x, isDefault: false } : x));
+        return { waTemplates: list };
+      }),
+      deleteTemplate: (id) => set((s) => ({ waTemplates: s.waTemplates.filter((x) => x.id !== id) })),
+      setDefaultTemplate: (id) => set((s) => {
+        const t = s.waTemplates.find((x) => x.id === id);
+        return t ? { waTemplates: s.waTemplates.map((x) => (x.purpose === t.purpose ? { ...x, isDefault: x.id === id, ...(x.id === id ? { enabled: true } : {}) } : x)) } : {};
+      }),
+      resetTemplates: () => set((s) => ({ waTemplates: [...builtInTemplates(), ...s.waTemplates.filter((x) => !x.builtIn).map((x) => ({ ...x, isDefault: false }))] })),
+      saveDemo: (d) => {
+        if (!d.title.trim() || !safeUrl(d.url)) return false;
+        const row = { ...d, url: safeUrl(d.url)! };
+        set((s) => ({ demos: s.demos.some((x) => x.id === d.id) ? s.demos.map((x) => (x.id === d.id ? row : x)) : [...s.demos, { ...row, order: s.demos.length }] }));
+        return true;
+      },
+      deleteDemo: (id) => set((s) => ({ demos: s.demos.filter((x) => x.id !== id) })),
+      moveDemo: (id, dir) => set((s) => {
+        const list = [...s.demos].sort((a, b) => a.order - b.order);
+        const i = list.findIndex((x) => x.id === id), j = i + dir;
+        if (i < 0 || j < 0 || j >= list.length) return {};
+        [list[i], list[j]] = [list[j]!, list[i]!];
+        return { demos: list.map((x, order) => ({ ...x, order })) };
+      }),
+      addDemoCategory: (name) => set((s) => (name.trim() && !s.demoCategories.includes(name.trim()) ? { demoCategories: [...s.demoCategories, name.trim()] } : {})),
+      saveBusinessProfile: (p) => set({ businessProfile: p }),
     };
     },
     { name: "scale-flow-crm-2-demo", version: 2, storage: createJSONStorage(() => localStorage), skipHydration: true },
