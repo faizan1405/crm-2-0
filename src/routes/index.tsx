@@ -1,3 +1,4 @@
+import { isPending } from "@/lib/crm/followups";
 import { CallButton } from "@/components/crm/CallButton";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -24,7 +25,7 @@ function Dashboard() {
   const [add,setAdd] = useState(false);
   const fin=financeSummary(deals,payments), today=dayKey(new Date());
   const open=leads.filter(l => !["won","lost"].includes(l.status));
-  const pending=followUps.filter(f => !f.completedAt).sort((a,b)=>a.dueAt.localeCompare(b.dueAt));
+  const pending=followUps.filter(f => isPending(f)).sort((a,b)=>a.dueAt.localeCompare(b.dueAt));
   const focus=pending.filter(f => dayKey(f.dueAt)<=today);
   const hot=[...open].sort((a,b)=>(b.aiScore??0)-(a.aiScore??0)).slice(0,4);
   const stage=LEAD_STATUSES.map(s=>({name:STATUS_LABEL[s],count:leads.filter(l=>l.status===s).length}));

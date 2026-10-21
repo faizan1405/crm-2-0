@@ -1,3 +1,4 @@
+import { isPending } from "@/lib/crm/followups";
 import { CallButton } from "@/components/crm/CallButton";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -39,7 +40,7 @@ function Briefing() {
 
   const d = useMemo(() => {
     const open = leads.filter(isOpen);
-    const pending = followUps.filter((f) => !f.completedAt);
+    const pending = followUps.filter((f) => isPending(f));
     const todayFu = pending.filter((f) => dayKey(f.dueAt) === today);
     const overdueFu = pending.filter((f) => dayKey(f.dueAt) < today);
     return {
@@ -151,7 +152,7 @@ function Briefing() {
           </Widget>
           <Widget title="Proposal stage" count={d.proposals.length}>
             {d.proposals.length === 0 ? <p className="text-sm text-muted-foreground">No leads in Proposal Sent.</p> : d.proposals.map((l) => {
-              const next = followUps.find((f) => f.leadId === l.id && !f.completedAt);
+              const next = followUps.find((f) => f.leadId === l.id && isPending(f));
               return <Link key={l.id} to="/leads/$id" params={{ id: l.id }} className="flex items-center justify-between rounded-lg p-2 text-sm hover:bg-muted"><div><div className="font-medium">{l.name}</div><div className="text-xs text-muted-foreground">{next ? `Next: ${formatDateTime(next.dueAt)}` : "No follow-up scheduled"}</div></div><span className="num text-xs font-semibold">{formatINRCompact(l.quotedAmount ?? 0)}</span></Link>;
             })}
           </Widget>

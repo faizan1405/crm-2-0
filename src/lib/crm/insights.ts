@@ -23,7 +23,7 @@ export function buildPriorities(leads: Lead[], followUps: FollowUp[], now = new 
   const items: PriorityItem[] = [];
   const byId = new Map(leads.map((l) => [l.id, l]));
   for (const f of followUps) {
-    if (f.completedAt) continue;
+    if (f.completedAt || f.cancelledAt) continue;
     const lead = byId.get(f.leadId);
     if (!lead) continue;
     const k = dayKey(f.dueAt);
@@ -33,7 +33,7 @@ export function buildPriorities(leads: Lead[], followUps: FollowUp[], now = new 
   const covered = new Set(items.map((i) => i.lead.id));
   for (const lead of leads) {
     if (!isOpen(lead) || covered.has(lead.id)) continue;
-    if (followUps.some((f) => f.leadId === lead.id && !f.completedAt)) continue;
+    if (followUps.some((f) => f.leadId === lead.id && !f.completedAt && !f.cancelledAt)) continue;
     if (lead.status === "proposal") items.push({ key: `lead:${lead.id}:proposal`, lead, severity: "important", reason: "Proposal sent — no follow-up scheduled", action: "Check in and confirm next steps", ...val(lead) });
     else if (lead.priority === "hot") items.push({ key: `lead:${lead.id}:hot`, lead, severity: "important", reason: `Hot lead · score ${lead.aiScore ?? "—"}`, action: "Schedule a discovery call", ...val(lead) });
     else if (lead.status === "new") items.push({ key: `lead:${lead.id}:new`, lead, severity: "normal", reason: "New lead not yet contacted", action: "Make first contact", ...val(lead) });

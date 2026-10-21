@@ -1,3 +1,4 @@
+import { isPending } from "@/lib/crm/followups";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
@@ -60,8 +61,8 @@ function Analytics() {
     const trend = [...buckets.entries()].sort().map(([k, v]) => ({ label: monthly ? formatDate(k + "-01", { month: "short", year: "2-digit" }) : formatDate(k), revenue: v }));
     const today = dayKey(new Date());
     const fu = {
-      dueToday: followUps.filter((f) => !f.completedAt && dayKey(f.dueAt) === today).length,
-      overdue: followUps.filter((f) => !f.completedAt && dayKey(f.dueAt) < today).length,
+      dueToday: followUps.filter((f) => isPending(f) && dayKey(f.dueAt) === today).length,
+      overdue: followUps.filter((f) => isPending(f) && dayKey(f.dueAt) < today).length,
       completed: followUps.filter((f) => f.completedAt && inRange(f.completedAt)).length,
     };
     const fuTrend = ["call", "whatsapp", "meeting", "email"].map((t) => ({ type: t === "whatsapp" ? "WhatsApp" : t.charAt(0).toUpperCase() + t.slice(1), scheduled: followUps.filter((f) => f.type === t && inRange(f.dueAt)).length, done: followUps.filter((f) => f.type === t && f.completedAt && inRange(f.completedAt)).length }));
