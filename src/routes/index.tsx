@@ -1,4 +1,4 @@
-import { isPending } from "@/lib/crm/followups";
+import { isPending, followUpBucket } from "@/lib/crm/followups";
 import { CallButton } from "@/components/crm/CallButton";
 import { openCallLog } from "@/components/crm/PostCallDialog";
 import { FollowUpDialog } from "@/components/crm/Dialogs";
@@ -55,8 +55,8 @@ function Dashboard() {
   const open = leads.filter((l) => !["won", "lost"].includes(l.status));
   const pending = followUps.filter(isPending).sort((a, b) => a.dueAt.localeCompare(b.dueAt));
   // Overdue = scheduled time already passed (IST-agnostic absolute time); Today = later today in India time.
-  const overdue = pending.filter((f) => new Date(f.dueAt).getTime() < now);
-  const dueToday = pending.filter((f) => new Date(f.dueAt).getTime() >= now && dayKey(f.dueAt) === today);
+  const overdue = pending.filter((f) => followUpBucket(f, new Date(now)) === "overdue");
+  const dueToday = pending.filter((f) => followUpBucket(f, new Date(now)) === "today");
   const hot = open.filter((l) => l.priority === "hot").sort((a, b) => (b.aiScore ?? 0) - (a.aiScore ?? 0));
   const dueDeals = deals.filter((d) => ["overdue", "partial", "unpaid"].includes(dealPaymentStatus(d, payments))).sort((a, b) => dealOutstanding(b, payments) - dealOutstanding(a, payments));
   const pipelineValue = open.reduce((a, l) => a + (l.quotedAmount ?? 0), 0);

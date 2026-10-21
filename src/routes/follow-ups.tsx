@@ -1,3 +1,4 @@
+import { followUpBucket } from "@/lib/crm/followups";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -37,7 +38,8 @@ function FollowUps() {
   const [tab, setTab] = useState<Tab>("today");
   const [add, setAdd] = useState(false);
   const today = dayKey(new Date());
-  const bucket = (f: (typeof followUps)[0]): Tab => (f.completedAt || f.cancelledAt ? "done" : dayKey(f.dueAt) < today ? "overdue" : dayKey(f.dueAt) === today ? "today" : "upcoming");
+  const nowD = new Date();
+  const bucket = (f: (typeof followUps)[0]): Tab => followUpBucket(f, nowD);
   const counts = { overdue: 0, today: 0, upcoming: 0, done: 0 };
   followUps.forEach((f) => counts[bucket(f)]++);
   const list = followUps.filter((f) => bucket(f) === tab).sort((a, b) => (tab === "done" ? b.dueAt.localeCompare(a.dueAt) : a.dueAt.localeCompare(b.dueAt)));

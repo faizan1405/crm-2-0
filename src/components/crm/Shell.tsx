@@ -110,14 +110,14 @@ export function Shell({ title, subtitle, actions, children }: { title: string; s
       <div className="flex min-w-0 flex-1 flex-col pb-28 md:pb-0">
         <header className="topbar sticky top-0 z-30 border-b">
           <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-2 px-4 sm:px-6 lg:px-8">
-            <button type="button" className="topbar-icon md:hidden" aria-label="Open navigation" onClick={() => setDrawer(true)}><Menu className="size-5" /></button>
+            <button type="button" className="topbar-icon md:!hidden" aria-label="Open navigation" onClick={() => setDrawer(true)}><Menu className="size-5" /></button>
             <Link to="/" className="flex items-center gap-2 md:hidden" aria-label="Dashboard"><span className="sb-mark sb-mark-light"><ScaleMark className="size-4" /></span></Link>
             <div className="crumb hidden min-w-0 items-center gap-1.5 text-[13px] sm:flex"><span className="text-muted-foreground">{group}</span><ChevronRight className="size-3.5 text-muted-foreground" /><span className="truncate font-medium">{current?.label ?? "Lead details"}</span></div>
             <button type="button" onClick={() => setSearch(true)} aria-label="Search workspace" className="os-command ml-auto min-w-0 sm:w-64 lg:w-80"><Search className="size-4 shrink-0" /><span className="hidden flex-1 truncate text-left sm:inline">Search…</span><span className="os-kbd hidden sm:inline">⌘K</span></button>
             <button type="button" onClick={() => setCallPick(true)} className="os-calllog" aria-label="Instant call log"><PhoneCall className="size-4" /><span className="hidden lg:inline">Call log</span></button>
             <DropdownMenu><DropdownMenuTrigger asChild><button type="button" aria-label="Quick add" className="topbar-icon"><Plus className="size-[18px]" /></button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => setAdd(true)}><Users />Add lead</DropdownMenuItem><DropdownMenuItem onSelect={() => setSchedule(true)}><CalendarClock />Schedule follow-up</DropdownMenuItem><DropdownMenuItem asChild><Link to="/deals"><Wallet />Deals & Payments</Link></DropdownMenuItem><DropdownMenuItem asChild><Link to="/notes"><StickyNote />New note</Link></DropdownMenuItem></DropdownMenuContent></DropdownMenu>
             <button type="button" title="Notifications" aria-label="Notifications" onClick={() => setAlerts(true)} className="topbar-icon relative"><Bell className="size-[18px]" />{attention.length > 0 && <span className="absolute top-2 right-2 size-1.5 rounded-full bg-destructive" />}</button>
-            <button type="button" title="Toggle theme" aria-label="Toggle theme" onClick={() => preferences({theme: dark ? "light" : "dark"})} className="topbar-icon hidden sm:grid">{dark ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}</button>
+            <button type="button" title="Toggle theme" aria-label="Toggle theme" onClick={() => preferences({theme: dark ? "light" : "dark"})} className="topbar-icon !hidden sm:!grid">{dark ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}</button>
           </div>
         </header>
         <div className="os-heading mx-auto flex w-full max-w-[1400px] flex-wrap items-end justify-between gap-4 px-4 pt-6 pb-5 sm:px-6 lg:px-8 lg:pt-8">

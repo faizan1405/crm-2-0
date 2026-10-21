@@ -561,4 +561,4 @@ main input[type="checkbox"] { accent-color: var(--foreground); width: 16px; heig
 .funnel-fill { height: 100%; border-radius: 999px; background: var(--stage, var(--foreground)); transform-origin: left; animation: fill-grow 700ms var(--ease-out) both; }
 @keyframes fill-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 .collect-bar { display: flex; height: 14px; gap: 2px; border-radius: 999px; overflow: hidden; }
-.collect-bar > div { height: 100%; transform-origin: left; animation: fill-grow 700ms var(--ease-out) both; }
+.collect-bar > div { flex-basis: 0; height: 100%; transform-origin: left; animation: fill-grow 700ms var(--ease-out) both; }
