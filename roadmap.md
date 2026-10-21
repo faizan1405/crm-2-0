@@ -16,7 +16,7 @@ Frontend-only demo. No backend; production CRM untouched.
 
 ## V1 parity (see docs/V1_PARITY_CHECKLIST.md)
 - [x] Batch 1 Advanced Lead Management
-- [ ] Batch 2 Smart Sales Workflows
+- [x] Batch 2 Smart Sales Workflows
 - [ ] Batch 3 WhatsApp tools
 - [ ] Batch 4 AI features
 - [ ] Batch 5 Deals & Payments advanced
