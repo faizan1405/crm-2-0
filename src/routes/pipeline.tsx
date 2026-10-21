@@ -1,3 +1,4 @@
+import { WhatsAppButton } from "@/components/crm/WhatsAppComposer";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -73,7 +74,7 @@ function Pipeline() {
                     {l.nextFollowUp && <div className="mt-2 text-[11px] text-muted-foreground">Next · {formatDateTime(l.nextFollowUp)}</div>}
                     {l.lostReason && s === "lost" && <div className="mt-2 text-[11px] text-destructive">Reason · {l.lostReason}</div>}
                     <div className="ticket-perf flex items-center gap-2">
-                      <CallButton leadId={l.id} phone={l.phone} name={l.name} source="Pipeline" compact />
+                      <CallButton leadId={l.id} phone={l.phone} name={l.name} source="Pipeline" compact /><WhatsAppButton leadId={l.id} name={l.name} source="Pipeline" />
                       <span className="eyebrow">{l.priority}</span>
                       <select aria-label={`Move ${l.name}`} className="ml-auto h-8 max-w-[112px] rounded-full border border-input bg-card px-2 text-[11px]" value={l.status} onChange={(e) => move(l.id, e.target.value as LeadStatus)}>
                         {LEAD_STATUSES.map((x) => <option key={x} value={x}>{STATUS_LABEL[x]}</option>)}

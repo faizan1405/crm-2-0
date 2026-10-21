@@ -1,3 +1,4 @@
+import { WhatsAppButton } from "@/components/crm/WhatsAppComposer";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import type * as React from "react";
@@ -115,7 +116,7 @@ function Leads() {
               <div className="relative">{quickSel(l.id, l.quickStatus)}</div>
               <div className="relative mt-auto flex items-center gap-1">
                 <CallButton leadId={l.id} phone={l.phone} name={l.name} source="Leads cards" />
-                <Button size="icon" variant="ghost" asChild className="size-8 rounded-full"><a href={`https://wa.me/91${digits(l.phone)}`} target="_blank" rel="noreferrer" aria-label={`WhatsApp ${l.name}`}><MessageCircle className="size-4" /></a></Button>
+                <WhatsAppButton leadId={l.id} name={l.name} source="Leads cards" />
                 <Button size="icon" variant="ghost" className="size-8 rounded-full" aria-label="Schedule follow-up" onClick={() => setFu(l.id)}><CalendarPlus className="size-4" /></Button>
                 <Button size="icon" variant="ghost" className="size-8 rounded-full" aria-label="Move to Waste" title="Move to Waste" onClick={() => removeLead(l.id, l.name, "waste")}><Ban className="size-4" /></Button>
                 <Button size="icon" variant="ghost" className="size-8 rounded-full" aria-label="Delete lead" onClick={() => removeLead(l.id, l.name, "deleted")}><Trash2 className="size-4" /></Button>
@@ -169,7 +170,7 @@ function Inspector({ id, onFollowUp, onStage, onRemove, quickSel }: { id: string
       <div className="mt-6 flex flex-wrap items-center gap-2">
         <CallButton leadId={l.id} phone={l.phone} name={l.name} source="Leads workspace" />
         <Button variant="outline" size="sm" className="rounded-full" onClick={() => openCallLog(l.id, "Leads workspace")}><PhoneCall className="size-3.5" />Log call</Button>
-        <Button variant="outline" size="sm" asChild className="rounded-full"><a href={`https://wa.me/91${digits(l.phone)}`} target="_blank" rel="noreferrer"><MessageCircle className="size-3.5" />WhatsApp</a></Button>
+        <WhatsAppButton leadId={l.id} name={l.name} source="Leads workspace" label />
         <Button variant="outline" size="sm" className="rounded-full" onClick={onFollowUp}><CalendarPlus className="size-3.5" />Follow-up</Button>
         <Button variant="ghost" size="sm" asChild className="ml-auto rounded-full"><Link to="/leads/$id" params={{ id: l.id }}>Full record<ArrowUpRight className="size-3.5" /></Link></Button>
       </div>

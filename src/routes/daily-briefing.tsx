@@ -1,3 +1,4 @@
+import { WhatsAppButton } from "@/components/crm/WhatsAppComposer";
 import { SuggestionList } from "@/components/crm/Suggestions";
 import { isPending } from "@/lib/crm/followups";
 import { CallButton } from "@/components/crm/CallButton";
@@ -135,7 +136,7 @@ function Briefing() {
                   <div className="card-actions mt-3 flex flex-wrap gap-1.5">
                     <Button size="sm" variant="outline" asChild><Link to="/leads/$id" params={{ id: i.lead.id }}><ExternalLink className="size-3.5" />Open</Link></Button>
                     <CallButton leadId={i.lead.id} phone={i.lead.phone} name={i.lead.name} source="Daily Briefing" />
-                    <Button size="sm" variant="outline" asChild><a href={`https://wa.me/91${digits(i.lead.phone)}`} target="_blank" rel="noreferrer" onClick={() => addActivity(i.lead.id, "WhatsApp from Daily Briefing", "whatsapp")}><MessageCircle className="size-3.5" />WhatsApp</a></Button>
+                    <WhatsAppButton leadId={i.lead.id} name={i.lead.name} source="Daily Briefing" label />
                     <Button size="sm" variant="outline" onClick={() => setFuLead(i.lead.id)}><CalendarPlus className="size-3.5" />Follow-up</Button>
                     <Button size="sm" variant={done ? "ghost" : "default"} onClick={() => toggleBriefing(i.key)}><Check className="size-3.5" />{done ? "Undo" : "Mark done"}</Button>
                   </div>
