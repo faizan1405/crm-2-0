@@ -179,7 +179,13 @@
   h3,
   h4 {
     font-family: var(--font-display);
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
+  }
+  main, header {
+    overflow-wrap: anywhere;
+  }
+  main .grid > *, main .flex > * {
+    min-width: 0;
   }
   @media (prefers-reduced-motion: reduce) {
     *,

@@ -70,9 +70,6 @@ describe("CRM action and persistence contracts", () => {
   });
   it("persists local changes and reads them back after rehydration", async () => {
     const id = first().id; useCRM.getState().updateLead(id, { name: "Persisted name" });
-    useCRM.setState({ leads: [] });
-    // Preserve the saved record as if the page's in-memory store was recreated.
-    useCRM.getState().reset(); useCRM.getState().updateLead(id, { name: "Persisted name" });
     const saved = localStorage.getItem("scale-flow-crm-2-demo");
     useCRM.setState({ leads: [] });
     if (!saved) throw new Error("Missing saved state");
