@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Shell, PriorityBadge } from "@/components/crm/Shell";
+import { Shell } from "@/components/crm/Shell";
 import { LostReasonDialog } from "@/components/crm/Dialogs";
 import { CallButton } from "@/components/crm/CallButton";
 import { useCRM } from "@/lib/crm/store";
@@ -50,7 +50,7 @@ function Pipeline() {
     <Shell title="Deal theatre" subtitle={`${open.length} open opportunities worth ${formatINRCompact(open.reduce((a, l) => a + (l.quotedAmount ?? 0), 0))} · drag a ticket to move its stage`}>
       <div className="mb-4 flex flex-wrap items-center gap-x-8 gap-y-3">
         <div className="flex gap-6 text-sm"><span><span className="num text-lg">{leads.length}</span> <span className="text-muted-foreground">leads</span></span><span><span className="num text-lg">{leads.filter(l => l.status === "proposal").length}</span> <span className="text-muted-foreground">proposals</span></span><span><span className="num text-lg">{leads.filter(l => l.status === "won").length}</span> <span className="text-muted-foreground">won</span></span></div>
-        <div className="seg max-w-full overflow-x-auto md:hidden" role="tablist" aria-label="Jump to stage">{LEAD_STATUSES.map((s) => <button key={s} type="button" role="tab" onClick={() => jump(s)}>{STATUS_LABEL[s]}</button>)}</div>
+        <div className="max-w-full overflow-x-auto md:hidden"><div className="seg" role="tablist" aria-label="Jump to stage">{LEAD_STATUSES.map((s) => <button key={s} type="button" role="tab" onClick={() => jump(s)}>{STATUS_LABEL[s]}</button>)}</div></div>
         <div className="ml-auto hidden gap-1 md:flex"><Button variant="outline" size="icon" className="rounded-full" aria-label="Previous stages" title="Previous stages" onClick={() => board.current?.scrollBy({ left: -(board.current?.clientWidth ?? 300) / 2, behavior: smooth() })}><ChevronLeft /></Button><Button variant="outline" size="icon" className="rounded-full" aria-label="Next stages" title="Next stages" onClick={() => board.current?.scrollBy({ left: (board.current?.clientWidth ?? 300) / 2, behavior: smooth() })}><ChevronRight /></Button></div>
       </div>
       <div ref={board} className="theatre scrollbar-thin">
@@ -74,7 +74,7 @@ function Pipeline() {
                     {l.lostReason && s === "lost" && <div className="mt-2 text-[11px] text-destructive">Reason · {l.lostReason}</div>}
                     <div className="ticket-perf flex items-center gap-2">
                       <CallButton leadId={l.id} phone={l.phone} name={l.name} source="Pipeline" compact />
-                      <PriorityBadge p={l.priority} />
+                      <span className="eyebrow">{l.priority}</span>
                       <select aria-label={`Move ${l.name}`} className="ml-auto h-8 max-w-[112px] rounded-full border border-input bg-card px-2 text-[11px]" value={l.status} onChange={(e) => move(l.id, e.target.value as LeadStatus)}>
                         {LEAD_STATUSES.map((x) => <option key={x} value={x}>{STATUS_LABEL[x]}</option>)}
                       </select>
