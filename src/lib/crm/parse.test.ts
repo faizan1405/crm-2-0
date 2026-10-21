@@ -14,4 +14,15 @@ describe("Quick AI demo parser", () => {
     expect(r.email).toBeUndefined();
   });
   it("understands 1.5 lakh", () => expect(structureLead("Amit, budget 1.5 lakh").budget).toBe(150000));
+  it("keeps budget and quote distinct when several amounts appear", () => {
+    const result = structureLead("Rahul, 9876543210, budget 40000, quoted 55000, advance 10000");
+    expect(result.budget).toBe(40000);
+    expect(result.quotedAmount).toBe(55000);
+  });
+  it("leaves absent phone and optional fields unset", () => {
+    const result = structureLead("Rahul Sharma, wants a website");
+    expect(result.phone).toBeUndefined();
+    expect(result.email).toBeUndefined();
+    expect(result.budget).toBeUndefined();
+  });
 });

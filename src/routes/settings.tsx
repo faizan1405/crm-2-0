@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/settings")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Settings · Scale Flow CRM" },
       { name: "description", content: "Profile, appearance, preferences and demo data." },
       { property: "og:title", content: "Settings · Scale Flow CRM" },
@@ -47,17 +49,17 @@ function Settings() {
     <div className="flex flex-wrap gap-2">{options.map(([v, l, icon]) => <button key={v} onClick={() => onChange(v)} className={cn("flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors", value === v ? "border-primary bg-primary-soft text-primary" : "hover:border-foreground/20")}>{icon}{l}</button>)}</div>
   );
   const Row = ({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) => (
-    <div className="grid gap-2 border-b py-4 last:border-0 sm:grid-cols-[220px_1fr] sm:items-center"><div><div className="text-sm font-medium">{label}</div>{hint && <div className="text-xs text-muted-foreground">{hint}</div>}</div><div>{children}</div></div>
+    <div className="grid gap-2 border-b py-4 last:border-0 lg:grid-cols-[180px_minmax(0,1fr)] lg:items-center"><div><div className="text-sm font-medium">{label}</div>{hint && <div className="text-xs text-muted-foreground">{hint}</div>}</div><div>{children}</div></div>
   );
 
   return (
     <Shell title="Settings" subtitle="Preferences are saved on this device">
-      <div className="grid gap-5 md:grid-cols-[220px_1fr]">
-        <nav className="flex gap-1 overflow-x-auto md:flex-col">
+      <div className="grid gap-5 xl:grid-cols-[220px_minmax(0,1fr)]">
+        <nav className="flex gap-1 overflow-x-auto xl:flex-col">
           {SECTIONS.map((x) => <button key={x.id} onClick={() => setSec(x.id)} className={cn("flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors", sec === x.id ? "bg-card font-medium text-foreground shadow-card" : "text-muted-foreground hover:text-foreground")}><x.icon className="size-4" />{x.label}</button>)}
         </nav>
         <section className="surface p-5 sm:p-6">
-          <h2 className="mb-2 text-lg font-semibold">{SECTIONS.find((x) => x.id === sec)!.label}</h2>
+          <h2 className="mb-2 text-lg font-semibold">{SECTIONS.find((x) => x.id === sec)?.label}</h2>
           {sec === "profile" && <>
             <div className="flex items-center gap-4 py-3"><div className="grid size-14 place-items-center rounded-full bg-primary text-lg font-bold text-primary-foreground">{initials(s.owner)}</div><div><div className="font-semibold">{s.owner}</div><div className="text-sm text-muted-foreground">{s.email} · Owner</div></div></div>
             <Row label="Display name"><Input value={owner} onChange={(e) => setOwner(e.target.value)} /></Row>

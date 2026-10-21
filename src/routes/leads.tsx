@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/leads")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Leads · Scale Flow CRM" },
       { name: "description", content: "Search, filter, sort and add leads." },
       { property: "og:title", content: "Leads · Scale Flow CRM" },
@@ -81,7 +83,7 @@ function Leads() {
         )}
       </div>
       <AddLeadDialog open={open} onOpenChange={setOpen} />
-      <LostReasonDialog open={!!lost} {...(lostLead ? { leadName: lostLead.name } : {})} onCancel={() => setLost(null)} onConfirm={(r) => { updateLead(lost!, { status: "lost", lostReason: r }); setLost(null); toast.success("Marked as lost"); }} />
+      <LostReasonDialog open={!!lost} {...(lostLead ? { leadName: lostLead.name } : {})} onCancel={() => setLost(null)} onConfirm={(r) => { if (!lost) return; updateLead(lost, { status: "lost", lostReason: r }); setLost(null); toast.success("Marked as lost"); }} />
     </Shell>
   );
 }

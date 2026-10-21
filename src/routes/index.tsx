@@ -8,6 +8,8 @@ import { FOLLOWUP_LABEL } from "@/lib/crm/types";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Dashboard · Scale Flow CRM" },
       { name: "description", content: "Your leads, follow-ups and collections at a glance." },
       { property: "og:title", content: "Dashboard · Scale Flow CRM" },

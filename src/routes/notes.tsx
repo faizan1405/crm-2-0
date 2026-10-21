@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/notes")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Notes · Scale Flow CRM" },
       { name: "description", content: "Personal notes and checklists for your sales work." },
       { property: "og:title", content: "Notes · Scale Flow CRM" },
@@ -58,11 +60,11 @@ function Notes() {
             {sorted.map((n) => (
               <div key={n.id} className={cn("surface surface-hover p-4", editing?.id === n.id && "ring-2 ring-ring")}>
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-semibold">{n.title}</h3>
-                  <div className="flex gap-1 text-muted-foreground">
-                    <button aria-label="Pin note" className={cn("rounded p-1 hover:bg-muted", n.pinned && "text-primary")} onClick={() => saveNote({ ...n, pinned: !n.pinned })}><Pin className="size-4" /></button>
-                    <button aria-label="Edit note" className="rounded p-1 hover:bg-muted" onClick={() => startEdit(n)}><Pencil className="size-4" /></button>
-                    <button aria-label="Delete note" className="rounded p-1 hover:bg-muted hover:text-destructive" onClick={() => { deleteNote(n.id); toast.success("Note deleted"); }}><Trash2 className="size-4" /></button>
+                  <h3 className="min-w-0 break-words font-semibold">{n.title}</h3>
+                  <div className="flex shrink-0 gap-1 text-muted-foreground">
+                    <Button size="icon" variant="ghost" aria-label={n.pinned ? "Unpin note" : "Pin note"} className={cn("rounded p-1 hover:bg-muted", n.pinned && "text-primary")} onClick={() => saveNote({ ...n, pinned: !n.pinned })}><Pin className="size-4" /></Button>
+                    <Button size="icon" variant="ghost" aria-label="Edit note" className="rounded p-1 hover:bg-muted" onClick={() => startEdit(n)}><Pencil className="size-4" /></Button>
+                    <Button size="icon" variant="ghost" aria-label="Delete note" className="rounded p-1 hover:bg-muted hover:text-destructive" onClick={() => { if (window.confirm(`Delete ${n.title}?`)) { deleteNote(n.id); if (editing?.id === n.id) clear(); toast.success("Note deleted"); } }}><Trash2 className="size-4" /></Button>
                   </div>
                 </div>
                 <p className="mt-2 line-clamp-6 text-sm whitespace-pre-line text-muted-foreground">{n.body}</p>

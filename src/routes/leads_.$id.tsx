@@ -7,6 +7,7 @@ import { FollowUpDialog, LostReasonDialog } from "@/components/crm/Dialogs";
 import { useCRM } from "@/lib/crm/store";
 import { formatINR, formatDateTime, relative, digits } from "@/lib/crm/format";
 import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, FOLLOWUP_LABEL, type Lead, type LeadStatus } from "@/lib/crm/types";
+import { leadEditError } from "@/lib/crm/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +16,8 @@ import { Label } from "@/components/ui/label";
 export const Route = createFileRoute("/leads_/$id")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Lead details · Scale Flow CRM" },
       { name: "description", content: "Lead profile, activity timeline and follow-ups." },
       { property: "og:title", content: "Lead details · Scale Flow CRM" },
@@ -56,7 +59,7 @@ function LeadDetail() {
             {edit ? <EditLead lead={lead} onDone={() => setEdit(false)} /> : (
               <dl className="grid gap-4 text-sm sm:grid-cols-3">
                 {[["Phone", lead.phone], ["Email", lead.email ?? "—"], ["Source", lead.source], ["Budget", formatINR(lead.budget)], ["Quoted", formatINR(lead.quotedAmount)], ["Score", lead.aiScore ?? "—"], ["Last contact", relative(lead.lastContact)], ["Next follow-up", formatDateTime(lead.nextFollowUp)], ["Requirement", lead.requirement ?? "—"]].map(([k, v]) => (
-                  <div key={k as string}><dt className="text-xs text-muted-foreground">{k}</dt><dd className="mt-0.5 font-medium">{v}</dd></div>
+                  <div key={k as string}><dt className="text-xs text-muted-foreground">{k}</dt><dd className="mt-0.5 break-words font-medium">{v}</dd></div>
                 ))}
                 {lead.lostReason && <div className="sm:col-span-3"><dt className="text-xs text-muted-foreground">Lost reason</dt><dd className="mt-0.5 font-medium text-destructive">{lead.lostReason}</dd></div>}
                 {lead.notes && <div className="sm:col-span-3"><dt className="text-xs text-muted-foreground">Notes</dt><dd className="mt-0.5 whitespace-pre-line">{lead.notes}</dd></div>}
@@ -108,15 +111,16 @@ function LeadDetail() {
 }
 
 function EditLead({ lead, onDone }: { lead: Lead; onDone: () => void }) {
-  const updateLead = useCRM((s) => s.updateLead);
+  const { updateLead, leads } = useCRM();
   const [f, setF] = useState({ name: lead.name, phone: lead.phone, email: lead.email ?? "", company: lead.company ?? "", requirement: lead.requirement ?? "", source: lead.source, priority: lead.priority, budget: String(lead.budget ?? ""), quotedAmount: String(lead.quotedAmount ?? ""), notes: lead.notes ?? "" });
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   const save = () => {
-    if (!f.name.trim() || f.phone.replace(/\D/g, "").length < 10) { toast.error("Name and a 10-digit phone are required"); return; }
+    const error = leadEditError(leads, lead.id, { ...f, budget: Number(f.budget), quotedAmount: Number(f.quotedAmount) });
+    if (error) { toast.error(error); return; }
     updateLead(lead.id, { name: f.name, phone: f.phone, email: f.email, company: f.company, requirement: f.requirement, source: f.source, priority: f.priority, budget: Number(f.budget) || 0, quotedAmount: Number(f.quotedAmount) || 0, notes: f.notes });
     toast.success("Lead updated"); onDone();
   };
-  const inp = (k: keyof typeof f, label: string, type = "text") => <div className="grid gap-1.5"><Label>{label}</Label><Input type={type} value={f[k]} onChange={set(k)} /></div>;
+  const inp = (k: keyof typeof f, label: string, type = "text") => <div className="grid gap-1.5"><Label htmlFor={`edit-${k}`}>{label}</Label><Input id={`edit-${k}`} type={type} value={f[k]} onChange={set(k)} /></div>;
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {inp("name", "Name")}{inp("phone", "Phone")}{inp("email", "Email", "email")}{inp("company", "Company")}

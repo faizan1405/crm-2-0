@@ -33,6 +33,7 @@ export function buildPriorities(leads: Lead[], followUps: FollowUp[], now = new 
   const covered = new Set(items.map((i) => i.lead.id));
   for (const lead of leads) {
     if (!isOpen(lead) || covered.has(lead.id)) continue;
+    if (followUps.some((f) => f.leadId === lead.id && !f.completedAt)) continue;
     if (lead.status === "proposal") items.push({ key: `lead:${lead.id}:proposal`, lead, severity: "important", reason: "Proposal sent — no follow-up scheduled", action: "Check in and confirm next steps", ...val(lead) });
     else if (lead.priority === "hot") items.push({ key: `lead:${lead.id}:hot`, lead, severity: "important", reason: `Hot lead · score ${lead.aiScore ?? "—"}`, action: "Schedule a discovery call", ...val(lead) });
     else if (lead.status === "new") items.push({ key: `lead:${lead.id}:new`, lead, severity: "normal", reason: "New lead not yet contacted", action: "Make first contact", ...val(lead) });
@@ -48,5 +49,5 @@ export function paymentsToChase(deals: Deal[], payments: Payment[], now = new Da
     .sort((a, b) => Number(b.overdue) - Number(a.overdue) || b.due - a.due);
 }
 
-const cap = (s: string) => (s === "whatsapp" ? "WhatsApp" : s[0]!.toUpperCase() + s.slice(1));
+const cap = (s: string) => (s === "whatsapp" ? "WhatsApp" : s.charAt(0).toUpperCase() + s.slice(1));
 const val = (l: Lead) => (l.quotedAmount ? { value: l.quotedAmount } : {});

@@ -27,10 +27,10 @@ export interface Lead {
   quotedAmount?: number;
   budget?: number;
   lastContact?: string; // ISO
-  nextFollowUp?: string; // ISO
+  nextFollowUp?: string | undefined; // ISO; cleared when no follow-ups remain
   notes?: string;
   pinned: boolean;
-  lostReason?: string;
+  lostReason?: string | undefined;
   createdAt: string;
   updatedAt: string;
 }

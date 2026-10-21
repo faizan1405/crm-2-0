@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/daily-briefing")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Daily Briefing · Scale Flow CRM" },
       { name: "description", content: "Today's priorities, calls, proposals and payments to chase." },
       { property: "og:title", content: "Daily Briefing · Scale Flow CRM" },
@@ -25,13 +27,14 @@ export const Route = createFileRoute("/daily-briefing")({
 const SEV: Record<Severity, string> = { critical: "bg-destructive-soft text-destructive", important: "bg-warning-soft text-warning", normal: "bg-info-soft text-primary" };
 
 function Briefing() {
-  const { leads, followUps, deals, payments, owner, briefingDone, toggleBriefing, resetBriefing, addActivity } = useCRM();
+  const { leads, followUps, deals, payments, owner, briefingDone: savedDone, briefingDate, toggleBriefing, resetBriefing, addActivity } = useCRM();
   const [filter, setFilter] = useState<"all" | Severity | "done">("all");
   const [expanded, setExpanded] = useState(false);
   const [stamp, setStamp] = useState(() => new Date());
   const [fuLead, setFuLead] = useState<string | null>(null);
   const now = stamp;
   const today = dayKey(now);
+  const briefingDone = briefingDate === today ? savedDone : [];
 
   const d = useMemo(() => {
     const open = leads.filter(isOpen);
@@ -119,7 +122,7 @@ function Briefing() {
                 <li key={i.key} className={cn("rounded-xl border p-4 transition-colors hover:border-primary/40", done && "opacity-60")}>
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <div className="flex items-center gap-2"><span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold uppercase", SEV[i.severity])}>{i.severity}</span><span className="font-medium">{i.lead.name}</span>{i.lead.company && <span className="text-sm text-muted-foreground">· {i.lead.company}</span>}</div>
+                      <div className="flex flex-wrap items-center gap-2"><span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold uppercase", SEV[i.severity])}>{i.severity}</span><span className="font-medium">{i.lead.name}</span>{i.lead.company && <span className="text-sm text-muted-foreground">· {i.lead.company}</span>}</div>
                       <div className="mt-1 text-sm">{i.reason}</div>
                       <div className="text-sm text-muted-foreground">→ {i.action}</div>
                     </div>

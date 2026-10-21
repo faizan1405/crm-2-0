@@ -7,12 +7,16 @@ import { useCRM } from "@/lib/crm/store";
 import { financeSummary } from "@/lib/crm/finance";
 import { dayKey, formatINR, formatINRCompact, formatPct, formatDate } from "@/lib/crm/format";
 import { LEAD_STATUSES, STATUS_LABEL } from "@/lib/crm/types";
+import { rangeBounds, shiftDay, inDateRange, type AnalyticsRange } from "@/lib/crm/dates";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/analytics")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Analytics · Scale Flow CRM" },
       { name: "description", content: "Revenue, pipeline, lead and follow-up analytics." },
       { property: "og:title", content: "Analytics · Scale Flow CRM" },
@@ -22,19 +26,9 @@ export const Route = createFileRoute("/analytics")({
   component: Analytics,
 });
 
-type Range = "today" | "7d" | "30d" | "month" | "custom";
+type Range = AnalyticsRange;
 const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--chart-6)"];
 const tip = { contentStyle: { background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 10, fontSize: 12, color: "var(--popover-foreground)" } };
-
-function rangeBounds(r: Range, from: string, to: string): [string, string] {
-  const today = dayKey(new Date());
-  const back = (n: number) => dayKey(new Date(Date.now() - n * 86_400_000));
-  if (r === "today") return [today, today];
-  if (r === "7d") return [back(6), today];
-  if (r === "30d") return [back(29), today];
-  if (r === "month") return [today.slice(0, 8) + "01", today];
-  return [from || "0000-01-01", to || today];
-}
 
 function Analytics() {
   const { leads, deals, payments, followUps } = useCRM();
@@ -42,11 +36,12 @@ function Analytics() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [start, end] = rangeBounds(range, from, to);
-  const inRange = (d: string) => { const k = dayKey(d); return k >= start && k <= end; };
+  const inRange = (d: string) => inDateRange(d, start, end);
 
   const data = useMemo(() => {
     const rLeads = leads.filter((l) => inRange(l.createdAt));
-    const rPayments = payments.filter((p) => !p.voided && inRange(p.date));
+    const eligibleIds = new Set(deals.filter((d) => d.status !== "cancelled").map((d) => d.id));
+    const rPayments = payments.filter((p) => !p.voided && eligibleIds.has(p.dealId) && inRange(p.date));
     const fin = financeSummary(deals, payments);
     const won = rLeads.filter((l) => l.status === "won").length;
     const lost = rLeads.filter((l) => l.status === "lost").length;
@@ -60,7 +55,7 @@ function Analytics() {
     const days = Math.round((new Date(end).getTime() - new Date(start === "0000-01-01" ? (payments.map((p) => p.date).sort()[0] ?? end) : start).getTime()) / 86_400_000) + 1;
     const monthly = days > 62;
     const buckets = new Map<string, number>();
-    if (!monthly) for (let i = days - 1; i >= 0; i--) buckets.set(dayKey(new Date(new Date(end).getTime() - i * 86_400_000)), 0);
+    if (!monthly) for (let i = days - 1; i >= 0; i--) buckets.set(shiftDay(end, -i), 0);
     rPayments.forEach((p) => { const k = monthly ? p.date.slice(0, 7) : dayKey(p.date); buckets.set(k, (buckets.get(k) ?? 0) + p.amount); });
     const trend = [...buckets.entries()].sort().map(([k, v]) => ({ label: monthly ? formatDate(k + "-01", { month: "short", year: "2-digit" }) : formatDate(k), revenue: v }));
     const today = dayKey(new Date());
@@ -69,7 +64,7 @@ function Analytics() {
       overdue: followUps.filter((f) => !f.completedAt && dayKey(f.dueAt) < today).length,
       completed: followUps.filter((f) => f.completedAt && inRange(f.completedAt)).length,
     };
-    const fuTrend = ["call", "whatsapp", "meeting", "email"].map((t) => ({ type: t === "whatsapp" ? "WhatsApp" : t[0]!.toUpperCase() + t.slice(1), scheduled: followUps.filter((f) => f.type === t && inRange(f.dueAt)).length, done: followUps.filter((f) => f.type === t && f.completedAt && inRange(f.dueAt)).length }));
+    const fuTrend = ["call", "whatsapp", "meeting", "email"].map((t) => ({ type: t === "whatsapp" ? "WhatsApp" : t.charAt(0).toUpperCase() + t.slice(1), scheduled: followUps.filter((f) => f.type === t && inRange(f.dueAt)).length, done: followUps.filter((f) => f.type === t && f.completedAt && inRange(f.completedAt)).length }));
     return { rLeads, rPayments, fin, won, lost, open, byStage, funnel, sources, trend, fu, fuTrend, received: rPayments.reduce((a, p) => a + p.amount, 0) };
   }, [leads, deals, payments, followUps, start, end]);
 
@@ -80,13 +75,14 @@ function Analytics() {
   return (
     <Shell title="Analytics" subtitle={`${formatDate(start === "0000-01-01" ? undefined : start, { day: "numeric", month: "short", year: "numeric" })} – ${formatDate(end, { day: "numeric", month: "short", year: "numeric" })}`}
       actions={<div className="flex flex-wrap items-center gap-2">
-        <div className="flex gap-1 rounded-lg bg-muted p-1">
+        <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
           {([["today", "Today"], ["7d", "7 days"], ["30d", "30 days"], ["month", "This month"], ["custom", "Custom"]] as const).map(([k, l]) => (
-            <button key={k} onClick={() => setRange(k)} className={cn("rounded-md px-2.5 py-1 text-xs font-medium", range === k ? "bg-card text-foreground shadow-card" : "text-muted-foreground hover:text-foreground")}>{l}</button>
+            <Button size="sm" variant="ghost" key={k} onClick={() => setRange(k)} className={cn("rounded-md px-2.5 py-1 text-xs font-medium", range === k ? "bg-card text-foreground shadow-card" : "text-muted-foreground hover:text-foreground")}>{l}</Button>
           ))}
         </div>
         {range === "custom" && <div className="flex gap-1"><Input aria-label="From" type="date" className="h-8 w-36" value={from} onChange={(e) => setFrom(e.target.value)} /><Input aria-label="To" type="date" className="h-8 w-36" value={to} onChange={(e) => setTo(e.target.value)} /></div>}
       </div>}>
+      {start > end && <p role="alert" className="mb-4 text-sm text-destructive">Start date must be on or before end date.</p>}
       <section className="rounded-2xl bg-hero-gradient p-5 text-hero-foreground sm:p-6">
         <div className="text-xs font-medium tracking-wide text-hero-muted uppercase">Money received in range</div>
         <div className="num mt-1 font-display text-4xl font-bold">{formatINR(data.received)}</div>
@@ -105,7 +101,7 @@ function Analytics() {
       </section>
 
       <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Stat label="Total deal value" value={formatINRCompact(data.fin.totalValue)} hint="All active deals" icon={<IndianRupee />} />
+        <Stat label="Total deal value" value={formatINRCompact(data.fin.totalValue)} hint="Excludes cancelled" icon={<IndianRupee />} />
         <Stat label="Total received" value={formatINRCompact(data.fin.collected)} hint="All time" tone="success" icon={<Wallet />} />
         <Stat label="Outstanding" value={formatINRCompact(data.fin.outstanding)} tone="warning" icon={<Target />} />
         <Stat label="Collection rate" value={formatPct(data.fin.collectionRate)} tone="teal" icon={<Percent />} />
