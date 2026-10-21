@@ -28,7 +28,7 @@ export const Route = createFileRoute("/analytics")({
 
 type Range = AnalyticsRange;
 const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--chart-6)"];
-const tip = { contentStyle: { background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 10, fontSize: 12, color: "var(--popover-foreground)" } };
+const tip = { contentStyle: { background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, color: "var(--popover-foreground)" } };
 
 function Analytics() {
   const { leads, deals, payments, followUps } = useCRM();
@@ -83,21 +83,21 @@ function Analytics() {
         {range === "custom" && <div className="flex gap-1"><Input aria-label="From" type="date" className="h-8 w-36" value={from} onChange={(e) => setFrom(e.target.value)} /><Input aria-label="To" type="date" className="h-8 w-36" value={to} onChange={(e) => setTo(e.target.value)} /></div>}
       </div>}>
       {start > end && <p role="alert" className="mb-4 text-sm text-destructive">Start date must be on or before end date.</p>}
-      <section className="rounded-2xl bg-hero-gradient p-5 text-hero-foreground sm:p-6">
-        <div className="text-xs font-medium tracking-wide text-hero-muted uppercase">Money received in range</div>
-        <div className="num mt-1 font-display text-4xl font-bold">{formatINR(data.received)}</div>
-        <div className="mt-1 text-sm text-hero-muted">{data.rPayments.length} payments · deal value is tracked separately below</div>
-        <div className="mt-4 h-40">
+      <section className="analytics-revenue border-y py-6 text-foreground">
+        <div className="flex items-center gap-2 text-xs font-semibold text-teal"><Wallet className="size-4" />MONEY RECEIVED IN RANGE</div>
+        <div className="num mt-3 font-display text-4xl font-extrabold">{formatINR(data.received)}</div>
+        <div className="mt-1 text-sm text-muted-foreground">{data.rPayments.length} payments · deal value is tracked separately below</div>
+        <div className="mt-4 h-48">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data.trend} margin={{ left: 0, right: 0, top: 5, bottom: 0 }}>
               <defs><linearGradient id="rev" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--chart-2)" stopOpacity={0.6} /><stop offset="100%" stopColor="var(--chart-2)" stopOpacity={0} /></linearGradient></defs>
-              <XAxis dataKey="label" tick={{ fill: "var(--hero-muted)", fontSize: 11 }} axisLine={false} tickLine={false} minTickGap={24} />
+              <XAxis dataKey="label" tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={false} tickLine={false} minTickGap={24} />
               <Tooltip {...tip} formatter={(v: number) => [formatINR(v), "Received"]} />
-              <Area type="monotone" dataKey="revenue" stroke="var(--chart-2)" strokeWidth={2} fill="url(#rev)" />
+              <Area type="monotone" dataKey="revenue" stroke="var(--chart-2)" strokeWidth={3} fill="url(#rev)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
-        {data.received === 0 && <p className="text-xs text-hero-muted">No payments recorded in this range.</p>}
+        {data.received === 0 && <p className="text-xs text-muted-foreground">No payments recorded in this range.</p>}
       </section>
 
       <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
@@ -108,7 +108,7 @@ function Analytics() {
         <Stat label="Overdue" value={formatINRCompact(data.fin.overdue)} tone="destructive" icon={<AlertCircle />} />
       </div>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-3">
+      <div className="mt-7 grid gap-8 lg:grid-cols-3">
         <Card title="Sales funnel" sub={`${data.rLeads.length} leads created in range`}>
           <div className="grid gap-2">
             {data.funnel.map((f, i) => (
@@ -176,5 +176,5 @@ function Analytics() {
 }
 
 function Card({ title, sub, className, children }: { title: string; sub?: string; className?: string; children: React.ReactNode }) {
-  return <section className={cn("surface p-5", className)}><h2 className="font-semibold">{title}</h2>{sub && <p className="mb-3 text-xs text-muted-foreground">{sub}</p>}{!sub && <div className="mb-3" />}{children}</section>;
+  return <section className={cn("surface p-5", className)}><h2 className="text-base font-bold">{title}</h2>{sub && <p className="mb-3 text-xs text-muted-foreground">{sub}</p>}{!sub && <div className="mb-3" />}{children}</section>;
 }
