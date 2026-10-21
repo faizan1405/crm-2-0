@@ -1,3 +1,4 @@
+import { PostCallDialog } from "@/components/crm/PostCallDialog";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import {
@@ -103,7 +104,7 @@ export function Shell({ title, subtitle, actions, children }: { title: string; s
         {query && !leads.some(l => matches(`${l.name} ${l.company ?? ""} ${l.phone}`)) && !deals.some(d => matches(`${d.name} ${d.clientName}`)) && !notes.some(n => matches(`${n.title} ${n.body}`)) && <p className="py-6 text-center text-sm text-muted-foreground">No matching records.</p>}
       </div></DialogContent></Dialog>
       <Sheet open={alerts} onOpenChange={setAlerts}><SheetContent className="w-full sm:max-w-md"><SheetHeader><SheetTitle>Notifications</SheetTitle></SheetHeader><p className="mt-2 text-xs text-muted-foreground">From local demo records · no live delivery</p><div className="mt-6 grid gap-3">{attention.map(f => <Link key={f.id} to="/leads/$id" params={{id:f.leadId}} onClick={() => setAlerts(false)} className="rounded-lg border p-4"><span className="text-sm font-semibold">{leads.find(l => l.id === f.leadId)?.name ?? "Lead"}</span><span className="mt-1 block text-xs text-muted-foreground">{f.note ?? "Follow-up due"} · {formatDateTime(f.dueAt)}</span></Link>)}{!attention.length && <Empty icon={<Bell />} title="All caught up" />}</div></SheetContent></Sheet>
-      <AddLeadDialog open={add} onOpenChange={setAdd} /><FollowUpDialog open={schedule} onOpenChange={setSchedule} />
+      <AddLeadDialog open={add} onOpenChange={setAdd} /><FollowUpDialog open={schedule} onOpenChange={setSchedule} /><PostCallDialog />
     </div>
   );
 }
