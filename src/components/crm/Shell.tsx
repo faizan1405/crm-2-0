@@ -85,8 +85,7 @@ export function Shell({ title, subtitle, actions, children }: { title: string; s
     window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
   }, []);
   const dark = theme === "dark";
-  const now = Date.now();
-  const attention = followUps.filter(f => isPending(f) && new Date(f.dueAt).getTime() <= now + 864e5 && dayKey(f.dueAt) <= dayKey(new Date())).sort((a,b) => a.dueAt.localeCompare(b.dueAt));
+  const attention = followUps.filter(f => isPending(f) && dayKey(f.dueAt) <= dayKey(new Date())).sort((a,b) => a.dueAt.localeCompare(b.dueAt));
   const matches = (text: string) => text.toLowerCase().includes(query.toLowerCase());
   const current = NAV.find(n => isActive(path, n.to));
   const group = GROUPS.find(g => current && (g.items as readonly string[]).includes(current.to))?.label ?? "Workspace";
