@@ -12,13 +12,13 @@ const TABS: { key: Tab; label: string; icon: typeof FileText }[] = [
   { key: "templates", label: "WhatsApp Templates", icon: MessagesSquare },
   { key: "demos", label: "Demo Library", icon: LayoutTemplate },
 ];
-interface StudioSearch { tab?: Tab; quote?: string; client?: string }
+interface StudioSearch { tab?: Tab | undefined; quote?: string | undefined; client?: string | undefined }
 
 export const Route = createFileRoute("/sales-studio")({
   validateSearch: (s: Record<string, unknown>): StudioSearch => ({
-    ...(s.tab === "templates" || s.tab === "demos" || s.tab === "quotations" ? { tab: s.tab } : {}),
-    ...(typeof s.quote === "string" ? { quote: s.quote } : {}),
-    ...(typeof s.client === "string" ? { client: s.client } : {}),
+    ...(s["tab"] === "templates" || s["tab"] === "demos" || s["tab"] === "quotations" ? { tab: s["tab"] } : {}),
+    ...(typeof s["quote"] === "string" ? { quote: s["quote"] } : {}),
+    ...(typeof s["client"] === "string" ? { client: s["client"] } : {}),
   }),
   head: () => ({
     meta: [

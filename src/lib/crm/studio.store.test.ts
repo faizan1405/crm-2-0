@@ -41,7 +41,9 @@ describe("Sales Studio store", () => {
     const lead = useCRM.getState().leads[0]!;
     useCRM.getState().saveQuotation(draft(lead.id, "Persisted", 5000));
     useCRM.getState().saveDemo({ id: "d1", title: "Shop", url: "https://shop.example.com", category: "E-commerce", tags: [], active: true, order: 0, includeByDefault: true });
-    useCRM.setState({ quotations: [], demos: [] });
+    const saved = localStorage.getItem("scale-flow-crm-2-demo")!;
+    useCRM.setState({ quotations: [], demos: [] }); // in-memory state lost, as on reload
+    localStorage.setItem("scale-flow-crm-2-demo", saved);
     await useCRM.persist.rehydrate();
     expect(useCRM.getState().quotations.map((x) => x.title)).toEqual(["Persisted"]);
     expect(useCRM.getState().demos.map((x) => x.title)).toEqual(["Shop"]);
