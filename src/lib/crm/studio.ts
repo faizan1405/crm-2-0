@@ -2,6 +2,7 @@
 // Pure and backend-agnostic — the store persists these shapes; a Hostinger API can return the same shapes later.
 import type { Lead } from "./types";
 import { formatINR, formatDate, uid } from "./format";
+import { draftMessage } from "./whatsapp";
 
 export type QuoteStatus = "draft" | "ready" | "shared" | "accepted" | "rejected" | "expired";
 export const QUOTE_STATUSES: QuoteStatus[] = ["draft", "ready", "shared", "accepted", "rejected", "expired"];
@@ -139,6 +140,40 @@ export const pickTemplate = (templates: WaTemplate[], purpose: TemplatePurpose) 
   const list = templates.filter((t) => t.purpose === purpose && t.enabled);
   return list.find((t) => t.isDefault) ?? list[0];
 };
+
+/* ---------- composer ---------- */
+export interface ComposeInput {
+  purpose: TemplatePurpose;
+  templateId?: string | null | undefined;
+  lead: Pick<Lead, "name" | "company" | "requirement" | "quotedAmount">;
+  owner: string;
+  business: string;
+  dealName?: string | undefined;
+  templates: WaTemplate[];
+  quote?: Quotation | undefined;
+  demos?: Demo[];
+}
+/** The composer's draft, always built from the one shared template / quotation / demo source. */
+export function composeDraft(i: ComposeInput): string {
+  const chosen = i.templateId ? i.templates.find((t) => t.id === i.templateId && t.enabled && t.purpose === i.purpose) : undefined;
+  const t = chosen ?? (i.purpose === "custom" ? undefined : pickTemplate(i.templates, i.purpose));
+  const ctx = { owner: i.owner, business: i.business, dealName: i.dealName };
+  // A quotation message without a saved quotation falls back to the generic draft (never "I'll attach the PDF").
+  if (!t || (i.purpose === "quotation" && !i.quote)) {
+    return i.purpose === "custom" ? "" : draftMessage(i.purpose, i.lead, { ...ctx, assets: (i.demos ?? []).map((d) => ({ label: d.title, url: safeUrl(d.url)! })) });
+  }
+  return renderTemplate(t.body, templateVars(i.lead, { ...ctx, quote: i.quote, demos: i.demos ?? [] }));
+}
+/**
+ * Keep the composer in step with shared data without destroying the user's work:
+ * an untouched draft follows the latest template/selection; an edited draft is kept and a notice is raised.
+ */
+export function syncDraft(s: { text: string; base: string; edited: boolean }, fresh: string): { text: string; base: string; notice: boolean } {
+  if (fresh === s.base) return { text: s.text, base: s.base, notice: false };
+  if (!s.edited || !s.text.trim()) return { text: fresh, base: fresh, notice: false };
+  return { text: s.text, base: s.base, notice: true };
+}
+export const addDaysYmd = (ymd: string, n: number) => { const d = new Date(`${ymd}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 export function builtInTemplates(at = new Date().toISOString()): WaTemplate[] {
   const t = (id: string, purpose: TemplatePurpose, name: string, body: string): WaTemplate => ({ id, purpose, name, body, isDefault: true, enabled: true, builtIn: true, updatedAt: at });
   return [
