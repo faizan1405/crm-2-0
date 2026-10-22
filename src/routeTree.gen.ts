@@ -17,6 +17,7 @@ import { Route as FollowUpsRouteImport } from './routes/follow-ups'
 import { Route as LeadsRouteImport } from './routes/leads'
 import { Route as NotesRouteImport } from './routes/notes'
 import { Route as PipelineRouteImport } from './routes/pipeline'
+import { Route as SalesStudioRouteImport } from './routes/sales-studio'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as LeadsIdRouteImport } from './routes/leads_.$id'
 import { Route as LeadsBinRouteImport } from './routes/leads_.bin'
@@ -61,6 +62,11 @@ const PipelineRoute = PipelineRouteImport.update({
   path: '/pipeline',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SalesStudioRoute = SalesStudioRouteImport.update({
+  id: '/sales-studio',
+  path: '/sales-studio',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -86,6 +92,7 @@ export interface FileRoutesByFullPath {
   '/leads': typeof LeadsRoute
   '/notes': typeof NotesRoute
   '/pipeline': typeof PipelineRoute
+  '/sales-studio': typeof SalesStudioRoute
   '/settings': typeof SettingsRoute
   '/leads/$id': typeof LeadsIdRoute
   '/leads/bin': typeof LeadsBinRoute
@@ -99,6 +106,7 @@ export interface FileRoutesByTo {
   '/leads': typeof LeadsRoute
   '/notes': typeof NotesRoute
   '/pipeline': typeof PipelineRoute
+  '/sales-studio': typeof SalesStudioRoute
   '/settings': typeof SettingsRoute
   '/leads/$id': typeof LeadsIdRoute
   '/leads/bin': typeof LeadsBinRoute
@@ -113,6 +121,7 @@ export interface FileRoutesById {
   '/leads': typeof LeadsRoute
   '/notes': typeof NotesRoute
   '/pipeline': typeof PipelineRoute
+  '/sales-studio': typeof SalesStudioRoute
   '/settings': typeof SettingsRoute
   '/leads_/$id': typeof LeadsIdRoute
   '/leads_/bin': typeof LeadsBinRoute
@@ -128,6 +137,7 @@ export interface FileRouteTypes {
     | '/leads'
     | '/notes'
     | '/pipeline'
+    | '/sales-studio'
     | '/settings'
     | '/leads/$id'
     | '/leads/bin'
@@ -141,6 +151,7 @@ export interface FileRouteTypes {
     | '/leads'
     | '/notes'
     | '/pipeline'
+    | '/sales-studio'
     | '/settings'
     | '/leads/$id'
     | '/leads/bin'
@@ -154,6 +165,7 @@ export interface FileRouteTypes {
     | '/leads'
     | '/notes'
     | '/pipeline'
+    | '/sales-studio'
     | '/settings'
     | '/leads_/$id'
     | '/leads_/bin'
@@ -168,6 +180,7 @@ export interface RootRouteChildren {
   LeadsRoute: typeof LeadsRoute
   NotesRoute: typeof NotesRoute
   PipelineRoute: typeof PipelineRoute
+  SalesStudioRoute: typeof SalesStudioRoute
   SettingsRoute: typeof SettingsRoute
   LeadsIdRoute: typeof LeadsIdRoute
   LeadsBinRoute: typeof LeadsBinRoute
@@ -231,6 +244,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PipelineRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sales-studio': {
+      id: '/sales-studio'
+      path: '/sales-studio'
+      fullPath: '/sales-studio'
+      preLoaderRoute: typeof SalesStudioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -264,6 +284,7 @@ const rootRouteChildren: RootRouteChildren = {
   LeadsRoute: LeadsRoute,
   NotesRoute: NotesRoute,
   PipelineRoute: PipelineRoute,
+  SalesStudioRoute: SalesStudioRoute,
   SettingsRoute: SettingsRoute,
   LeadsIdRoute: LeadsIdRoute,
   LeadsBinRoute: LeadsBinRoute,
