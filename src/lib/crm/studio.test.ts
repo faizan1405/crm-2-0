@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { quoteTotals, quotesForLead, renderTemplate, safeUrl, selectedDemos, shareBlocker, nextQuoteNumber, quoteError, pickTemplate, builtInTemplates, templateVars, type Quotation, type Demo } from "./studio";
+import { composeDraft, syncDraft, quoteTotals, quotesForLead, renderTemplate, safeUrl, selectedDemos, shareBlocker, nextQuoteNumber, quoteError, pickTemplate, builtInTemplates, templateVars, type Quotation, type Demo } from "./studio";
 
 const q = (p: Partial<Quotation> = {}): Quotation => ({ id: "q1", number: "SF-Q-2026-001", leadId: "l1", clientName: "Rohan Kapoor", title: "Basic Website", issueDate: "2026-10-21", validUntil: "2026-11-20", items: [{ id: "i", description: "Site", qty: 1, unitPrice: 15000 }], discountType: "flat", discount: 0, gstEnabled: false, gstRate: 18, status: "ready", revision: 1, history: [], createdAt: "", updatedAt: "", ...p });
 const demo = (p: Partial<Demo>): Demo => ({ id: "d", title: "Demo", url: "https://a.com", category: "Other", tags: [], active: true, order: 0, includeByDefault: false, ...p });
@@ -66,4 +66,32 @@ describe("demo library", () => {
     expect(safeUrl("")).toBeNull();
     expect(safeUrl("example.com/demo")).toBe("https://example.com/demo");
   });
+});
+
+describe("composer drafts from the shared source", () => {
+  const lead = { name: "Rohan Kapoor", company: "Kapoor Foods", requirement: "Business Website" };
+  const base = { lead, owner: "Faizan", business: "Scale Flow" };
+  it("reflects an edited template immediately", () => {
+    const templates = builtInTemplates().map((t) => (t.purpose === "followup" ? { ...t, body: "Namaste {firstName} from {companyName}!" } : t));
+    expect(composeDraft({ ...base, purpose: "followup", templates })).toBe("Namaste Rohan from Kapoor Foods!");
+  });
+  it("shows only the selected demo links in a samples message", () => {
+    const demos = [demo({ id: "e", title: "Shop", url: "https://shop.example.com", category: "E-commerce", includeByDefault: true }), demo({ id: "x", title: "3D", url: "https://3d.example.com", includeByDefault: false })];
+    const out = composeDraft({ ...base, purpose: "samples", templates: builtInTemplates(), demos: selectedDemos(demos) });
+    expect(out).toContain("• Shop: https://shop.example.com/");
+    expect(out).not.toContain("3d.example.com");
+  });
+  it("uses the selected quotation's real total", () => {
+    const out = composeDraft({ ...base, purpose: "quotation", templates: builtInTemplates(), quote: q({ items: [{ id: "i", description: "Site", qty: 1, unitPrice: 30000 }] }) });
+    expect(out).toContain("₹30,000");
+    expect(out).toContain("SF-Q-2026-001");
+  });
+  it("never mentions a PDF when the client has no quotation", () => {
+    expect(composeDraft({ ...base, purpose: "quotation", templates: builtInTemplates() })).not.toMatch(/PDF|\{/);
+  });
+});
+
+describe("unsaved composer edits", () => {
+  it("follows the latest template when untouched", () => expect(syncDraft({ text: "old", base: "old", edited: false }, "new")).toEqual({ text: "new", base: "new", notice: false }));
+  it("keeps a manually edited draft and raises a notice instead", () => expect(syncDraft({ text: "my words", base: "old", edited: true }, "new")).toEqual({ text: "my words", base: "old", notice: true }));
 });

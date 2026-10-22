@@ -5,7 +5,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   LayoutDashboard, Users, KanbanSquare, CalendarClock, Wallet, StickyNote, Moon, Sun,
-  BarChart3, Sunrise, Settings, MoreHorizontal, Plus, Search, Bell, ArrowUpRight, PhoneCall, Menu, ChevronRight, PanelLeftClose, PanelLeftOpen,
+  BarChart3, Sunrise, Settings, MoreHorizontal, Plus, Search, Bell, ArrowUpRight, PhoneCall, Menu, ChevronRight, PanelLeftClose, PanelLeftOpen, Presentation,
 } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,7 @@ const NAV = [
   { to: "/pipeline", label: "Pipeline", mobile: "Pipeline", icon: KanbanSquare, section: "" },
   { to: "/follow-ups", label: "Follow-ups", mobile: "Follow-ups", icon: CalendarClock, section: "" },
   { to: "/deals", label: "Deals & Payments", mobile: "Deals", icon: Wallet, section: "" },
+  { to: "/sales-studio", label: "Sales Studio", mobile: "Studio", icon: Presentation, section: "" },
   { to: "/notes", label: "Personal Notes", mobile: "Notes", icon: StickyNote, section: "" },
   { to: "/analytics", label: "Analytics", mobile: "Analytics", icon: BarChart3, section: "Insights" },
   { to: "/daily-briefing", label: "Daily Briefing", mobile: "Briefing", icon: Sunrise, section: "" },
@@ -34,7 +35,13 @@ function usePreferenceEffects() {
   const { theme, accent, density, timeFormat, dateStyle } = useCRM();
   displayPrefs.hour12 = timeFormat === "12h";
   displayPrefs.longDate = dateStyle === "long";
-  useEffect(() => { useCRM.persist.rehydrate(); }, []);
+  useEffect(() => {
+    useCRM.persist.rehydrate();
+    // Multi-tab sync: another tab saved → reload the shared store here (no polling).
+    const onStorage = (e: StorageEvent) => { if (e.key === useCRM.persist.getOptions().name) void useCRM.persist.rehydrate(); };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => document.documentElement.classList.toggle("dark", theme === "dark" || (theme === "system" && mq.matches));
@@ -51,7 +58,7 @@ export function ScaleMark({ className }: { className?: string }) {
 
 const GROUPS = [
   { label: "Workspace", items: ["/", "/leads", "/pipeline", "/follow-ups"] },
-  { label: "Business", items: ["/deals", "/analytics", "/daily-briefing"] },
+  { label: "Business", items: ["/deals", "/sales-studio", "/analytics", "/daily-briefing"] },
   { label: "Personal", items: ["/notes"] },
   { label: "System", items: ["/settings"] },
 ] as const;
