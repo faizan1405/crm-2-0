@@ -671,3 +671,10 @@ button.ph-chip:hover { background: var(--primary-soft); color: var(--primary); }
 .demo-card:hover { border-color: color-mix(in oklab, var(--foreground) 18%, var(--border)); }
 .demo-thumb { width: 64px; height: 48px; flex-shrink: 0; border-radius: 8px; object-fit: cover; background: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .studio-pane, .wa-assets { animation: none; } }
+@media (max-width: 640px) {
+  .studio-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .studio-metric { padding: 10px; }
+  .studio-metric > .num { font-size: 15px; }
+  .studio-metric > span:last-child:not(.num) { display: none; }
+  .studio-metric .eyebrow { font-size: 9px; }
+}

@@ -19,3 +19,5 @@
 - Shared CRM presentation belongs in Shell and semantic global CSS; page components preserve store actions and pure calculations so visual redesigns cannot change business behavior.
 - The pipeline uses native drag-and-drop with named stage targets and horizontally scrollable columns; mobile stage selectors provide an equivalent touch interaction.
 - Every WhatsApp action uses the shared `WhatsAppComposer` (`openWhatsApp`/`WhatsAppButton`) with drafts from pure `whatsapp.ts` — one modal, no direct wa.me links, nothing marked sent automatically.
+- Sales Studio data (quotations, WhatsApp templates, demos, business profile) lives in the same CRM store; the WhatsApp composer builds drafts only via pure `composeDraft`/`syncDraft` in `studio.ts` — one source of truth, edited drafts are never overwritten silently.
+- Quotations are independent of deals/payments; no code path converts or syncs them automatically — keeps quoted, confirmed and received money separate.
