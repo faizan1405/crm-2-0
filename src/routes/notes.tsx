@@ -80,14 +80,14 @@ function Notes() {
   const create = () => {
     saver.flush();
     const at = new Date().toISOString();
-    const n: Note = { id: uid("note"), title: "Untitled note", body: "", doc: { type: "doc", content: [{ type: "paragraph" }] }, pinned: false, createdAt: at, updatedAt: at };
+    const n: Note = { id: uid("note"), title: "", body: "", doc: { type: "doc", content: [{ type: "paragraph" }] }, pinned: false, createdAt: at, updatedAt: at };
     try { saveNote(n); } catch { toast.error("Couldn't create the note — browser storage may be full"); return; }
     setQ(""); setSelId(n.id); setMobileOpen(true);
-    requestAnimationFrame(() => { const t = document.getElementById("note-title") as HTMLInputElement | null; t?.focus(); t?.select(); });
+    requestAnimationFrame(() => { const t = document.getElementById("note-title") as HTMLInputElement | null; t?.focus(); });
   };
   const sel = notes.find((n) => n.id === selId) ?? null;
   const remove = (n: Note) => {
-    if (!window.confirm(`Delete "${n.title}" permanently?`)) return;
+    if (!window.confirm(`Delete "${n.title || "Untitled note"}" permanently?`)) return;
     if (n.id === selId) saver.cancel();
     deleteNote(n.id); toast.success("Note deleted");
     if (n.id === selId) { setSelId(filterNotes(useCRM.getState().notes, q, sort)[0]?.id ?? null); setMobileOpen(false); }
@@ -106,7 +106,7 @@ function Notes() {
             {list.map((n) => { const pr = checklistProgress(noteDoc(n)); return (
               <li key={n.id}>
                 <button type="button" onClick={() => select(n.id)} aria-current={n.id === selId ? "true" : undefined} className="notes-item">
-                  <span className="flex items-center gap-1.5"><span className="truncate text-sm font-semibold">{n.title}</span>{n.pinned && <Pin className="size-3 shrink-0 fill-current text-foreground" aria-label="Pinned" />}</span>
+                  <span className="flex items-center gap-1.5"><span className="truncate text-sm font-semibold">{n.title || "Untitled note"}</span>{n.pinned && <Pin className="size-3 shrink-0 fill-current text-foreground" aria-label="Pinned" />}</span>
                   <span className="line-clamp-2 text-xs text-muted-foreground">{n.body.trim() || "Empty note"}</span>
                   <span className="flex gap-2 text-[10px] text-muted-foreground"><span>Edited {relative(n.updatedAt)}</span>{pr.total > 0 && <span className="num">☑ {pr.done}/{pr.total}</span>}</span>
                 </button>
