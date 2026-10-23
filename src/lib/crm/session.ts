@@ -1,0 +1,60 @@
+// Phase 3B.6 — the Employee Workspace Preview session (frontend simulation only).
+// While a preview runs, the real CRM pages operate on an isolated in-memory working copy:
+// persistence is paused so the Owner's saved records are never written, and every store
+// action is checked against the previewed employee's saved permissions. This is NOT a login
+// and NOT security — the future Hostinger backend must enforce the same rules server-side.
+import { create } from "zustand";
+import type { FinanceLevel, LeadScope } from "./access";
+
+export interface PreviewSession {
+  employeeId: string;
+  name: string;
+  roleLabel: string;
+  allowed: string[];
+  leadScope: LeadScope;
+  finance: FinanceLevel;
+  startedAt: string;
+}
+
+/** Future production event shapes (Section 10). The backend persists, broadcasts and notifies; here they are only collected in the preview. */
+export type CrmEventType = "lead.created" | "lead.updated" | "call.logged" | "followup.created" | "followup.completed" | "pipeline.stage_changed" | "client.note_added" | "lead.assigned";
+export interface CrmEvent { id: string; type: CrmEventType; actorId: string; at: string; resourceId?: string; change?: unknown }
+export interface CrmEventSink { emit: (e: CrmEvent) => void }
+
+interface SessionState { preview: PreviewSession | null; events: CrmEvent[] }
+export const useSession = create<SessionState>(() => ({ preview: null, events: [] }));
+export const activePreview = () => useSession.getState().preview;
+
+/** Pseudo-permissions: `__owner` is never granted to an employee; `__finance` = record/void payments. */
+export function allows(p: PreviewSession | null, perm: string): boolean {
+  if (!p) return true;
+  if (perm === "__owner") return false;
+  if (perm === "__finance") return p.finance === "manage" && p.allowed.includes("deals.edit");
+  return p.allowed.includes(perm);
+}
+export const previewAllows = (perm: string) => allows(activePreview(), perm);
+
+/** Preview-only sink. Swap for an authenticated API client when the backend exists. */
+export const previewSink: CrmEventSink = {
+  emit: (e) => useSession.setState((s) => ({ events: [e, ...s.events].slice(0, 200) })),
+};
+
+/** Permission needed to open each page. Owner-only pages can never be granted. */
+export const ROUTE_PERM: Record<string, string> = {
+  "/": "dashboard.view", "/leads/bin": "leads.delete", "/leads": "leads.view", "/pipeline": "pipeline.view", "/follow-ups": "followups.view",
+  "/deals": "deals.view", "/sales-studio": "studio.view", "/notes": "notes.own", "/analytics": "analytics.view",
+  "/daily-briefing": "briefing.view", "/team": "__owner", "/data-vault": "__owner", "/settings": "__owner", "/login": "__owner",
+};
+export function routeAllowed(p: PreviewSession | null, path: string): boolean {
+  if (!p) return true;
+  const key = Object.keys(ROUTE_PERM).filter((k) => (k === "/" ? path === "/" : path.startsWith(k))).sort((a, b) => b.length - a.length)[0];
+  if (!key) return true;
+  if (key === "/deals" && (p.finance === "none" || p.finance === "status")) return false;
+  return allows(p, ROUTE_PERM[key]!);
+}
+
+/** UI hook: `can` is always true for the Owner. */
+export function useAccess() {
+  const preview = useSession((s) => s.preview);
+  return { preview, can: (perm: string) => allows(preview, perm) };
+}
