@@ -1053,7 +1053,7 @@ a.pd-row:hover { border-color: var(--input); background: var(--muted); }
 .pd-pill[data-status="awaiting_client"], .pd-pill[data-status="on_hold"], .pd-pill[data-stage="awaiting_content"] { background: color-mix(in oklch, var(--warning) 16%, var(--card)); }
 .pd-pill[data-status="completed"], .pd-pill[data-stage="delivered"], .pd-pill[data-stage="support"] { background: color-mix(in oklch, var(--success) 16%, var(--card)); }
 .pd-pill[data-status="cancelled"] { color: var(--muted-foreground); text-decoration: line-through; }
-.pd-prio { font-size: 10px; font-weight: 600; text-transform: capitalize; color: var(--muted-foreground); }
+.pd-prio { white-space: nowrap; flex-shrink: 0; font-size: 10px; font-weight: 600; text-transform: capitalize; color: var(--muted-foreground); }
 .pd-prio[data-p="high"] { color: var(--destructive); }
 .pd-board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(260px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 8px; }
 .pd-col { display: grid; align-content: start; gap: 10px; padding: 10px; border-radius: 18px; background: var(--secondary); border: 1px dashed transparent; min-height: 160px; transition: border-color 160ms ease, background 160ms ease; }
