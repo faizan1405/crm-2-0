@@ -25,6 +25,7 @@ import { Route as SalesStudioRouteImport } from './routes/sales-studio'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as TeamRouteImport } from './routes/team'
 import { Route as TeamActivityRouteImport } from './routes/team-activity'
+import { Route as TeamPerformanceRouteImport } from './routes/team-performance'
 import { Route as LeadsIdRouteImport } from './routes/leads_.$id'
 import { Route as LeadsBinRouteImport } from './routes/leads_.bin'
 import { Route as TeamPreviewIdRouteImport } from './routes/team_.preview.$id'
@@ -110,6 +111,11 @@ const TeamActivityRoute = TeamActivityRouteImport.update({
   path: '/team-activity',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TeamPerformanceRoute = TeamPerformanceRouteImport.update({
+  id: '/team-performance',
+  path: '/team-performance',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LeadsIdRoute = LeadsIdRouteImport.update({
   id: '/leads_/$id',
   path: '/leads/$id',
@@ -148,6 +154,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
   '/team-activity': typeof TeamActivityRoute
+  '/team-performance': typeof TeamPerformanceRoute
   '/leads/$id': typeof LeadsIdRoute
   '/leads/bin': typeof LeadsBinRoute
   '/team/preview/$id': typeof TeamPreviewIdRoute
@@ -170,6 +177,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
   '/team-activity': typeof TeamActivityRoute
+  '/team-performance': typeof TeamPerformanceRoute
   '/leads/$id': typeof LeadsIdRoute
   '/leads/bin': typeof LeadsBinRoute
   '/team/preview/$id': typeof TeamPreviewIdRoute
@@ -193,6 +201,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
   '/team-activity': typeof TeamActivityRoute
+  '/team-performance': typeof TeamPerformanceRoute
   '/leads_/$id': typeof LeadsIdRoute
   '/leads_/bin': typeof LeadsBinRoute
   '/team_/preview/$id': typeof TeamPreviewIdRoute
@@ -217,6 +226,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/team'
     | '/team-activity'
+    | '/team-performance'
     | '/leads/$id'
     | '/leads/bin'
     | '/team/preview/$id'
@@ -239,6 +249,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/team'
     | '/team-activity'
+    | '/team-performance'
     | '/leads/$id'
     | '/leads/bin'
     | '/team/preview/$id'
@@ -261,6 +272,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/team'
     | '/team-activity'
+    | '/team-performance'
     | '/leads_/$id'
     | '/leads_/bin'
     | '/team_/preview/$id'
@@ -284,6 +296,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   TeamRoute: typeof TeamRoute
   TeamActivityRoute: typeof TeamActivityRoute
+  TeamPerformanceRoute: typeof TeamPerformanceRoute
   LeadsIdRoute: typeof LeadsIdRoute
   LeadsBinRoute: typeof LeadsBinRoute
   TeamPreviewIdRoute: typeof TeamPreviewIdRoute
@@ -404,6 +417,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TeamActivityRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/team-performance': {
+      id: '/team-performance'
+      path: '/team-performance'
+      fullPath: '/team-performance'
+      preLoaderRoute: typeof TeamPerformanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/leads_/$id': {
       id: '/leads_/$id'
       path: '/leads/$id'
@@ -452,6 +472,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   TeamRoute: TeamRoute,
   TeamActivityRoute: TeamActivityRoute,
+  TeamPerformanceRoute: TeamPerformanceRoute,
   LeadsIdRoute: LeadsIdRoute,
   LeadsBinRoute: LeadsBinRoute,
   TeamPreviewIdRoute: TeamPreviewIdRoute,
