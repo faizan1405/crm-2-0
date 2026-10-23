@@ -9,7 +9,7 @@ export const FORMAT_VERSION = 1;
 export const SCHEMA_VERSION = 3;
 export const BUSINESS_TZ = "Asia/Kolkata";
 
-export type CategoryId = "leads" | "activities" | "followups" | "deals" | "payments" | "proofs" | "notes" | "quotations" | "waTemplates" | "demos" | "employees" | "permissions" | "assignments" | "teamActivity" | "inbox" | "automation" | "settings";
+export type CategoryId = "leads" | "activities" | "followups" | "deals" | "payments" | "proofs" | "notes" | "quotations" | "waTemplates" | "demos" | "employees" | "permissions" | "assignments" | "teamActivity" | "inbox" | "automation" | "performance" | "settings";
 export interface Category { id: CategoryId; label: string; group: string; desc: string; keys: string[]; file: string; isPrivate?: boolean }
 
 export const CATEGORIES: Category[] = [
