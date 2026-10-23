@@ -261,9 +261,9 @@ export function deriveEvents(prev: EventSnap, next: EventSnap, ctx: DeriveCtx): 
     if (o.ownerId !== p.ownerId || o.memberIds.join() !== p.memberIds.join()) push("project.assigned", `${p.id}:${p.version}`, { ...base, summary: `${who} changed the team on “${p.name}”.`, oldValues: { ownerId: o.ownerId, memberIds: o.memberIds }, newValues: { ...links, ownerId: p.ownerId, memberIds: p.memberIds } });
     if (p.support.included && p.support.start && !(o.support.included && o.support.start)) push("project.support_started", `${p.id}:${p.version}`, { ...base, summary: `${who} configured support for “${p.name}” from ${p.support.start}.`, newValues: links });
   }
-  const pt = new Map((prev.projectTasks ?? []).map((x) => [x.id, x]));
+  const ptk = new Map((prev.projectTasks ?? []).map((x) => [x.id, x]));
   for (const t of next.projectTasks ?? []) {
-    const o = pt.get(t.id);
+    const o = ptk.get(t.id);
     if (!o && !(prev.projects ?? []).every((x) => x.id !== t.projectId)) push("project.task_created", t.id, { entityType: "project", entityId: t.projectId, summary: `${who} added the task “${t.title}” to “${pName(t.projectId)}”.`, newValues: { projectId: t.projectId, taskId: t.id } });
     if (o && o.status !== "done" && t.status === "done") push("project.task_completed", `${t.id}:done:${ctx.operationId}`, { entityType: "project", entityId: t.projectId, summary: `${who} completed “${t.title}” on “${pName(t.projectId)}”.`, newValues: { projectId: t.projectId, taskId: t.id } });
   }
