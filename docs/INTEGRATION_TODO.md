@@ -25,3 +25,7 @@ No backend, authentication service, AI service or notification delivery was conf
 - Implement `CredentialService` (`team.ts`): createLogin, changeLoginEmail, setPassword — Owner-only, authorized server-side.
 - Hash with Argon2id (salted); never return or log passwords; setPassword replaces the hash and revokes all employee sessions; success only after commit.
 - No invitations, OTP, email reset or employee self-service password/email change. Login rate limiting, HTTPS, secure session cookies.
+## Phase 3B.5 — Data Vault (Hostinger)
+- Implement `BackupService` (`vault.ts`) server-side; every backup/export/restore endpoint is Owner-only, verified from the session; no override can grant it.
+- Keep archive format v1 (manifest + checksums + data/*.json + files/payment-proofs). Restore: validate → preview → Owner confirm → pre-restore snapshot → conflict handling → rollback.
+- Configure Hostinger scheduled DB + private-file backups with retention and restore drills; don't assume hosting backups include proofs.
