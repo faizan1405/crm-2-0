@@ -226,8 +226,10 @@ describe("permissions and employee preview", () => {
   };
   it("seeing the lead is not enough: employees only see assigned projects, finance needs explicit permission", () => {
     const e = emp();
-    const mine = make(), other = make({ name: "Other" });
-    s().createProject(draftFromDeal({ deal: DEAL }), { allowAnother: true });
+    const mine = make();
+    const o = s().createProject({ ...draftFromDeal({ deal: DEAL }), name: "Other" }, { allowAnother: true });
+    if (!o.ok) throw new Error(o.error);
+    const other = o.id;
     s().updateProject(mine, { memberIds: [e] });
     expect(canSeeProject(P(other), { owner: false, employeeId: e, can: () => true, financeAmounts: false })).toBe(false);
     // Without projects.view the employee sees nothing.
