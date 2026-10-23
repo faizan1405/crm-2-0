@@ -131,3 +131,11 @@ describe("workload", () => {
     expect(performance.now() - t).toBeLessThan(1500);
   });
 });
+
+import { CATEGORIES } from "./vault";
+describe("data vault coverage", () => {
+  it("full backup covers goals, revisions, alerts and scorecard settings", () => {
+    const keys = CATEGORIES.flatMap((c) => c.keys as readonly string[]);
+    for (const k of ["goals", "goalRevisions", "goalAlerts", "perfPrefs"]) expect(keys).toContain(k);
+  });
+});
