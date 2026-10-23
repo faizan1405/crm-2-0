@@ -58,7 +58,7 @@ function usePreferenceEffects() {
   }, [theme]);
   useEffect(() => { document.documentElement.dataset["accent"] = accent; document.documentElement.dataset["density"] = density; }, [accent, density]);
 }
-const isActive = (path: string, to: string) => to === "/" ? path === "/" : path.startsWith(to);
+const isActive = (path: string, to: string) => to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`) || (to === "/leads" && path.startsWith("/leads"));
 
 export function ScaleMark({ className }: { className?: string }) {
   return <svg viewBox="0 0 32 32" fill="none" aria-hidden="true" className={cn("size-8", className)}><path d="M5 23V14l7-5v9l-7 5Zm10-5V9l7-5v9l-7 5Zm0 10v-7l12-8v7l-12 8Z" fill="currentColor" /></svg>;
