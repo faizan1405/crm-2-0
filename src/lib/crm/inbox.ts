@@ -116,8 +116,8 @@ export function inCategory(r: InboxRow, cat: InboxCategory, now: Date): boolean 
 }
 
 export interface InboxFilters {
-  q?: string; source?: string; assignee?: "all" | "unassigned" | string; priority?: LeadPriority | "all"; stage?: LeadStatus | "all";
-  status?: InboxStatus | "all"; createdDays?: number; contactedDays?: number; firstContactPending?: boolean; duplicate?: boolean;
+  q?: string | undefined; source?: string | undefined; assignee?: "all" | "unassigned" | string | undefined; priority?: LeadPriority | "all" | undefined; stage?: LeadStatus | "all" | undefined;
+  status?: InboxStatus | "all" | undefined; createdDays?: number | undefined; contactedDays?: number | undefined; firstContactPending?: boolean | undefined; duplicate?: boolean | undefined;
 }
 export function filterRows(rows: InboxRow[], cat: InboxCategory, f: InboxFilters, now: Date): InboxRow[] {
   const q = f.q?.trim().toLowerCase(); const qd = q?.replace(/\D/g, "");
