@@ -15,7 +15,7 @@ import { AddLeadDialog } from "@/components/crm/AddLeadDialog";
 import { LostReasonDialog, FollowUpDialog } from "@/components/crm/Dialogs";
 import { useAccess } from "@/lib/crm/session";
 import { useCRM } from "@/lib/crm/store";
-import { formatINR, formatINRCompact, relative, formatDateTime, digits } from "@/lib/crm/format";
+import { formatINR, formatINRCompact, relative, formatDateTime, formatDate, digits } from "@/lib/crm/format";
 import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, type LeadStatus, type LeadSource, type LeadPriority } from "@/lib/crm/types";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
