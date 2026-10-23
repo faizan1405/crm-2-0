@@ -9,7 +9,7 @@ export const FORMAT_VERSION = 1;
 export const SCHEMA_VERSION = 3;
 export const BUSINESS_TZ = "Asia/Kolkata";
 
-export type CategoryId = "leads" | "activities" | "followups" | "deals" | "payments" | "proofs" | "notes" | "quotations" | "waTemplates" | "demos" | "employees" | "permissions" | "assignments" | "settings";
+export type CategoryId = "leads" | "activities" | "followups" | "deals" | "payments" | "proofs" | "notes" | "quotations" | "waTemplates" | "demos" | "employees" | "permissions" | "assignments" | "teamActivity" | "settings";
 export interface Category { id: CategoryId; label: string; group: string; desc: string; keys: string[]; file: string; isPrivate?: boolean }
 
 export const CATEGORIES: Category[] = [
@@ -26,6 +26,7 @@ export const CATEGORIES: Category[] = [
   { id: "employees", label: "Employee profiles", group: "Team", desc: "Profiles, roles and account statuses. Never passwords.", keys: ["employees"], file: "data/employees.json" },
   { id: "permissions", label: "Employee permissions", group: "Team", desc: "Permission overrides, lead scope and finance level.", keys: ["employeeAccess"], file: "data/roles-permissions.json" },
   { id: "assignments", label: "Lead assignments", group: "Team", desc: "Current assignments, assignment history and rules.", keys: ["assignments", "assignmentEvents", "assignmentRules", "ruleSettings", "firedRules"], file: "data/lead-assignments.json" },
+  { id: "teamActivity", label: "Team activity & notifications", group: "Team", desc: "Owner activity timeline events, notification preferences and read status. Demo simulation events are never included.", keys: ["teamEvents", "notifyPrefs", "notifyReads"], file: "data/team-activity.json" },
   { id: "settings", label: "Settings", group: "System", desc: "Workspace preferences, business profile and Daily Briefing state.", keys: ["owner", "email", "business", "theme", "accent", "density", "timeFormat", "dateStyle", "defaultLeadSort", "notifyFollowUps", "notifyPayments", "notifyDigest", "businessProfile", "briefingDone", "briefingDate"], file: "data/settings.json" },
 ];
 export const ALL_CATEGORY_IDS = CATEGORIES.map((c) => c.id);
