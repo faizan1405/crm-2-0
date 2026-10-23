@@ -47,7 +47,7 @@ export function RulesPanel() {
 
 function RuleForm({ rule, onClose }: { rule: AssignmentRule | undefined; onClose: () => void }) {
   const { employees, saveRule } = useCRM();
-  const [r, setR] = useState(() => rule ?? { id: uid("rule"), name: "", trigger: "lead_created" as RuleTrigger, conditions: {}, targetEmployeeId: "", enabled: true });
+  const [r, setR] = useState<Omit<AssignmentRule, "createdAt" | "updatedAt" | "priority">>(() => rule ?? { id: uid("rule"), name: "", trigger: "lead_created", conditions: {}, targetEmployeeId: "", enabled: true });
   const [err, setErr] = useState<string | null>(null);
   const targets = employees.filter(assignable);
   const cond = (k: "source" | "priority" | "stage", v: string) => { const c = { ...r.conditions } as Record<string, string>; if (v) c[k] = v; else delete c[k]; setR({ ...r, conditions: c }); setErr(null); };
