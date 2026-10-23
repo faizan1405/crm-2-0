@@ -20,7 +20,10 @@ import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, type LeadStatus, type LeadSo
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AssignDialog, AssigneeTag } from "@/components/team/AssignDialog";
-import { UserCheck, X } from "lucide-react";
+import { UserCheck, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { BulkAssignDialog } from "@/components/team/BulkAssignDialog";
+import { EMPTY_SELECTION, addPage, isSelected, selectMatching, selectedIds, selectionCount, toggle, type Selection } from "@/lib/crm/bulk";
+import { dayKey } from "@/lib/crm/format";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +44,7 @@ export const Route = createFileRoute("/leads")({
 type Sort = "recent" | "score" | "value" | "name";
 
 function Leads() {
-  const { leads, updateLead, deleteLead, wasteLead, restoreLead, setQuickStatus, bin, defaultLeadSort } = useCRM();
+  const { leads, updateLead, deleteLead, wasteLead, restoreLead, setQuickStatus, bin, defaultLeadSort, assignments, employees, followUps } = useCRM();
   const { can } = useAccess();
   const canDel = can("leads.delete");
   const [bulk, setBulk] = useState(false);
@@ -66,16 +69,46 @@ function Leads() {
   const navigate = useNavigate();
   const [fu, setFu] = useState<string | null>(null);
   // Owner-only bulk assignment; selection survives filter changes and never alters lead data.
-  const [picked, setPicked] = useState<string[]>([]), [assignFor, setAssignFor] = useState<string[] | null>(null);
-  const togglePick = (id: string, v: boolean) => setPicked((x) => (v ? (x.includes(id) ? x : [...x, id]) : x.filter((y) => y !== id)));
+  const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION), [assignFor, setAssignFor] = useState<string[] | null>(null), [bulkAssign, setBulkAssign] = useState(false);
+  const picked = useMemo(() => selectedIds(selection), [selection]);
+  const pickedCount = selectionCount(selection);
+  const isPicked = (id: string) => isSelected(selection, id);
+  const togglePick = (id: string, v: boolean) => setSelection((x) => toggle(x, id, v));
+  const [who, setWho] = useState<string>("all"), [created, setCreated] = useState<"all" | "7" | "30" | "90">("all"), [due, setDue] = useState<"all" | "overdue" | "today" | "week" | "none">("all");
+  const [page, setPage] = useState(0); const PAGE = 50;
   useEffect(() => setSort(defaultLeadSort), [defaultLeadSort]);
 
+  function dueMatch(leadId: string) {
+    const f = followUps.filter((x) => x.leadId === leadId && isPending(x));
+    if (due === "none") return f.length === 0;
+    const t = now.getTime(), today = dayKey(now);
+    if (due === "overdue") return f.some((x) => new Date(x.dueAt).getTime() < t);
+    if (due === "today") return f.some((x) => dayKey(x.dueAt) === today);
+    return f.some((x) => { const d = new Date(x.dueAt).getTime(); return d >= t && d <= t + 7 * 864e5; });
+  }
   const rows = useMemo(() => {
-    const r = leads.filter((l) => (status === "all" || l.status === status) && (source === "all" || l.source === source) && (prio === "all" || l.priority === prio) && (quick === "all" || (quick === "stale" ? staleDays(l, now) !== undefined : l.quickStatus === quick)) && `${l.name} ${l.company ?? ""} ${l.phone} ${l.email ?? ""}`.toLowerCase().includes(q.toLowerCase()));
+    const r = leads.filter((l) => (status === "all" || l.status === status) && (source === "all" || l.source === source) && (prio === "all" || l.priority === prio) && (quick === "all" || (quick === "stale" ? staleDays(l, now) !== undefined : l.quickStatus === quick)) && `${l.name} ${l.company ?? ""} ${l.phone} ${l.email ?? ""}`.toLowerCase().includes(q.toLowerCase())
+      && (who === "all" || (who === "__none" ? !assignments[l.id] : assignments[l.id]?.employeeId === who))
+      && (created === "all" || now.getTime() - new Date(l.createdAt).getTime() <= Number(created) * 864e5)
+      && (due === "all" || dueMatch(l.id)));
     const cmp = { recent: (a: typeof r[0], b: typeof r[0]) => b.createdAt.localeCompare(a.createdAt), score: (a: typeof r[0], b: typeof r[0]) => (b.aiScore ?? 0) - (a.aiScore ?? 0), value: (a: typeof r[0], b: typeof r[0]) => (b.quotedAmount ?? 0) - (a.quotedAmount ?? 0), name: (a: typeof r[0], b: typeof r[0]) => a.name.localeCompare(b.name) }[sort];
     return r.sort((a, b) => Number(b.pinned) - Number(a.pinned) || cmp(a, b));
-  }, [leads, q, status, source, prio, sort, quick, now]);
+  }, [leads, q, status, source, prio, sort, quick, now, who, created, due, assignments, followUps]);
+  useEffect(() => setPage(0), [q, status, source, prio, sort, quick, who, created, due]);
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE)), pg = Math.min(page, pages - 1);
+  const pageRows = rows.slice(pg * PAGE, pg * PAGE + PAGE);
+  const filterLabel = [status !== "all" && STATUS_LABEL[status], source !== "all" && source, prio !== "all" && prio, who === "__none" ? "Unassigned" : who !== "all" && employees.find((e) => e.id === who)?.name, created !== "all" && `created ≤${created}d`, due !== "all" && `follow-up ${due}`, q && `“${q}”`].filter(Boolean).join(" · ") || "all leads";
 
+  /** Bulk edit with one Undo; each lead goes through the normal guarded updateLead. Lost is excluded (needs a reason per lead). */
+  const bulkPatch = (patch: { priority?: LeadPriority; status?: LeadStatus }, label: string) => {
+    const before = new Map(leads.filter((l) => picked.includes(l.id)).map((l) => [l.id, { priority: l.priority, status: l.status }]));
+    let n = 0, failed = 0;
+    for (const id of before.keys()) { const cur = before.get(id)!; if ((patch.priority && cur.priority === patch.priority) || (patch.status && cur.status === patch.status)) continue; if (updateLead(id, patch)) n++; else failed++; }
+    const missing = picked.length - before.size;
+    const undo = () => { for (const [id, b] of before) updateLead(id, patch.priority ? { priority: b.priority } : { status: b.status }); };
+    const tail = [failed && `${failed} not allowed`, missing && `${missing} no longer exist`].filter(Boolean).join(", ");
+    (tail ? toast.warning : toast.success)(`${label} · ${n} lead${n === 1 ? "" : "s"} changed${tail ? ` · ${tail}` : ""}`, n ? { action: { label: "Undo", onClick: undo } } : undefined);
+  };
   const changeStatus = (id: string, s: LeadStatus) => (s === "lost" ? setLost(id) : updateLead(id, { status: s }));
   const lostLead = leads.find((l) => l.id === lost);
 
@@ -87,10 +120,13 @@ function Leads() {
       <select aria-label="Source filter" className={selectCls} value={source} onChange={(e) => setSource(e.target.value as typeof source)}><option value="all">All sources</option>{LEAD_SOURCES.map((s) => <option key={s}>{s}</option>)}</select>
       <select aria-label="Priority filter" className={selectCls} value={prio} onChange={(e) => setPrio(e.target.value as typeof prio)}><option value="all">All priorities</option><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option></select>
       <select aria-label="Quick status filter" className={selectCls} value={quick} onChange={(e) => setQuick(e.target.value as typeof quick)}><option value="all">Any quick status</option><option value="stale">Stale (7+ days quiet)</option>{QUICK_STATUSES.map((x) => <option key={x} value={x}>{QUICK_LABEL[x]}</option>)}</select>
+      {employees.length > 0 && <select aria-label="Assignee filter" className={selectCls} value={who} onChange={(e) => setWho(e.target.value)}><option value="all">Any assignee</option><option value="__none">Unassigned</option>{employees.filter((e) => e.accountStatus !== "archived").map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select>}
+      <select aria-label="Created filter" className={selectCls} value={created} onChange={(e) => setCreated(e.target.value as typeof created)}><option value="all">Any created date</option><option value="7">Created last 7 days</option><option value="30">Created last 30 days</option><option value="90">Created last 90 days</option></select>
+      <select aria-label="Follow-up due filter" className={selectCls} value={due} onChange={(e) => setDue(e.target.value as typeof due)}><option value="all">Any follow-up</option><option value="overdue">Follow-up overdue</option><option value="today">Follow-up today</option><option value="week">Due next 7 days</option><option value="none">No follow-up</option></select>
       <select aria-label="Sort" className={selectCls} value={sort} onChange={(e) => setSort(e.target.value as Sort)}><option value="recent">Newest</option><option value="score">Highest score</option><option value="value">Highest value</option><option value="name">Name A–Z</option></select>
     </div>
   );
-  const empty = <Empty icon={<Users />} title="No leads match" hint="Try clearing a filter or add a new lead." action={<Button variant="outline" onClick={() => { setQ(""); setStatus("all"); setSource("all"); setPrio("all"); setQuick("all"); }}>Clear filters</Button>} />;
+  const empty = <Empty icon={<Users />} title="No leads match" hint="Try clearing a filter or add a new lead." action={<Button variant="outline" onClick={() => { setQ(""); setStatus("all"); setSource("all"); setPrio("all"); setQuick("all"); setWho("all"); setCreated("all"); setDue("all"); }}>Clear filters</Button>} />;
 
   return (
     <Shell title="Prospects" subtitle={`${rows.length} of ${leads.length} leads in view · select one to inspect it without leaving the list`} actions={<div className="flex flex-wrap gap-2">{canDel && <Button variant="outline" asChild className="rounded-full"><Link to="/leads/bin"><Archive className="size-4" />Waste & deleted{bin.length ? <span className="num ml-1 text-xs text-muted-foreground">{bin.length}</span> : null}</Link></Button>}{can("import.run") && <Button variant="outline" onClick={() => setBulk(true)} className="rounded-full"><Layers className="size-4" />Bulk add</Button>}{can("leads.create") && <Button onClick={() => setOpen(true)} className="rounded-full"><Plus className="size-4" />Add lead</Button>}</div>}>
@@ -103,9 +139,9 @@ function Leads() {
       {rows.length === 0 ? <div className="panel">{empty}</div> : view === "workspace" ? (
         <div className="grid gap-6 lg:grid-cols-[minmax(320px,0.9fr)_1.4fr]">
           <div role="listbox" aria-label="Lead directory" className="max-h-[calc(100vh-180px)] overflow-y-auto border-t border-foreground scrollbar-thin lg:sticky lg:top-32">
-            {rows.map((l) => { const st = staleDays(l, now); return (
+            {pageRows.map((l) => { const st = staleDays(l, now); return (
               <div key={l.id} role="option" tabIndex={0} aria-selected={sel?.id === l.id} data-priority={l.priority} onClick={() => pick(l.id)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(l.id); } }} className="prospect-row prospect-row-pick">
-                <span onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} className="flex items-center"><Checkbox aria-label={`Select ${l.name}`} checked={picked.includes(l.id)} onCheckedChange={(v) => togglePick(l.id, !!v)} /></span>
+                <span onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} className="flex items-center"><Checkbox aria-label={`Select ${l.name}`} checked={isPicked(l.id)} onCheckedChange={(v) => togglePick(l.id, !!v)} /></span>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2"><span className="prio-dot shrink-0" /><span className="truncate text-sm font-semibold">{l.name}</span>{l.pinned && <Pin className="size-3 shrink-0" aria-label="Pinned" />}{st !== undefined && <span className="aging is-old shrink-0">stale {st}d</span>}</div>
                   <div className="mt-1 flex items-center gap-2 truncate pl-4 text-xs text-muted-foreground"><span className="stage-chip shrink-0" data-stage={l.status}>{STATUS_LABEL[l.status]}</span><span className="truncate">{l.company ?? l.source} · {l.lastContact ? `spoke ${relative(l.lastContact)}` : "not contacted"}</span><AssigneeTag leadId={l.id} /></div>
@@ -117,10 +153,10 @@ function Leads() {
         </div>
       ) : view === "cards" ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {rows.map((l, i) => { const st = staleDays(l, now); return (
+          {pageRows.map((l, i) => { const st = staleDays(l, now); return (
             <article key={l.id} data-priority={l.priority} style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }} className={cn("prospect-tile", l.pinned && "is-pinned")}>
               <span className="tile-score num" aria-hidden>{l.aiScore ?? ""}</span>
-              <div className="flex items-start justify-between gap-2"><div className="relative flex items-center gap-2"><Checkbox aria-label={`Select ${l.name}`} checked={picked.includes(l.id)} onCheckedChange={(v) => togglePick(l.id, !!v)} /><span className="prio-dot" /><span className="eyebrow">{l.priority} · {l.source}</span></div><Button size="icon" variant="ghost" aria-label={l.pinned ? "Unpin" : "Pin"} onClick={() => updateLead(l.id, { pinned: !l.pinned })} className="relative size-8 rounded-full"><Pin className={cn("size-4", !l.pinned && "opacity-40")} /></Button></div>
+              <div className="flex items-start justify-between gap-2"><div className="relative flex items-center gap-2"><Checkbox aria-label={`Select ${l.name}`} checked={isPicked(l.id)} onCheckedChange={(v) => togglePick(l.id, !!v)} /><span className="prio-dot" /><span className="eyebrow">{l.priority} · {l.source}</span></div><Button size="icon" variant="ghost" aria-label={l.pinned ? "Unpin" : "Pin"} onClick={() => updateLead(l.id, { pinned: !l.pinned })} className="relative size-8 rounded-full"><Pin className={cn("size-4", !l.pinned && "opacity-40")} /></Button></div>
               <Link to="/leads/$id" params={{ id: l.id }} className="relative"><h3 className="editorial text-[30px]">{l.name}</h3><p className="mt-1 text-xs text-muted-foreground">{l.company ?? "Independent"} · {l.phone}</p></Link>
               <div className="relative flex flex-wrap items-center gap-1.5"><span className="stage-chip" data-stage={l.status}>{STATUS_LABEL[l.status]}</span>{l.quickStatus && <span className="aging">{QUICK_LABEL[l.quickStatus]}</span>}{st !== undefined && <span className="aging is-old"><Clock className="mr-1 inline size-3" />stale {st}d</span>}</div>
               <dl className="relative grid grid-cols-3 gap-3 border-t pt-3 text-xs"><div><dt className="eyebrow">{l.quotedAmount ? "Quoted" : "Budget"}</dt><dd className="num mt-1 text-sm">{formatINRCompact(l.quotedAmount ?? l.budget ?? 0)}</dd></div><div><dt className="eyebrow">Next</dt><dd className="mt-1">{l.nextFollowUp ? formatDateTime(l.nextFollowUp) : "—"}</dd></div><div><dt className="eyebrow">Updated</dt><dd className="mt-1">{relative(l.updatedAt)}</dd></div></dl>
@@ -139,9 +175,9 @@ function Leads() {
           <table className="w-full min-w-[1180px] text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
             <thead className="text-left text-muted-foreground"><tr>{["", "Lead", "Phone", "Source", "Priority", "Score", "Quoted", "Stage", "Quick status", "Updated", ""].map((h, i) => <th key={i} className="px-3">{h}</th>)}</tr></thead>
             <tbody>
-              {rows.map((l) => (
+              {pageRows.map((l) => (
                 <tr key={l.id} className="border-b hover:bg-card">
-                  <td className="pl-1"><span className="inline-flex items-center gap-1"><Checkbox aria-label={`Select ${l.name}`} checked={picked.includes(l.id)} onCheckedChange={(v) => togglePick(l.id, !!v)} /><Button size="icon" variant="ghost" title={l.pinned ? "Unpin" : "Pin"} aria-label={l.pinned ? "Unpin" : "Pin"} onClick={() => updateLead(l.id, { pinned: !l.pinned })} className={cn("rounded-full", !l.pinned && "opacity-30 hover:opacity-80")}><Pin className="size-3.5" /></Button></span></td>
+                  <td className="pl-1"><span className="inline-flex items-center gap-1"><Checkbox aria-label={`Select ${l.name}`} checked={isPicked(l.id)} onCheckedChange={(v) => togglePick(l.id, !!v)} /><Button size="icon" variant="ghost" title={l.pinned ? "Unpin" : "Pin"} aria-label={l.pinned ? "Unpin" : "Pin"} onClick={() => updateLead(l.id, { pinned: !l.pinned })} className={cn("rounded-full", !l.pinned && "opacity-30 hover:opacity-80")}><Pin className="size-3.5" /></Button></span></td>
                   <td className="min-w-52 px-3"><Link to="/leads/$id" params={{ id: l.id }} className="hover:underline"><Identity name={l.name} company={l.company} /></Link></td>
                   <td className="num px-3 text-muted-foreground"><a href={`tel:${l.phone}`} className="hover:text-foreground" onClick={() => startCall(l.id, "Leads")}>{l.phone}</a></td>
                   <td className="px-3">{l.source}<div className="mt-0.5"><AssigneeTag leadId={l.id} /></div></td>
@@ -157,8 +193,19 @@ function Leads() {
             </tbody>
           </table>
         </div>}
-      {picked.length > 0 && <div className="as-bulk" role="region" aria-label="Bulk actions"><span className="text-sm font-semibold"><span className="num">{picked.length}</span> lead{picked.length === 1 ? "" : "s"} selected</span>{can("leads.assign") && <Button size="sm" onClick={() => setAssignFor(picked)}><UserCheck />Assign / reassign</Button>}<Button size="sm" variant="ghost" onClick={() => setPicked(rows.map((r) => r.id))}>Select all {rows.length}</Button><Button size="sm" variant="ghost" aria-label="Clear selection" onClick={() => setPicked([])}><X />Clear</Button></div>}
-      <AssignDialog open={!!assignFor} leadIds={assignFor ?? []} source={assignFor && assignFor.length > 1 ? "Leads bulk" : "Leads inspector"} onClose={() => setAssignFor(null)} onDone={() => { if (assignFor && assignFor.length > 1) setPicked([]); }} />
+      {rows.length > 0 && (can("leads.assign") || can("leads.edit")) && <div className="ba-pager">
+        <span className="flex flex-wrap items-center gap-2"><Checkbox aria-label="Select this page" checked={pageRows.length > 0 && pageRows.every((l) => isPicked(l.id))} onCheckedChange={(v) => setSelection((x) => (v ? addPage(x, pageRows.map((l) => l.id)) : pageRows.reduce((a, l) => toggle(a, l.id, false), x)))} />Select page ({pageRows.length}){rows.length > pageRows.length && <Button size="sm" variant="ghost" className="h-7 rounded-full" onClick={() => setSelection(selectMatching(rows.map((l) => l.id), filterLabel))}>Select all {rows.length} matching</Button>}{leads.length > rows.length && <Button size="sm" variant="ghost" className="h-7 rounded-full" onClick={() => setSelection(selectMatching(leads.map((l) => l.id), "all leads"))}>Select all {leads.length} leads</Button>}</span>
+        {pages > 1 && <span className="flex items-center gap-1"><Button size="icon" variant="ghost" className="size-7" aria-label="Previous page" disabled={pg === 0} onClick={() => setPage(pg - 1)}><ChevronLeft /></Button><span className="num">{pg * PAGE + 1}–{Math.min(rows.length, pg * PAGE + PAGE)} of {rows.length}</span><Button size="icon" variant="ghost" className="size-7" aria-label="Next page" disabled={pg >= pages - 1} onClick={() => setPage(pg + 1)}><ChevronRight /></Button></span>}
+      </div>}
+      {pickedCount > 0 && <div className="as-bulk" role="region" aria-label="Bulk actions">
+        <span className="text-sm font-semibold"><span className="num">{pickedCount}</span> selected<span className="ba-scope block font-normal">{selection.kind === "matching" ? `All matching ${selection.label}${selection.exclude.length ? ` · ${selection.exclude.length} excluded` : ""}` : "Picked individually"}</span></span>
+        {can("leads.assign") && <Button size="sm" onClick={() => setBulkAssign(true)}><UserCheck />Assign / distribute</Button>}
+        {can("leads.edit") && <select aria-label="Bulk change priority" className={cn(selectCls, "h-8 text-xs")} value="" onChange={(e) => bulkPatch({ priority: e.target.value as LeadPriority }, `Priority set to ${e.target.value}`)}><option value="">Priority…</option><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option></select>}
+        {(can("pipeline.edit") || can("leads.edit")) && <select aria-label="Bulk change stage" className={cn(selectCls, "h-8 text-xs")} value="" onChange={(e) => bulkPatch({ status: e.target.value as LeadStatus }, `Moved to ${STATUS_LABEL[e.target.value as LeadStatus]}`)}><option value="">Stage…</option>{LEAD_STATUSES.filter((s) => s !== "lost").map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select>}
+        <Button size="sm" variant="ghost" aria-label="Clear selection" onClick={() => setSelection(EMPTY_SELECTION)}><X />Clear</Button>
+      </div>}
+      <BulkAssignDialog open={bulkAssign} leadIds={picked} scope={selection.kind === "matching" ? `All leads matching ${selection.label}${selection.exclude.length ? `, minus ${selection.exclude.length} excluded` : ""}` : "Leads picked individually"} onClose={() => setBulkAssign(false)} onDone={() => setSelection(EMPTY_SELECTION)} />
+      <AssignDialog open={!!assignFor} leadIds={assignFor ?? []} source="Leads inspector" onClose={() => setAssignFor(null)} />
       <FollowUpDialog open={!!fu} onOpenChange={(o) => !o && setFu(null)} {...(fu ? { leadId: fu } : {})} />
       <AddLeadDialog open={open} onOpenChange={setOpen} />
       <BulkLeadDialog open={bulk} onOpenChange={setBulk} />
