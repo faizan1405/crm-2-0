@@ -225,7 +225,7 @@ function RuleEditor({ initial, onClose }: { initial: AutomationRule; onClose: ()
   const multi = <T extends string>(list: T[] | undefined, v: T, on: boolean) => (on ? [...new Set([...(list ?? []), v])] : (list ?? []).filter((x) => x !== v));
   const subject: RuleSubject = r.subject ?? "lead";
   const ACTIONS = ACTIONS_FOR[subject]; const TRIGGERS = TRIGGERS_FOR[subject];
-  const switchSubject = (sub: RuleSubject) => setR((x) => ({ ...x, subject: sub, trigger: TRIGGERS_FOR[sub][0]!, conditions: {}, actions: ["reminder"], settings: { cooldownHours: x.settings.cooldownHours, ...(sub === "project" ? {} : {}) } }));
+  const switchSubject = (sub: RuleSubject) => setR((x) => ({ ...x, subject: sub, trigger: TRIGGERS_FOR[sub][0]!, conditions: {}, actions: ["reminder"], settings: { cooldownHours: x.settings.cooldownHours } }));
   const err = ruleError(r);
   const save = () => { const e = saveAutomationRule(r); if (e) { toast.error(e); return; } toast.success(r.status === "enabled" ? "Rule updated" : "Saved — test it, then enable"); onClose(); };
   const chip = (on: boolean) => `rounded-full border px-2.5 py-1 text-xs ${on ? "border-primary bg-primary-soft text-primary" : "text-muted-foreground"}`;
