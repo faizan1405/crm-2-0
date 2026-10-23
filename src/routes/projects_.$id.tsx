@@ -16,6 +16,7 @@ import {
   type CheckItem, type Project, type ProjectMessage, type ProjectPriority, type ProjectStage, type ProjectStatus, type ProjectTask, type SupportKind,
 } from "@/lib/crm/projects";
 import type { CheckList } from "@/lib/crm/projectStore";
+import { ProjectAdditionalInfo, ProjectTagPicker } from "@/components/projects/ProjectCustom";
 import { ProgressBar, StagePill, StatusPill, useCanProject, usePeople, useProjectViewer } from "@/components/projects/ProjectParts";
 import { cn } from "@/lib/utils";
 
@@ -77,6 +78,7 @@ function OverviewTab({ p }: { p: Project }) {
   const pending = [...p.requirements.filter((r) => !r.done).map((r) => r.label), ...p.dependencies.filter((d) => !d.done).map((d) => d.label)];
   const date = (k: "bookingDate" | "plannedStart" | "actualStart" | "targetDelivery", label: string) => <label className="grid gap-1.5 text-sm"><span className="text-muted-foreground">{label}</span><Input type="date" disabled={!canEdit} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} /></label>;
   return <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+    <div className="grid content-start gap-6">
     <Card title="Project information">
       <div className="grid gap-4">
         <label className="grid gap-1.5 text-sm"><span className="text-muted-foreground">Project name</span><Input disabled={!canEdit} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
@@ -91,7 +93,11 @@ function OverviewTab({ p }: { p: Project }) {
         {canEdit && <div className="flex justify-end"><Button onClick={save}>Save changes</Button></div>}
       </div>
     </Card>
+    <ProjectAdditionalInfo projectId={p.id} />
+    </div>
     <div className="grid content-start gap-6">
+      {p.attention && <div className="pd-note" role="status"><b>Flagged by automation:</b> {p.attention.reason}{v.owner && <button type="button" className="ml-2 underline" onClick={() => { const e = updateProject(p.id, { attention: undefined }, "Automation flag cleared"); if (e) toast.error(e); }}>Clear</button>}</div>}
+      <Card title="Tags"><ProjectTagPicker projectId={p.id} canEdit={canEdit} /></Card>
       <Card title="Status">
         <div className="grid gap-3">
           <label className="grid gap-1.5 text-sm"><span className="text-muted-foreground">Commercial / booking status</span><select aria-label="Project status" disabled={!canStage} className={selectCls} value={p.status} onChange={(e) => setProjectStatus(p.id, e.target.value as ProjectStatus)}>{PROJECT_STATUSES.map((s) => <option key={s} value={s}>{STATUS_TEXT[s]}</option>)}</select></label>
