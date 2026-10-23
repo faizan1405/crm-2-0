@@ -41,7 +41,7 @@ export const previewSink: CrmEventSink = {
 
 /** Permission needed to open each page. Owner-only pages can never be granted. */
 export const ROUTE_PERM: Record<string, string> = {
-  "/": "dashboard.view", "/leads/bin": "leads.delete", "/leads": "leads.view", "/pipeline": "pipeline.view", "/follow-ups": "followups.view",
+  "/": "dashboard.view", "/leads/bin": "leads.delete", "/leads": "leads.view", "/inbox": "leads.view", "/pipeline": "pipeline.view", "/follow-ups": "followups.view",
   "/deals": "deals.view", "/sales-studio": "studio.view", "/notes": "notes.own", "/analytics": "analytics.view",
   "/daily-briefing": "briefing.view", "/team-activity": "__owner", "/team": "__owner", "/data-vault": "__owner", "/settings": "__owner", "/login": "__owner",
 };

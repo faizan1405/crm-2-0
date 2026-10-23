@@ -1,4 +1,4 @@
-import { WhatsAppComposer } from "@/components/crm/WhatsAppComposer";
+import { Inbox, WhatsAppComposer } from "@/components/crm/WhatsAppComposer";
 import { isPending } from "@/lib/crm/followups";
 import { PostCallDialog, openCallLog } from "@/components/crm/PostCallDialog";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
@@ -24,6 +24,7 @@ import { FollowUpDialog } from "./Dialogs";
 
 const NAV = [
   { to: "/", label: "Dashboard", mobile: "Home", icon: LayoutDashboard, section: "Workspace" },
+  { to: "/inbox", label: "Smart Inbox", mobile: "Inbox", icon: Inbox, section: "" },
   { to: "/leads", label: "Leads", mobile: "Leads", icon: Users, section: "" },
   { to: "/pipeline", label: "Pipeline", mobile: "Pipeline", icon: KanbanSquare, section: "" },
   { to: "/follow-ups", label: "Follow-ups", mobile: "Follow-ups", icon: CalendarClock, section: "" },
@@ -65,7 +66,7 @@ export function ScaleMark({ className }: { className?: string }) {
 }
 
 const GROUPS = [
-  { label: "Workspace", items: ["/", "/leads", "/pipeline", "/follow-ups"] },
+  { label: "Workspace", items: ["/", "/inbox", "/leads", "/pipeline", "/follow-ups"] },
   { label: "Business", items: ["/deals", "/sales-studio", "/analytics", "/daily-briefing"] },
   { label: "Personal", items: ["/notes"] },
   { label: "Owner admin", items: ["/team", "/team-activity", "/data-vault"] },
