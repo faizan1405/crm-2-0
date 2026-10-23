@@ -3,6 +3,7 @@ import { addPage, allocationError, balancedSplit, buildPlan, equalSplit, isSelec
 import { useCRM } from "./store";
 import { scopeWorkspace } from "./preview";
 import { resolve } from "./access";
+const ROLE = "salesperson" as const;
 
 const s = () => useCRM.getState();
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `L${i}`);
