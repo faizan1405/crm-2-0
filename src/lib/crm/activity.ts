@@ -19,6 +19,7 @@ export type EventType =
   | "payment.recorded" | "payment.updated"
   | "bulk.completed" | "bulk.reversed"
   | "lead.reviewed" | "lead.duplicate_flagged" | "lead.duplicate_resolved" | "lead.related" | "lead.merged" | "lead.intake_status_changed"
+  | "automation.reminder" | "automation.escalated"
   | "employee.added" | "employee.updated" | "employee.status_changed" | "employee.permissions_changed";
 
 export type EntityType = "lead" | "followup" | "deal" | "payment" | "employee" | "bulk";
@@ -54,6 +55,7 @@ export const OWNER_ACTOR_ID = "owner";
 export interface EventSnap {
   leads: Lead[]; followUps: FollowUp[]; deals: Deal[]; payments: Payment[]; activities: LeadActivity[];
   assignments: Record<string, Assignment>; employees: Employee[]; employeeAccess: Record<string, EmployeeAccess>;
+  reminders?: { id: string; leadId: string; ruleName: string; reason: string; escalated?: boolean; employeeId: string | null }[];
   inboxMeta?: Record<string, { reviewedAt?: string; flaggedAt?: string }>; leadRelations?: Record<string, { a: string; b: string; kind: string }>;
 }
 export interface DeriveCtx { action: string; operationId: string; at: string; actor: Actor; source?: EventSource }
@@ -70,6 +72,7 @@ export const MODULE_OF: Record<EventType, CrmModule> = {
   "payment.recorded": "finance", "payment.updated": "finance",
   "bulk.completed": "assignments", "bulk.reversed": "assignments",
   "lead.reviewed": "leads", "lead.duplicate_flagged": "leads", "lead.duplicate_resolved": "leads", "lead.related": "leads", "lead.merged": "leads", "lead.intake_status_changed": "leads",
+  "automation.reminder": "followups", "automation.escalated": "followups",
   "employee.added": "team", "employee.updated": "team", "employee.status_changed": "team", "employee.permissions_changed": "team",
 };
 export const EVENT_LABEL: Record<EventType, string> = {
@@ -81,12 +84,13 @@ export const EVENT_LABEL: Record<EventType, string> = {
   "payment.recorded": "Payment recorded", "payment.updated": "Payment updated",
   "bulk.completed": "Bulk operation", "bulk.reversed": "Bulk operation reversed",
   "lead.reviewed": "Lead reviewed", "lead.duplicate_flagged": "Possible duplicate flagged", "lead.duplicate_resolved": "Duplicate kept separate", "lead.related": "Leads marked related", "lead.merged": "Leads merged", "lead.intake_status_changed": "Inbox status changed",
+  "automation.reminder": "Automation reminder", "automation.escalated": "Escalated to Owner",
   "employee.added": "Employee added", "employee.updated": "Employee updated", "employee.status_changed": "Account status changed", "employee.permissions_changed": "Permissions changed",
 };
 export const MODULE_LABEL: Record<CrmModule, string> = { leads: "Leads", calls: "Calls", followups: "Follow-ups", pipeline: "Pipeline", finance: "Finance", assignments: "Assignments", team: "Team" };
 const IMPORTANCE: Partial<Record<EventType, Importance>> = {
   "lead.edited": "low", "followup.rescheduled": "low", "client.note_added": "low", "deal.created": "low", "employee.updated": "low",
-  "deal.won": "high", "deal.lost": "high", "lead.hot": "high", "bulk.completed": "high", "payment.updated": "high", "employee.status_changed": "high", "employee.permissions_changed": "high", "bulk.reversed": "high",
+  "deal.won": "high", "deal.lost": "high", "lead.hot": "high", "bulk.completed": "high", "payment.updated": "high", "employee.status_changed": "high", "employee.permissions_changed": "high", "bulk.reversed": "high", "automation.escalated": "high",
 };
 
 const EDIT_KEYS = ["name", "phone", "email", "company", "requirement", "source", "budget", "quotedAmount", "priority", "notes"] as const;
@@ -189,6 +193,13 @@ export function deriveEvents(prev: EventSnap, next: EventSnap, ctx: DeriveCtx): 
     const a = prev.employeeAccess[id], b = next.employeeAccess[id];
     if (JSON.stringify(a ? { ...a, updatedAt: 0 } : null) !== JSON.stringify(b ? { ...b, updatedAt: 0 } : null)) push("employee.permissions_changed", id, { entityType: "employee", entityId: id, targetEmployeeId: id, summary: `${who} changed ${empName(id)}'s permissions.` });
   }
+  // Automation — one grouped summary for many reminders; escalations notify individually. Actor is "Automation", never an employee.
+  const prevRem = new Set((prev.reminders ?? []).map((r) => r.id));
+  const fresh = (next.reminders ?? []).filter((r) => !prevRem.has(r.id));
+  if (fresh.length >= BULK_THRESHOLD) push("automation.reminder", "bulk", { entityType: "bulk", entityId: ctx.operationId, summary: `Automation created ${fresh.length} reminders across ${new Set(fresh.map((r) => r.leadId)).size} leads.`, newValues: { count: fresh.length, rules: [...new Set(fresh.map((r) => r.ruleName))] } });
+  else for (const r of fresh) push("automation.reminder", r.id, { entityType: "lead", entityId: r.leadId, relatedLeadId: r.leadId, summary: `${r.ruleName}: ${r.reason}`, newValues: { rule: r.ruleName } });
+  for (const r of fresh) if (r.escalated) push("automation.escalated", r.id, { entityType: "lead", entityId: r.leadId, relatedLeadId: r.leadId, summary: `Escalated by ${r.ruleName}: ${r.reason}`, newValues: { rule: r.ruleName } });
+
   // Smart Inbox — reviews (summarised at BULK_THRESHOLD), duplicate flags and Owner decisions.
   const pm = prev.inboxMeta ?? {}, nm = next.inboxMeta ?? {};
   const reviewed = Object.keys(nm).filter((id) => nm[id]?.reviewedAt && !pm[id]?.reviewedAt);
@@ -277,6 +288,7 @@ export const NOTIFY_OF: Partial<Record<EventType, NotifyCategory>> = {
   "lead.created": "leads", "lead.hot": "leads", "call.logged": "calls", "followup.completed": "followups",
   "pipeline.stage_changed": "deals", "deal.won": "deals", "deal.lost": "deals",
   "lead.reassigned": "assignments", "bulk.completed": "assignments", "bulk.reversed": "assignments",
+  "automation.reminder": "followups", "automation.escalated": "overdue",
   "payment.recorded": "payments", "payment.updated": "payments",
   "employee.status_changed": "team", "employee.permissions_changed": "team", "employee.added": "team",
 };

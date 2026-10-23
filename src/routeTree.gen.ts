@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
+import { Route as AutomationRouteImport } from './routes/automation'
 import { Route as DailyBriefingRouteImport } from './routes/daily-briefing'
 import { Route as DataVaultRouteImport } from './routes/data-vault'
 import { Route as DealsRouteImport } from './routes/deals'
@@ -37,6 +38,11 @@ const IndexRoute = IndexRouteImport.update({
 const AnalyticsRoute = AnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AutomationRoute = AutomationRouteImport.update({
+  id: '/automation',
+  path: '/automation',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DailyBriefingRoute = DailyBriefingRouteImport.update({
@@ -128,6 +134,7 @@ const TeamWorkspaceIdRoute = TeamWorkspaceIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
+  '/automation': typeof AutomationRoute
   '/daily-briefing': typeof DailyBriefingRoute
   '/data-vault': typeof DataVaultRoute
   '/deals': typeof DealsRoute
@@ -149,6 +156,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
+  '/automation': typeof AutomationRoute
   '/daily-briefing': typeof DailyBriefingRoute
   '/data-vault': typeof DataVaultRoute
   '/deals': typeof DealsRoute
@@ -171,6 +179,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
+  '/automation': typeof AutomationRoute
   '/daily-briefing': typeof DailyBriefingRoute
   '/data-vault': typeof DataVaultRoute
   '/deals': typeof DealsRoute
@@ -194,6 +203,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/analytics'
+    | '/automation'
     | '/daily-briefing'
     | '/data-vault'
     | '/deals'
@@ -215,6 +225,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/analytics'
+    | '/automation'
     | '/daily-briefing'
     | '/data-vault'
     | '/deals'
@@ -236,6 +247,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/analytics'
+    | '/automation'
     | '/daily-briefing'
     | '/data-vault'
     | '/deals'
@@ -258,6 +270,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnalyticsRoute: typeof AnalyticsRoute
+  AutomationRoute: typeof AutomationRoute
   DailyBriefingRoute: typeof DailyBriefingRoute
   DataVaultRoute: typeof DataVaultRoute
   DealsRoute: typeof DealsRoute
@@ -291,6 +304,13 @@ declare module '@tanstack/react-router' {
       path: '/analytics'
       fullPath: '/analytics'
       preLoaderRoute: typeof AnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/automation': {
+      id: '/automation'
+      path: '/automation'
+      fullPath: '/automation'
+      preLoaderRoute: typeof AutomationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/daily-briefing': {
@@ -418,6 +438,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnalyticsRoute: AnalyticsRoute,
+  AutomationRoute: AutomationRoute,
   DailyBriefingRoute: DailyBriefingRoute,
   DataVaultRoute: DataVaultRoute,
   DealsRoute: DealsRoute,

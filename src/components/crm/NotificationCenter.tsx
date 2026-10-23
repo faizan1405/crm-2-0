@@ -21,7 +21,9 @@ export function NotificationCenter() {
   const [open, setOpen] = useState(false);
   const [settings, setSettings] = useState(false);
   const navigate = useNavigate();
-  const list = useMemo(() => deriveNotifications(events, followUps, leads, prefs, new Date()), [events, followUps, leads, prefs]);
+  const escalate = useCRM((s) => s.automationSettings.notifyOwnerOnEscalation);
+  const list = useMemo(() => deriveNotifications(escalate ? events : events.filter((e) => e.eventType !== "automation.escalated"), followUps, leads, prefs, new Date()), [events, followUps, leads, prefs, escalate]);
+  // (escalation visibility follows Automation Studio settings)
   const unread = unreadCount(list, reads);
   const today = dayKey(new Date());
   const fresh = list.filter((n) => dayKey(n.at) === today || !isRead(n, reads));

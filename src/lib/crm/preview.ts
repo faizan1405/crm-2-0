@@ -22,6 +22,7 @@ export function scopeWorkspace(d: ScopeInput, employeeId: string, eff: Effective
     deals,
     payments: d.payments.filter((p) => dealIds.has(p.dealId)),
     quotationShares: d.quotationShares.filter((s) => ids.has(s.leadId)),
+    automationRules: [], automationRuns: [],
     notes: [], bin: [], callOps: [], briefingDone: [], legacyQuotations: [], backupHistory: [], assignmentRules: [], firedRules: [],
   };
 }

@@ -1,4 +1,5 @@
 import { followUpBucket, isPending, activeFollowUp } from "@/lib/crm/followups";
+import { RemindersPanel } from "@/components/automation/RemindersPanel";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -54,6 +55,7 @@ function FollowUps() {
 
   return (
     <Shell title="Follow-ups" subtitle={`${counts.overdue + counts.today} need attention today · India time (IST)`} actions={<Button onClick={() => setAdd(true)}><Plus className="size-4" />Schedule</Button>}>
+      <RemindersPanel />
       <div className="fu-overview mb-6">
         {([["Pending", counts.overdue + counts.today + counts.upcoming, ListTodo, "upcoming"], ["Overdue", counts.overdue, AlertCircle, "overdue"], ["Left today", counts.today, Clock, "today"], ["Hot clients", hot, Flame, "today"]] as const).map(([label, n, Icon, t]) => (
           <button type="button" key={label} onClick={() => setTab(t)} className="fu-metric" data-tone={label === "Overdue" && n ? "danger" : label === "Hot clients" && n ? "hot" : undefined}><Icon className="size-4" /><span className="num text-2xl font-semibold">{n}</span><span className="text-xs text-muted-foreground">{label}</span></button>

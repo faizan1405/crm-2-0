@@ -3,6 +3,7 @@
 // so the pipeline stage, quick status and priority are never touched by inbox work.
 import type { FollowUp, Lead, LeadActivity, LeadPriority, LeadStatus } from "./types";
 import type { Assignment } from "./access";
+import { contactState } from "./automation";
 
 const DAY = 86_400_000;
 
@@ -35,14 +36,19 @@ const normName = (s: string | undefined) => (s ?? "").toLowerCase().replace(/[^a
 
 export interface InboxMeta { reviewedAt?: string; flaggedAt?: string; flagNote?: string }
 export type RelationKind = "separate" | "related";
-export interface LeadRelation { key: string; a: string; b: string; kind: RelationKind; at: string; note?: string }
+export interface LeadRelation { key: string; a: string; b: string; kind: RelationKind; at: string; note?: string; /** Identifiers at decision time; a changed phone/email re-opens review. */ sig?: string; history?: { kind: RelationKind; at: string; sig?: string }[] }
+/** Signature of the identifiers a decision was based on (normalized phone + email of both leads). */
+export function pairSignature(x: Pick<Lead, "phone" | "email">, y: Pick<Lead, "phone" | "email">): string {
+  const one = (l: Pick<Lead, "phone" | "email">) => `${normalizePhone(l.phone) ?? ""}/${normalizeEmail(l.email) ?? ""}`;
+  return [one(x), one(y)].sort().join("|");
+}
 export const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
 /* ---------- duplicates ---------- */
 
 export type DupReason = "phone" | "email" | "possible";
 export const DUP_LABEL: Record<DupReason, string> = { phone: "Exact phone match", email: "Exact email match", possible: "Possible related record" };
-export interface DupPair { key: string; a: string; b: string; reasons: DupReason[]; strength: "confirmed" | "suggested" }
+export interface DupPair { key: string; a: string; b: string; reasons: DupReason[]; strength: "confirmed" | "suggested"; reopened?: boolean }
 
 /** Find duplicate pairs. Phone/email equality is "confirmed match"; name+company (or name + same email domain) is only a suggestion.
  *  A name-only similarity never counts. Pairs the Owner resolved (Keep Separate / Related) are excluded. */
@@ -51,8 +57,9 @@ export function findDuplicates(leads: Lead[], relations: Record<string, LeadRela
   const add = (x: Lead, y: Lead, r: DupReason) => {
     if (x.id === y.id) return;
     const key = pairKey(x.id, y.id);
-    if (relations[key]) return;
-    const p = pairs.get(key) ?? { key, a: x.id < y.id ? x.id : y.id, b: x.id < y.id ? y.id : x.id, reasons: [], strength: "suggested" as const };
+    const rel = relations[key];
+    if (rel && (!rel.sig || rel.sig === pairSignature(x, y))) return;
+    const p: DupPair = pairs.get(key) ?? { key, a: x.id < y.id ? x.id : y.id, b: x.id < y.id ? y.id : x.id, reasons: [], strength: "suggested", ...(rel ? { reopened: true } : {}) };
     if (!p.reasons.includes(r)) p.reasons.push(r);
     if (r !== "possible") p.strength = "confirmed";
     pairs.set(key, p);
@@ -71,16 +78,15 @@ export function duplicateIds(pairs: DupPair[]): Set<string> { const s = new Set<
 
 /* ---------- first contact ---------- */
 
-export type FirstContact = "not_contacted" | "call_logged" | "attempt" | "followup";
-export const FIRST_CONTACT_LABEL: Record<FirstContact, string> = { not_contacted: "Not contacted", call_logged: "First call logged", attempt: "Contact attempt recorded", followup: "Follow-up scheduled" };
-/** Only saved records count: a logged call, a confirmed WhatsApp/email/meeting entry, or a pending follow-up. Clicking Call alone never counts. */
+export type FirstContact = "not_contacted" | "followup_only" | "outbound" | "attempted" | "established";
+export const FIRST_CONTACT_LABEL: Record<FirstContact, string> = { not_contacted: "Not contacted", followup_only: "Follow-up scheduled · no contact yet", outbound: "Message sent · reply not confirmed", attempted: "Contact attempted · not reached", established: "Contact established" };
+/** Contact comes only from saved call outcomes / confirmed sends (see automation.contactState). A follow-up alone is never contact. */
 export function firstContact(leadId: string, activities: LeadActivity[], followUps: FollowUp[]): FirstContact {
-  const acts = activities.filter((a) => a.leadId === leadId);
-  if (acts.some((a) => a.type === "call")) return "call_logged";
-  if (acts.some((a) => a.type === "whatsapp" || a.type === "email" || a.type === "meeting")) return "attempt";
-  if (followUps.some((f) => f.leadId === leadId && !f.completedAt && !f.cancelledAt)) return "followup";
-  return "not_contacted";
+  const c = contactState(leadId, activities);
+  if (c !== "none") return c;
+  return followUps.some((f) => f.leadId === leadId && !f.completedAt && !f.cancelledAt) ? "followup_only" : "not_contacted";
 }
+export const contactPending = (c: FirstContact) => c === "not_contacted" || c === "followup_only";
 
 /* ---------- categories & filters ---------- */
 
@@ -132,7 +138,7 @@ export function filterRows(rows: InboxRow[], cat: InboxCategory, f: InboxFilters
     if (f.status && f.status !== "all" && r.status !== f.status) return false;
     if (f.createdDays && !within(l.createdAt, f.createdDays, now)) return false;
     if (f.contactedDays && !within(l.lastContact, f.contactedDays, now)) return false;
-    if (f.firstContactPending && r.contact !== "not_contacted") return false;
+    if (f.firstContactPending && !contactPending(r.contact)) return false;
     if (f.duplicate && !r.duplicate) return false;
     return true;
   }).sort((a, b) => b.lead.createdAt.localeCompare(a.lead.createdAt));
@@ -145,7 +151,7 @@ export function overview(rows: InboxRow[], now: Date): InboxOverview {
     awaitingReview: open.filter((r) => r.status === "needs_review").length,
     unassigned: rows.filter((r) => inCategory(r, "unassigned", now)).length,
     duplicates: rows.filter((r) => r.duplicate).length,
-    needFirstContact: open.filter((r) => r.contact === "not_contacted").length,
+    needFirstContact: open.filter((r) => contactPending(r.contact)).length,
     recent: rows.filter((r) => within(r.lead.createdAt, RECENT_DAYS, now)).length,
   };
 }

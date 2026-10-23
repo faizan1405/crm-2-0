@@ -3,10 +3,11 @@ import { isPending } from "@/lib/crm/followups";
 import { PostCallDialog, openCallLog } from "@/components/crm/PostCallDialog";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
+import { startAutomationRunner } from "@/lib/crm/automationRunner";
 import {
   LayoutDashboard, Users, KanbanSquare, CalendarClock, Wallet, StickyNote, Moon, Sun,
   BarChart3, Sunrise, Settings, MoreHorizontal, Plus, Search, Bell, ArrowUpRight, PhoneCall, Menu, ChevronRight, PanelLeftClose, PanelLeftOpen, Presentation, ShieldCheck, Activity,
-  Archive, Eye, Lock, Inbox,
+  Archive, Eye, Lock, Inbox, Workflow,
 } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
 import { useSession, useAccess, routeAllowed, type PreviewSession } from "@/lib/crm/session";
@@ -35,6 +36,7 @@ const NAV = [
   { to: "/daily-briefing", label: "Daily Briefing", mobile: "Briefing", icon: Sunrise, section: "" },
   { to: "/team-activity", label: "Team Activity", mobile: "Activity", icon: Activity, section: "" },
   { to: "/team", label: "Team Management", mobile: "Team", icon: ShieldCheck, section: "Admin" },
+  { to: "/automation", label: "Automation Studio", mobile: "Automation", icon: Workflow, section: "" },
   { to: "/data-vault", label: "Data Vault", mobile: "Vault", icon: Archive, section: "" },
   { to: "/settings", label: "Settings", mobile: "Settings", icon: Settings, section: "Manage" },
 ] as const;
@@ -49,6 +51,7 @@ function usePreferenceEffects() {
     // Multi-tab sync: another tab saved → reload the shared store here (no polling).
     const onStorage = (e: StorageEvent) => { if (e.key === useCRM.persist.getOptions().name && !useSession.getState().preview) void useCRM.persist.rehydrate(); };
     window.addEventListener("storage", onStorage);
+    startAutomationRunner();
     return () => window.removeEventListener("storage", onStorage);
   }, []);
   useEffect(() => {
@@ -69,7 +72,7 @@ const GROUPS = [
   { label: "Workspace", items: ["/", "/inbox", "/leads", "/pipeline", "/follow-ups"] },
   { label: "Business", items: ["/deals", "/sales-studio", "/analytics", "/daily-briefing"] },
   { label: "Personal", items: ["/notes"] },
-  { label: "Owner admin", items: ["/team", "/team-activity", "/data-vault"] },
+  { label: "Owner admin", items: ["/team", "/team-activity", "/automation", "/data-vault"] },
   { label: "System", items: ["/settings"] },
 ] as const;
 const COLLAPSE_KEY = "scale-flow-sidebar-collapsed";
