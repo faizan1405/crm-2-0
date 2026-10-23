@@ -47,6 +47,7 @@ import { builtInTemplates, DEFAULT_DEMO_CATEGORIES, quotationTemplateError, safe
 import { activePreview, allows, previewSink, type CrmEventType } from "./session";
 import { DEFAULT_AUTOMATION_SETTINGS, planRule, reconcileReminders, ruleError as automationRuleError, ruleFromTemplate, type AutomationRule, type AutomationRun, type AutomationSettings, type Reminder, type RuleStatus } from "./automation";
 import { pairKey, pairSignature, type InboxMeta, type LeadRelation, type RelationKind } from "./inbox";
+import { buildGoal, goalError, reviseGoal, mergeAlerts, DEFAULT_PERF_PREFS, type GoalAlert, type GoalDef, type GoalInput, type GoalRevision, type GoalStatus, type PerfPrefs } from "./performance";
 import { deriveEvents, mergeEvents, markRead, markAllRead, DEFAULT_NOTIFY_PREFS, EMPTY_READS, OWNER_ACTOR_ID, type ActivityEvent, type EventSnap, type NotifyPrefs, type ReadState } from "./activity";
 
 // ---- Preview guards: every action is checked against the previewed employee's permissions (Owner: always allowed). ----
@@ -71,10 +72,11 @@ const GUARDS: Record<string, Guard> = {
   assignLeads: ["leads.assign", { ok: false, error: DENIED }, "lead.assigned"], restoreAssignments: ["leads.assign", undefined], applyAssignmentPlan: ["leads.assign", { ok: false, error: DENIED }, "lead.assigned"],
   saveBusinessProfile: ["__owner", undefined], reset: ["__owner", undefined], logBackup: ["__owner", undefined], deleteLegacyQuotations: ["__owner", undefined],
   addEmployee: ["__owner", { ok: false, error: DENIED }], updateEmployee: ["__owner", DENIED], setEmployeeStatus: ["__owner", undefined], saveEmployeeAccess: ["__owner", undefined],
+  saveGoal: ["__owner", DENIED], setGoalStatus: ["__owner", undefined], duplicateGoal: ["__owner", undefined], setPerfPrefs: ["__owner", undefined], recordGoalAlerts: ["__owner", undefined],
   saveRule: ["__owner", DENIED], deleteRule: ["__owner", undefined], moveRule: ["__owner", undefined], setRuleSettings: ["__owner", undefined], applyRulesToExisting: ["__owner", 0],
 };
 /** Actions never recorded as Team Activity (bulk reset would be noise; settings/templates are not team activity). */
-const UNRECORDED = new Set(["reset", "logBackup"]);
+const UNRECORDED = new Set(["reset", "logBackup", "recordGoalAlerts", "setPerfPrefs"]);
 const snapOf = (s: CRMState): EventSnap => ({ leads: s.leads, followUps: s.followUps, deals: s.deals, payments: s.payments, activities: s.activities, assignments: s.assignments, employees: s.employees, employeeAccess: s.employeeAccess, inboxMeta: s.inboxMeta, leadRelations: s.leadRelations, reminders: s.reminders });
 let depth = 0;
 function guarded<T extends object>(state: T, get: () => CRMState, set: (p: Partial<CRMState>) => void): T {
@@ -259,6 +261,18 @@ interface CRMState extends Prefs {
   markAllNotificationsRead: () => void;
   /** Real-time entry point (future backend feed / reconnect replay) — deduplicated by eventId. */
   ingestEvents: (events: ActivityEvent[]) => void;
+  // Phase 3F — Sales goals (Owner-only). Edits create a new version; old versions live in goalRevisions.
+  goals: GoalDef[];
+  goalRevisions: GoalRevision[];
+  goalAlerts: GoalAlert[];
+  perfPrefs: PerfPrefs;
+  /** Create (no id) or revise a goal. Returns an error or null. */
+  saveGoal: (input: GoalInput, id?: string) => string | null;
+  setGoalStatus: (id: string, status: GoalStatus) => void;
+  duplicateGoal: (id: string) => string | undefined;
+  setPerfPrefs: (p: Partial<PerfPrefs>) => void;
+  /** Deduplicated by stable alert id. */
+  recordGoalAlerts: (alerts: GoalAlert[]) => void;
 }
 
 export function duplicatePhone(leads: Lead[], phone: string): Lead | undefined {
@@ -417,6 +431,28 @@ export const useCRM = create<CRMState>()(
       markNotificationRead: (id) => set((s) => ({ notifyReads: markRead(s.notifyReads, id) })),
       markAllNotificationsRead: () => set({ notifyReads: markAllRead(new Date().toISOString()) }),
       ingestEvents: (events) => set((s) => ({ teamEvents: mergeEvents(s.teamEvents, events.filter((e) => e.eventSource !== "demo")) })),
+      goals: [],
+      goalRevisions: [],
+      goalAlerts: [],
+      perfPrefs: DEFAULT_PERF_PREFS,
+      saveGoal: (input, id) => {
+        const err = goalError(input, get().employees); if (err) return err;
+        const at = new Date().toISOString();
+        if (!id) { set((s) => ({ goals: [...s.goals, buildGoal(input, uid("goal"), at)] })); return null; }
+        const cur = get().goals.find((g) => g.id === id); if (!cur) return "Goal not found.";
+        const { next, revision } = reviseGoal(cur, input, at, uid("grev"));
+        set((s) => ({ goals: s.goals.map((g) => (g.id === id ? next : g)), goalRevisions: [revision, ...s.goalRevisions].slice(0, 2000) }));
+        return null;
+      },
+      setGoalStatus: (id, status) => set((s) => ({ goals: s.goals.map((g) => (g.id === id ? { ...g, status, updatedAt: new Date().toISOString() } : g)) })),
+      duplicateGoal: (id) => {
+        const g = get().goals.find((x) => x.id === id); if (!g) return undefined;
+        const nid = uid("goal"), at = new Date().toISOString();
+        set((s) => ({ goals: [...s.goals, { ...g, id: nid, name: `${g.name} (copy)`, status: "paused", version: 1, createdAt: at, updatedAt: at }] }));
+        return nid;
+      },
+      setPerfPrefs: (p) => set((s) => ({ perfPrefs: { ...s.perfPrefs, ...p } })),
+      recordGoalAlerts: (alerts) => set((s) => { const next = mergeAlerts(s.goalAlerts, alerts); return next === s.goalAlerts ? s : { goalAlerts: next }; }),
       ...defaultPrefs,
       addLead: (lead) => {
         const id = uid("lead");
@@ -752,16 +788,21 @@ export const useCRM = create<CRMState>()(
     },
     {
       name: "scale-flow-crm-2-demo",
-      version: 5,
+      version: 6,
       storage: createJSONStorage(() => guardedStorage),
       skipHydration: true,
       // v3: billing quotations are moved, unchanged, into a read-only backup. Nothing is converted automatically.
       // v4: adds Smart Inbox maps (empty) — existing leads are untouched and start as "Needs review".
-      migrate: (persisted, version) => migrateAutomation(migrateInbox(migrateQuotations(persisted as Record<string, unknown>, version), version), version) as unknown as CRMState,
+      migrate: (persisted, version) => migratePerformance(migrateAutomation(migrateInbox(migrateQuotations(persisted as Record<string, unknown>, version), version), version), version) as unknown as CRMState,
     },
   ),
 );
 
+/** v6: adds Sales Goals state (empty, no goal pre-created). */
+export function migratePerformance(state: Record<string, unknown>, version: number): Record<string, unknown> {
+  if (!state || version >= 6) return state;
+  return { ...state, goals: state["goals"] ?? [], goalRevisions: state["goalRevisions"] ?? [], goalAlerts: state["goalAlerts"] ?? [], perfPrefs: state["perfPrefs"] ?? DEFAULT_PERF_PREFS };
+}
 /** v5: adds Automation Studio state (empty, nothing enabled). */
 export function migrateAutomation(state: Record<string, unknown>, version: number): Record<string, unknown> {
   if (!state || version >= 5) return state;
