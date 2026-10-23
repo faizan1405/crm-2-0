@@ -111,6 +111,7 @@ function Inspector({ e, onClose, onEdit, onConfirm, onActivate }: { e: Employee;
         <dt>Created</dt><dd>{fmt(e.createdAt)}</dd><dt>Last updated</dt><dd>{fmt(e.updatedAt)}</dd>
         <dt>Last login</dt><dd>{e.lastLoginAt ? fmt(e.lastLoginAt) : "Not yet available"}</dd>
         <dt>Production login</dt><dd>Not configured yet</dd></dl></section>
+      <div className="flex flex-wrap gap-2"><Button asChild size="sm" variant="outline"><Link to="/team/workspace/$id" params={{ id: e.id }}><Users />View Employee Workspace</Link></Button><Button asChild size="sm" variant="ghost"><Link to="/team-activity" search={{ employee: e.id }}><Activity />View Activity</Link></Button></div>
       <AccessSection e={e} />
       <AssignedPanel e={e} />
       <section className="tm-sec"><h3 className="eyebrow">Activity</h3><p className="flex items-center gap-2 text-xs text-muted-foreground"><Activity className="size-3.5" />No trusted activity yet. Records will come from the secure backend.</p></section>
