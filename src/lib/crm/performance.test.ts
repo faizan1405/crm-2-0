@@ -7,7 +7,7 @@ import type { ActivityEvent } from "./activity";
 import type { Employee } from "./team";
 import type { FollowUp, Lead } from "./types";
 
-const emp = (id: string, status: Employee["accountStatus"] = "active"): Employee => ({ id, name: `Emp ${id}`, email: `${id}@x.in`, roleId: "sales", accountStatus: status, createdAt: "", updatedAt: "", lastLoginAt: null, invitedAt: null, activatedAt: null, deactivatedAt: null } as Employee);
+const emp = (id: string, status: Employee["accountStatus"] = "active"): Employee => ({ id, name: `Emp ${id}`, email: `${id}@x.in`, roleId: "salesperson", accountStatus: status, createdAt: "", updatedAt: "", lastLoginAt: null, invitedAt: null, activatedAt: null, deactivatedAt: null } as Employee);
 const ev = (p: Partial<ActivityEvent> & Pick<ActivityEvent, "eventType" | "actorUserId" | "occurredAt">): ActivityEvent => ({ eventId: Math.random().toString(36), actorRole: "x", actorName: "x", entityType: "lead", entityId: "l1", summary: "", module: "calls", importance: "normal", operationId: "op", eventSource: "local", schemaVersion: 1, ...p });
 const lead = (id: string, p: Partial<Lead> = {}): Lead => ({ id, name: id, phone: "1", source: "Website", status: "new", priority: "warm", pinned: false, createdAt: "2026-10-10T06:00:00Z", updatedAt: "", ...p });
 const input = (p: Partial<GoalInput> = {}): GoalInput => ({ name: "Daily calls", metric: "calls", target: 20, period: "daily", scope: "employee", employeeIds: ["e1"], effectiveFrom: "2026-10-01", ...p });
