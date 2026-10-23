@@ -21,3 +21,7 @@ No backend, authentication service, AI service or notification delivery was conf
 - Personal notes belong to their author; no role can read the Owner's notes.
 - Assignment endpoints: assign, bulk assign, reassign, unassign; reject inactive targets; write a trusted audit event per change.
 - Rule engine runs server-side, deterministic priority, once per lead per event, never replaces manual assignments unless the policy allows; historical redistribution is a separate confirmed action.
+## Phase 3C — Owner-controlled credentials (Hostinger)
+- Implement `CredentialService` (`team.ts`): createLogin, changeLoginEmail, setPassword — Owner-only, authorized server-side.
+- Hash with Argon2id (salted); never return or log passwords; setPassword replaces the hash and revokes all employee sessions; success only after commit.
+- No invitations, OTP, email reset or employee self-service password/email change. Login rate limiting, HTTPS, secure session cookies.
