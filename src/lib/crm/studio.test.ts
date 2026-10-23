@@ -1,36 +1,39 @@
 import { describe, expect, it } from "vitest";
-import { composeDraft, syncDraft, quoteTotals, quotesForLead, renderTemplate, safeUrl, selectedDemos, shareBlocker, nextQuoteNumber, quoteError, pickTemplate, builtInTemplates, templateVars, type Quotation, type Demo } from "./studio";
+import { activeQuotationTemplates, composeDraft, emptyQuotationTemplate, formatPackagePrice, priceMismatch, quotationTemplateError, renderQuotation, syncDraft, renderTemplate, safeUrl, selectedDemos, templateFromLegacy, pickTemplate, builtInTemplates, templateVars, type QuotationTemplate, type Demo } from "./studio";
 
-const q = (p: Partial<Quotation> = {}): Quotation => ({ id: "q1", number: "SF-Q-2026-001", leadId: "l1", clientName: "Rohan Kapoor", title: "Basic Website", issueDate: "2026-10-21", validUntil: "2026-11-20", items: [{ id: "i", description: "Site", qty: 1, unitPrice: 15000 }], discountType: "flat", discount: 0, gstEnabled: false, gstRate: 18, status: "ready", revision: 1, history: [], createdAt: "", updatedAt: "", ...p });
+const pkg = (p: Partial<QuotationTemplate> = {}): QuotationTemplate => ({ ...emptyQuotationTemplate(), id: "p1", name: "Premium 3D Website", priceType: "fixed", priceAmount: 45000, messageBody: "Hi {clientName}, our {packageName} is {packagePrice}.\nFor {companyName} we include a dashboard.", ...p });
 const demo = (p: Partial<Demo>): Demo => ({ id: "d", title: "Demo", url: "https://a.com", category: "Other", tags: [], active: true, order: 0, includeByDefault: false, ...p });
 
-describe("quotation totals", () => {
-  it("sums line items, applies percent discount then GST", () => {
-    const t = quoteTotals({ items: [{ id: "a", description: "x", qty: 2, unitPrice: 10000 }, { id: "b", description: "y", qty: 1, unitPrice: 5000 }], discountType: "percent", discount: 10, gstEnabled: true, gstRate: 18 });
-    expect(t).toMatchObject({ subtotal: 25000, discount: 2500, taxable: 22500, gst: 4050, total: 26550 });
+describe("quotation packages", () => {
+  it("formats fixed and custom prices", () => {
+    expect(formatPackagePrice(pkg())).toBe("₹45,000");
+    expect(formatPackagePrice(pkg({ priceType: "custom", priceLabel: "On request" }))).toBe("On request");
+    expect(formatPackagePrice(pkg({ priceType: "custom", priceLabel: "" }))).toBe("Custom price");
   });
-  it("caps a flat discount at the subtotal and ignores GST when disabled", () => {
-    expect(quoteTotals({ items: [{ id: "a", description: "x", qty: 1, unitPrice: 1000 }], discountType: "flat", discount: 5000, gstEnabled: false, gstRate: 18 }).total).toBe(0);
+  it("personalises for each client and omits details a client doesn't have", () => {
+    const ctx = { owner: "Faizan", business: "Scale Flow" };
+    expect(renderQuotation(pkg(), { name: "Rohan", company: "Kapoor Foods" }, ctx)).toBe("Hi Rohan, our Premium 3D Website is ₹45,000.\nFor Kapoor Foods we include a dashboard.");
+    const out = renderQuotation(pkg(), { name: "Asha" }, ctx);
+    expect(out).toBe("Hi Asha, our Premium 3D Website is ₹45,000.");
   });
-  it("rounds to paise", () => {
-    expect(quoteTotals({ items: [{ id: "a", description: "x", qty: 3, unitPrice: 333.333 }], discountType: "flat", discount: 0, gstEnabled: true, gstRate: 18 }).total).toBe(1180);
+  it("requires a name, a price above zero for fixed packages, and a message", () => {
+    expect(quotationTemplateError(pkg({ name: " " }))).toMatch(/name/);
+    expect(quotationTemplateError(pkg({ priceAmount: 0 }))).toMatch(/price/);
+    expect(quotationTemplateError(pkg({ priceType: "custom", priceAmount: undefined }))).toBeNull();
+    expect(quotationTemplateError(pkg({ messageBody: "" }))).toMatch(/message/);
   });
-});
-
-describe("quotations per client", () => {
-  const all = [q(), q({ id: "q2", title: "Business Website" }), q({ id: "q3", title: "Premium 3D" }), q({ id: "q4", leadId: "l2" })];
-  it("keeps multiple quotations for the same client", () => expect(quotesForLead(all, "l1")).toHaveLength(3));
-  it("never returns another client's quotation", () => {
-    expect(quotesForLead(all, "l2").map((x) => x.id)).toEqual(["q4"]);
-    expect(quotesForLead(all, null)).toEqual([]);
+  it("warns when a hand-typed price differs from the saved price", () => {
+    expect(priceMismatch(pkg({ priceAmount: 50000, messageBody: "Only ₹45,000 today" }))).toEqual(["₹45,000"]);
+    expect(priceMismatch(pkg({ messageBody: "Only ₹45,000 today" }))).toEqual([]);
   });
-  it("numbers sequentially per year", () => expect(nextQuoteNumber(all.concat(q({ number: "SF-Q-2026-007" })), 2026)).toBe("SF-Q-2026-008"));
-  it("blocks sharing drafts and expired quotations", () => {
-    expect(shareBlocker(q({ status: "draft" }), "2026-10-21")).toMatch(/Ready/);
-    expect(shareBlocker(q({ validUntil: "2026-10-01" }), "2026-10-21")).toMatch(/expired/);
-    expect(shareBlocker(q(), "2026-10-21")).toBeNull();
+  it("lists only active packages in saved order", () => {
+    expect(activeQuotationTemplates([pkg({ id: "b", sortOrder: 2 }), pkg({ id: "a", sortOrder: 1 }), pkg({ id: "off", isActive: false })]).map((x) => x.id)).toEqual(["a", "b"]);
   });
-  it("rejects validity before the quotation date", () => expect(quoteError(q({ validUntil: "2026-10-01" }))).toMatch(/Validity/));
+  it("turns an old quotation into an unsaved package draft using its real total", () => {
+    const t = templateFromLegacy({ id: "q", number: "SF-Q-1", leadId: "l", clientName: "C", title: "Old site", issueDate: "", validUntil: "", items: [{ id: "i", description: "Design", qty: 2, unitPrice: 5000 }], discountType: "flat", discount: 0, gstEnabled: true, gstRate: 18, status: "ready", createdAt: "", updatedAt: "" }, 0);
+    expect(t.priceAmount).toBe(11800);
+    expect(t.messageBody).toContain("- Design");
+  });
 });
 
 describe("templates", () => {
@@ -81,10 +84,8 @@ describe("composer drafts from the shared source", () => {
     expect(out).toContain("• Shop: https://shop.example.com/");
     expect(out).not.toContain("3d.example.com");
   });
-  it("uses the selected quotation's real total", () => {
-    const out = composeDraft({ ...base, purpose: "quotation", templates: builtInTemplates(), quote: q({ items: [{ id: "i", description: "Site", qty: 1, unitPrice: 30000 }] }) });
-    expect(out).toContain("₹30,000");
-    expect(out).toContain("SF-Q-2026-001");
+  it("uses the chosen package's latest saved price", () => {
+    expect(composeDraft({ ...base, purpose: "quotation", templates: builtInTemplates(), pkg: pkg({ priceAmount: 50000 }) })).toContain("₹50,000");
   });
   it("never mentions a PDF when the client has no quotation", () => {
     expect(composeDraft({ ...base, purpose: "quotation", templates: builtInTemplates() })).not.toMatch(/PDF|\{/);
