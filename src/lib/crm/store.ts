@@ -43,6 +43,56 @@ import { applyAssign, assignable, evaluate, fireKey, ruleError, DEFAULT_RULE_SET
 import type { BackupRecord } from "./vault";
 import { buildEmployee, employeeError, withStatus, type AccountStatus, type Employee, type EmployeeInput } from "./team";
 import { builtInTemplates, DEFAULT_DEMO_CATEGORIES, quotationTemplateError, safeUrl, type BusinessProfile, type Demo, type LegacyQuotation, type QuotationShare, type QuotationTemplate, type WaTemplate } from "./studio";
+import { activePreview, allows, previewSink, type CrmEventType } from "./session";
+
+// ---- Preview guards: every action is checked against the previewed employee's permissions (Owner: always allowed). ----
+const DENIED = "Not allowed by this employee's permissions.";
+const statusOnly = (patch: object) => Object.keys(patch).every((k) => k === "status" || k === "lostReason");
+type Guard = [perm: string | ((...a: never[]) => string | string[]), denied: unknown, event?: CrmEventType];
+const GUARDS: Record<string, Guard> = {
+  addLead: ["leads.create", "", "lead.created"],
+  updateLead: [((_id: string, patch: object) => (statusOnly(patch) ? ["pipeline.edit", "leads.edit"] : "leads.edit")) as never, false, "lead.updated"],
+  deleteLead: ["leads.delete", undefined], wasteLead: ["leads.delete", undefined], restoreLead: ["leads.delete", DENIED], purgeBin: ["leads.delete", undefined], emptyBin: ["leads.delete", undefined],
+  mergeIntoLead: ["leads.edit", false], setQuickStatus: ["leads.edit", undefined],
+  addDeal: ["deals.create", undefined], addPayment: ["__finance", false], voidPayment: ["__finance", undefined],
+  addFollowUp: ["followups.create", { ok: false, error: DENIED }, "followup.created"], completeFollowUp: ["followups.edit", undefined, "followup.completed"], rescheduleFollowUp: ["followups.edit", undefined],
+  logCall: ["clients.calls", { ok: false, error: DENIED }, "call.logged"], undoCall: ["clients.calls", DENIED],
+  saveNote: ["notes.own", undefined], deleteNote: ["notes.own", undefined],
+  saveQuotationTemplate: ["quotations.manage", DENIED], duplicateQuotationTemplate: ["quotations.manage", undefined], deleteQuotationTemplate: ["quotations.manage", undefined], setQuotationTemplateActive: ["quotations.manage", undefined], moveQuotationTemplate: ["quotations.manage", undefined], logQuotationShare: ["quotations.use", ""],
+  saveTemplate: ["templates.manage", undefined], deleteTemplate: ["templates.manage", undefined], setDefaultTemplate: ["templates.manage", undefined], resetTemplates: ["templates.manage", undefined],
+  saveDemo: ["demos.manage", false], deleteDemo: ["demos.manage", undefined], moveDemo: ["demos.manage", undefined], addDemoCategory: ["demos.manage", undefined],
+  assignLeads: ["leads.assign", { ok: false, error: DENIED }, "lead.assigned"], restoreAssignments: ["leads.assign", undefined],
+  saveBusinessProfile: ["__owner", undefined], reset: ["__owner", undefined], logBackup: ["__owner", undefined], deleteLegacyQuotations: ["__owner", undefined],
+  addEmployee: ["__owner", { ok: false, error: DENIED }], updateEmployee: ["__owner", DENIED], setEmployeeStatus: ["__owner", undefined], saveEmployeeAccess: ["__owner", undefined],
+  saveRule: ["__owner", DENIED], deleteRule: ["__owner", undefined], moveRule: ["__owner", undefined], setRuleSettings: ["__owner", undefined], applyRulesToExisting: ["__owner", 0],
+};
+function guarded<T extends object>(state: T): T {
+  const out: Record<string, unknown> = { ...state };
+  for (const [name, [perm, denied, event]] of Object.entries(GUARDS)) {
+    const fn = out[name] as ((...a: unknown[]) => unknown) | undefined;
+    if (typeof fn !== "function") continue;
+    out[name] = (...args: unknown[]) => {
+      const pv = activePreview();
+      if (!pv) return fn(...args);
+      const need = typeof perm === "function" ? (perm as (...a: unknown[]) => string | string[])(...args) : perm;
+      const ok = Array.isArray(need) ? need.some((p) => allows(pv, p)) : allows(pv, need);
+      if (!ok) return denied;
+      const r = fn(...args);
+      if (event && r !== false && !(r && typeof r === "object" && "ok" in r && !(r as { ok: boolean }).ok)) {
+        const type: CrmEventType = name === "updateLead" && statusOnly(args[1] as object) ? "pipeline.stage_changed" : event;
+        previewSink.emit({ id: uid("evt"), type, actorId: pv.employeeId, at: new Date().toISOString(), resourceId: typeof r === "string" && r ? r : typeof args[0] === "string" ? args[0] : undefined, change: args[1] });
+      }
+      return r;
+    };
+  }
+  return out as T;
+}
+/** localStorage that is never written while a preview runs — the Owner's saved data stays exactly as it was. */
+const guardedStorage = {
+  getItem: (k: string) => localStorage.getItem(k),
+  setItem: (k: string, v: string) => { if (!activePreview()) localStorage.setItem(k, v); },
+  removeItem: (k: string) => { if (!activePreview()) localStorage.removeItem(k); },
+};
 
 export type ThemePref = "light" | "dark" | "system";
 export interface Prefs {
@@ -228,7 +278,10 @@ export const useCRM = create<CRMState>()(
           leads: [{ ...lead, id, createdAt: at, updatedAt: at }, ...s.leads],
           activities: [{ id: uid("activity"), leadId: id, type: "created", text: "Lead added to Scale Flow", at }, ...s.activities],
         }));
-        autoAssign(id, "lead_created");
+        const pv = activePreview();
+        // In the employee preview, a lead the employee creates is theirs (otherwise it would vanish from an assigned-only scope).
+        if (pv) set((s) => ({ assignments: { ...s.assignments, [id]: { employeeId: pv.employeeId, assignedAt: at, source: "Created by employee", manual: true } } }));
+        else autoAssign(id, "lead_created");
         return id;
       },
       updateLead: (id, patch) => {
