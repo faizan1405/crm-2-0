@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Users } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
-import { startPreview } from "@/lib/crm/preview";
+import { startPreview, exitPreview } from "@/lib/crm/preview";
 import { useSession } from "@/lib/crm/session";
 import { Button } from "@/components/ui/button";
 
@@ -30,7 +30,7 @@ function Preview() {
     let live = true;
     void (async () => {
       if (!useSession.getState().preview) await useCRM.persist.rehydrate();
-      else { const { exitPreview } = await import("@/lib/crm/preview"); exitPreview(); }
+      else exitPreview();
       if (!live) return;
       const e = useCRM.getState().employees.find((x) => x.id === id && x.accountStatus !== "archived");
       if (!e) { setMissing(true); return; }

@@ -13,6 +13,7 @@ import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, FOLLOWUP_LABEL, type Lead, t
 import { QUICK_STATUSES, QUICK_LABEL, staleDays, type QuickStatus } from "@/lib/crm/leadtools";
 import { useNavigate } from "@tanstack/react-router";
 import { SuggestionList } from "@/components/crm/Suggestions";
+import { useAccess } from "@/lib/crm/session";
 import { leadEditError } from "@/lib/crm/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +38,7 @@ function LeadDetail() {
   const { id } = Route.useParams();
   const { leads, activities, followUps, deals, updateLead, completeFollowUp, addActivity, setQuickStatus, wasteLead, deleteLead } = useCRM();
   const navigate = useNavigate();
+  const { can } = useAccess();
   const lead = leads.find((l) => l.id === id);
   const [edit, setEdit] = useState(false);
   const [fu, setFu] = useState(false);
@@ -62,7 +64,7 @@ function LeadDetail() {
           <section className="surface p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold">Details</h2>
-              {!edit && <Button size="sm" variant="ghost" onClick={() => setEdit(true)}><Pencil className="size-4" />Edit</Button>}
+              {!edit && can("leads.edit") && <Button size="sm" variant="ghost" onClick={() => setEdit(true)}><Pencil className="size-4" />Edit</Button>}
             </div>
             {edit ? <EditLead lead={lead} onDone={() => setEdit(false)} /> : (
               <dl className="grid gap-6 text-sm sm:grid-cols-3">
@@ -93,10 +95,10 @@ function LeadDetail() {
             <h3 className="mt-4 mb-2 text-xs font-semibold text-muted-foreground">Quick status <span className="font-normal">(does not change stage)</span></h3>
             <div className="flex flex-wrap gap-1.5">{QUICK_STATUSES.map((q) => <button key={q} type="button" aria-pressed={lead.quickStatus === q} onClick={() => setQuickStatus(id, lead.quickStatus === q ? undefined : (q as QuickStatus))} className={`rounded-full border px-2.5 py-1 text-xs ${lead.quickStatus === q ? "border-primary bg-primary-soft text-primary" : "text-muted-foreground"}`}>{QUICK_LABEL[q]}</button>)}</div>
             {staleDays(lead, new Date()) !== undefined && <p className="mt-3 rounded-lg bg-warning/15 p-2 text-xs text-warning">Stale — no contact for {staleDays(lead, new Date())} days and no upcoming follow-up.</p>}
-            <div className="mt-4 flex gap-2 border-t pt-4">
+            {can("leads.delete") && <div className="mt-4 flex gap-2 border-t pt-4">
               <Button size="sm" variant="outline" className="flex-1" onClick={() => { const r = window.prompt("Reason for moving to Waste (optional)") ; if (r === null) return; wasteLead(id, r.trim() || undefined); toast.success("Moved to Waste"); navigate({ to: "/leads" }); }}>Move to Waste</Button>
               <Button size="sm" variant="ghost" className="flex-1 text-destructive" onClick={() => { deleteLead(id); toast.success("Deleted — restore from Recently Deleted"); navigate({ to: "/leads" }); }}>Delete</Button>
-            </div>
+            </div>}
           </section>
           <section className="surface p-5">
             <h2 className="mb-3 font-semibold">Follow-ups</h2>
