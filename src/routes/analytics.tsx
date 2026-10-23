@@ -428,6 +428,7 @@ function ForecastSection({ st, open }: SecProps) {
   const [editing, setEditing] = useState(false);
   return (
     <div className="grid gap-5">
+        <div role="note" className="rounded-md border bg-muted/40 p-3 text-xs"><b>Weighted Pipeline Opportunity Forecast.</b> Built from open qualified Leads with a quoted amount × your stage probability, grouped by expected close date (undated opportunities shown separately). It is <b>not</b> cash received, confirmed revenue, a guaranteed sale or an agreed payment schedule. No Deal records are created from it.</div>
       {!f.configured ? <Panel title="Set your stage probabilities" sub="The forecast stays empty until you choose them — no percentages are assumed.">
         <Button onClick={() => setEditing(true)}>Configure probabilities</Button>
       </Panel> : <>
@@ -436,7 +437,6 @@ function ForecastSection({ st, open }: SecProps) {
           <Kpi primary label="Conservative" value={formatINR(f.conservative)} def={`Each probability × ${s.forecastConfig.conservative} (your setting).`} />
           <Kpi primary label="Optimistic" value={formatINR(f.optimistic)} def={`Each probability × ${s.forecastConfig.optimistic} (your setting), capped at 100%.`} />
         </div>
-        <div role="note" className="-mt-1 rounded-md border bg-muted/40 p-3 text-xs"><b>Weighted Pipeline Opportunity Forecast.</b> Built from open qualified Leads with a quoted amount × your stage probability, grouped by expected close date (undated opportunities shown separately). It is <b>not</b> cash received, confirmed revenue, a guaranteed sale or an agreed payment schedule. No Deal records are created from it.</div>
         <p className="-mt-2 text-[11px] text-muted-foreground">Scenario estimates, not guaranteed revenue. Won and Lost leads are excluded. Probabilities version {s.forecastConfig.version} since {formatDate(s.forecastConfig.effectiveFrom, { day: "numeric", month: "short", year: "numeric" })}. <button className="font-medium underline" onClick={() => setEditing(true)}>Change probabilities</button></p>
         <div className="grid gap-5 lg:grid-cols-2">
           <Panel title="Forecast timeline" sub="Grouped by your expected close dates">
