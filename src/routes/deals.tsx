@@ -104,7 +104,7 @@ function DealInspector({ deal: d, onPay, onPick }: { deal: Deal; onPay: () => vo
   );
 }
 
-function PaymentRow({ id, proof }: { id: string; proof?: import("@/lib/crm/attachments").ProofMeta }) {
+function PaymentRow({ id, proof }: { id: string; proof?: import("@/lib/crm/attachments").ProofMeta | undefined }) {
   const { payments, voidPayment } = useCRM();
   const p = payments.find((x) => x.id === id);
   const [view, setView] = useState(false);

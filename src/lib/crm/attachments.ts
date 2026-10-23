@@ -26,7 +26,7 @@ export function sniffType(b: Uint8Array): ProofKind | null {
 
 export function extType(name: string): ProofKind | null {
   const m = /\.([a-z0-9]+)$/i.exec(name.trim());
-  return m ? EXT[m[1].toLowerCase()] ?? null : null;
+  return m ? EXT[(m[1] ?? "").toLowerCase()] ?? null : null;
 }
 
 export type ProofCheck = { ok: true; type: ProofKind } | { ok: false; error: string };
@@ -53,4 +53,4 @@ export function formatBytes(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export const proofLabel = (t: ProofKind) => (t === "application/pdf" ? "PDF" : t.split("/")[1].toUpperCase().replace("JPEG", "JPG"));
+export const proofLabel = (t: ProofKind) => (t === "application/pdf" ? "PDF" : (t.split("/")[1] ?? "").toUpperCase().replace("JPEG", "JPG"));
