@@ -15,10 +15,12 @@ import { Route as DailyBriefingRouteImport } from './routes/daily-briefing'
 import { Route as DealsRouteImport } from './routes/deals'
 import { Route as FollowUpsRouteImport } from './routes/follow-ups'
 import { Route as LeadsRouteImport } from './routes/leads'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as NotesRouteImport } from './routes/notes'
 import { Route as PipelineRouteImport } from './routes/pipeline'
 import { Route as SalesStudioRouteImport } from './routes/sales-studio'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as TeamRouteImport } from './routes/team'
 import { Route as LeadsIdRouteImport } from './routes/leads_.$id'
 import { Route as LeadsBinRouteImport } from './routes/leads_.bin'
 
@@ -52,6 +54,11 @@ const LeadsRoute = LeadsRouteImport.update({
   path: '/leads',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NotesRoute = NotesRouteImport.update({
   id: '/notes',
   path: '/notes',
@@ -72,6 +79,11 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TeamRoute = TeamRouteImport.update({
+  id: '/team',
+  path: '/team',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LeadsIdRoute = LeadsIdRouteImport.update({
   id: '/leads_/$id',
   path: '/leads/$id',
@@ -90,10 +102,12 @@ export interface FileRoutesByFullPath {
   '/deals': typeof DealsRoute
   '/follow-ups': typeof FollowUpsRoute
   '/leads': typeof LeadsRoute
+  '/login': typeof LoginRoute
   '/notes': typeof NotesRoute
   '/pipeline': typeof PipelineRoute
   '/sales-studio': typeof SalesStudioRoute
   '/settings': typeof SettingsRoute
+  '/team': typeof TeamRoute
   '/leads/$id': typeof LeadsIdRoute
   '/leads/bin': typeof LeadsBinRoute
 }
@@ -104,10 +118,12 @@ export interface FileRoutesByTo {
   '/deals': typeof DealsRoute
   '/follow-ups': typeof FollowUpsRoute
   '/leads': typeof LeadsRoute
+  '/login': typeof LoginRoute
   '/notes': typeof NotesRoute
   '/pipeline': typeof PipelineRoute
   '/sales-studio': typeof SalesStudioRoute
   '/settings': typeof SettingsRoute
+  '/team': typeof TeamRoute
   '/leads/$id': typeof LeadsIdRoute
   '/leads/bin': typeof LeadsBinRoute
 }
@@ -119,10 +135,12 @@ export interface FileRoutesById {
   '/deals': typeof DealsRoute
   '/follow-ups': typeof FollowUpsRoute
   '/leads': typeof LeadsRoute
+  '/login': typeof LoginRoute
   '/notes': typeof NotesRoute
   '/pipeline': typeof PipelineRoute
   '/sales-studio': typeof SalesStudioRoute
   '/settings': typeof SettingsRoute
+  '/team': typeof TeamRoute
   '/leads_/$id': typeof LeadsIdRoute
   '/leads_/bin': typeof LeadsBinRoute
 }
@@ -135,10 +153,12 @@ export interface FileRouteTypes {
     | '/deals'
     | '/follow-ups'
     | '/leads'
+    | '/login'
     | '/notes'
     | '/pipeline'
     | '/sales-studio'
     | '/settings'
+    | '/team'
     | '/leads/$id'
     | '/leads/bin'
   fileRoutesByTo: FileRoutesByTo
@@ -149,10 +169,12 @@ export interface FileRouteTypes {
     | '/deals'
     | '/follow-ups'
     | '/leads'
+    | '/login'
     | '/notes'
     | '/pipeline'
     | '/sales-studio'
     | '/settings'
+    | '/team'
     | '/leads/$id'
     | '/leads/bin'
   id:
@@ -163,10 +185,12 @@ export interface FileRouteTypes {
     | '/deals'
     | '/follow-ups'
     | '/leads'
+    | '/login'
     | '/notes'
     | '/pipeline'
     | '/sales-studio'
     | '/settings'
+    | '/team'
     | '/leads_/$id'
     | '/leads_/bin'
   fileRoutesById: FileRoutesById
@@ -178,10 +202,12 @@ export interface RootRouteChildren {
   DealsRoute: typeof DealsRoute
   FollowUpsRoute: typeof FollowUpsRoute
   LeadsRoute: typeof LeadsRoute
+  LoginRoute: typeof LoginRoute
   NotesRoute: typeof NotesRoute
   PipelineRoute: typeof PipelineRoute
   SalesStudioRoute: typeof SalesStudioRoute
   SettingsRoute: typeof SettingsRoute
+  TeamRoute: typeof TeamRoute
   LeadsIdRoute: typeof LeadsIdRoute
   LeadsBinRoute: typeof LeadsBinRoute
 }
@@ -230,6 +256,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LeadsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/notes': {
       id: '/notes'
       path: '/notes'
@@ -258,6 +291,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/team': {
+      id: '/team'
+      path: '/team'
+      fullPath: '/team'
+      preLoaderRoute: typeof TeamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/leads_/$id': {
       id: '/leads_/$id'
       path: '/leads/$id'
@@ -282,10 +322,12 @@ const rootRouteChildren: RootRouteChildren = {
   DealsRoute: DealsRoute,
   FollowUpsRoute: FollowUpsRoute,
   LeadsRoute: LeadsRoute,
+  LoginRoute: LoginRoute,
   NotesRoute: NotesRoute,
   PipelineRoute: PipelineRoute,
   SalesStudioRoute: SalesStudioRoute,
   SettingsRoute: SettingsRoute,
+  TeamRoute: TeamRoute,
   LeadsIdRoute: LeadsIdRoute,
   LeadsBinRoute: LeadsBinRoute,
 }
