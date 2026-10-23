@@ -6,6 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   LayoutDashboard, Users, KanbanSquare, CalendarClock, Wallet, StickyNote, Moon, Sun,
   BarChart3, Sunrise, Settings, MoreHorizontal, Plus, Search, Bell, ArrowUpRight, PhoneCall, Menu, ChevronRight, PanelLeftClose, PanelLeftOpen, Presentation, ShieldCheck,
+  Archive,
 } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
 import { cn } from "@/lib/utils";
