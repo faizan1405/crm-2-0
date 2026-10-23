@@ -2,7 +2,7 @@
 // Production swap point: implement ProofRepo against authenticated Hostinger endpoints
 // (private storage, server-side validation and finance-permission checks on every read).
 import { useEffect, useState, useSyncExternalStore } from "react";
-import type { ProofMeta, ProofKind } from "./attachments";
+import { readBytes, type ProofMeta, type ProofKind } from "./attachments";
 
 export interface ProofRepo {
   list(): Promise<ProofMeta[]>;
@@ -44,20 +44,20 @@ export const idbProofRepo: ProofRepo = {
   async list() { const d = await db(); return req(d.transaction("meta").objectStore("meta").getAll() as IDBRequest<ProofMeta[]>); },
   async get(paymentId) {
     const d = await db(); const t = d.transaction(["meta", "files"]);
-    const [meta, blob] = await Promise.all([req(t.objectStore("meta").get(paymentId) as IDBRequest<ProofMeta | undefined>), req(t.objectStore("files").get(paymentId) as IDBRequest<Blob | undefined>)]);
-    return meta && blob instanceof Blob ? { meta, blob } : null;
+    const [meta, blob] = await Promise.all([req(t.objectStore("meta").get(paymentId) as IDBRequest<ProofMeta | undefined>), req(t.objectStore("files").get(paymentId) as IDBRequest<ArrayBuffer | undefined>)]);
+    return meta && blob && blob.byteLength > 0 ? { meta, blob: new Blob([blob], { type: meta.mimeType }) } : null;
   },
   async put(paymentId, file, name, type) {
     if (busy.has(paymentId)) throw new Error("This payment's proof is already being saved");
     busy.add(paymentId);
     try {
       const d = await db();
-      const buf = await file.arrayBuffer(); // store a plain copy, detached from the picked file
+      const buf = await readBytes(file); // store a plain copy, detached from the picked file
       const prev = await req(d.transaction("meta").objectStore("meta").get(paymentId) as IDBRequest<ProofMeta | undefined>);
       const now = new Date().toISOString();
       const meta: ProofMeta = { attachmentId: `proof_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`, paymentId, originalFileName: name, mimeType: type, fileSize: buf.byteLength, createdAt: prev?.createdAt ?? now, updatedAt: now };
       const t = d.transaction(["meta", "files"], "readwrite");
-      t.objectStore("files").put(new Blob([buf], { type }), paymentId);
+      t.objectStore("files").put(buf, paymentId);
       t.objectStore("meta").put(meta);
       await done(t); bump();
       return meta;

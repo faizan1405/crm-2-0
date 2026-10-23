@@ -42,8 +42,14 @@ export function checkProof(name: string, size: number, head: Uint8Array): ProofC
   return { ok: true, type: real };
 }
 
+/** Read a Blob's bytes (FileReader fallback for older engines). */
+export function readBytes(b: Blob): Promise<ArrayBuffer> {
+  if (typeof b.arrayBuffer === "function") return b.arrayBuffer();
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result as ArrayBuffer); r.onerror = () => rej(r.error); r.readAsArrayBuffer(b); });
+}
+
 export async function checkProofFile(file: Blob & { name: string }): Promise<ProofCheck> {
-  const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  const head = new Uint8Array(await readBytes(file.slice(0, 16)));
   return checkProof(file.name, file.size, head);
 }
 
