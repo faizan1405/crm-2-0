@@ -62,6 +62,8 @@ export interface RuleConditions {
   /** Minimum minutes since the lead was created / since the last contact attempt / in the current stage (days). */
   minCreatedMinutes?: number; minSinceAttemptMinutes?: number; minStageDays?: number; minInactiveHours?: number;
   followupStatus?: "any" | "pending" | "overdue" | "completed";
+  /** Phase 3G: custom field / tag conditions (Saved View condition shape). All must match. */
+  custom?: { id: string; field: string; op: string; value?: unknown }[];
 }
 export interface RuleSettings { overdueMinutes?: number; cooldownHours: number; escalateOwnerAfterMinutes?: number; followupInHours?: number; windowHours?: number }
 export interface AutomationRule {
@@ -128,6 +130,8 @@ export function ruleConflicts(rule: AutomationRule, rules: AutomationRule[]): st
 export interface EvalCtx {
   leads: Lead[]; activities: LeadActivity[]; followUps: FollowUp[]; assignments: Record<string, Assignment>;
   inboxMeta: Record<string, { reviewedAt?: string }>; now: Date;
+  /** Evaluates `conditions.custom` (custom fields / tags). Without it, custom conditions match nothing. */
+  customMatch?: (lead: Lead, conditions: NonNullable<RuleConditions["custom"]>) => boolean;
 }
 export interface Match { leadId: string; employeeId: string | null; target: string; signature: string; reason: string; dueAt: string; resolveWhen: Reminder["resolveWhen"]; escalate: boolean }
 
@@ -148,6 +152,7 @@ function leadPasses(l: Lead, c: RuleConditions, x: EvalCtx, contact: ContactStat
   if (c.minSinceAttemptMinutes !== undefined && ago(lastAttemptAt(l.id, x.activities), x.now) < c.minSinceAttemptMinutes * MIN) return false;
   if (c.minStageDays !== undefined) { const d = daysIn(stageSince(l, x.activities) ?? l.createdAt, x.now); if (d === null || d < c.minStageDays) return false; }
   if (c.minInactiveHours !== undefined && ago(lastActivityAt(l, x.activities), x.now) < c.minInactiveHours * HOUR) return false;
+  if (c.custom?.length && !(x.customMatch && x.customMatch(l, c.custom))) return false;
   return true;
 }
 const fmt = (ms: number) => (ms >= DAY ? `${Math.floor(ms / DAY)}d` : ms >= HOUR ? `${Math.floor(ms / HOUR)}h` : `${Math.max(1, Math.floor(ms / MIN))}m`);

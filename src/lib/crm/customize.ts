@@ -248,7 +248,7 @@ export type FieldKind = "select" | "multi" | "date" | "text" | "number" | "bool"
 export interface FilterField { key: string; label: string; kind: FieldKind; options?: { id: string; label: string }[]; archived?: boolean; ownerOnly?: boolean }
 export const OPS_FOR: Record<FieldKind, Op[]> = {
   select: ["is", "is_not", "any_of", "empty", "not_empty"], multi: ["contains_any", "contains_all", "empty", "not_empty"],
-  date: ["before", "after", "between", "on", "within_days", "empty", "not_empty"], text: ["contains", "equals", "empty", "not_empty"],
+  date: ["before", "after", "between", "on", "within_days", "today", "overdue", "empty", "not_empty"], text: ["contains", "equals", "empty", "not_empty"],
   number: ["gt", "lt", "between", "equals", "empty", "not_empty"], bool: ["yes", "no"],
 };
 const CONTACT_LABEL: Record<ContactState, string> = { none: "No attempt yet", outbound: "Message sent", attempted: "Called, not reached", established: "Contact established" };
