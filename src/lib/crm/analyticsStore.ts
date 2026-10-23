@@ -15,7 +15,7 @@ export interface AnalyticsSlice {
   savedReports: ReportDef[];
   saveForecastConfig: (input: Pick<ForecastConfig, "probabilities" | "conservative" | "optimistic" | "note">) => string | null;
   setExpectedClose: (leadId: string, day: string | null) => string | null;
-  saveReport: (def: Omit<ReportDef, "createdAt" | "updatedAt" | "version"> & { id?: string }) => { ok: true; id: string } | { ok: false; error: string };
+  saveReport: (def: Omit<ReportDef, "createdAt" | "updatedAt" | "version"> & { id?: string | undefined }) => { ok: true; id: string } | { ok: false; error: string };
   duplicateReport: (id: string) => string | null;
   setReportFlags: (id: string, flags: Partial<Pick<ReportDef, "pinned" | "favorite" | "archived" | "name">>) => void;
 }

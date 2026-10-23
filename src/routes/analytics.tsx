@@ -541,7 +541,7 @@ const groupLabel = (r: Pick<ReportDef, "groupBy" | "source">, fields: { id: stri
 
 function ReportEditor({ initial, onClose }: { initial: Partial<ReportDef>; onClose: () => void }) {
   const s = useCRM();
-  const [r, setR] = useState<Omit<ReportDef, "createdAt" | "updatedAt" | "version"> & { id?: string }>({
+  const [r, setR] = useState<Omit<ReportDef, "createdAt" | "updatedAt" | "version"> & { id?: string | undefined }>({
     id: initial.id, name: initial.name ?? "", source: initial.source ?? "leads", metric: initial.metric ?? "count", groupBy: initial.groupBy ?? "source", period: initial.period ?? "30d", from: initial.from, to: initial.to,
     filter: initial.filter ?? {}, chart: initial.chart ?? "bar", sort: initial.sort ?? "value", pinned: initial.pinned ?? false, favorite: initial.favorite ?? false, archived: initial.archived ?? false,
   });
