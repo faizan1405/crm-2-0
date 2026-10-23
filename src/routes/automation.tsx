@@ -96,6 +96,7 @@ function AutomationPage() {
                   <dl className="mt-3 grid gap-1 text-xs">
                     <div><dt className="inline font-semibold">WHEN </dt><dd className="inline">{TRIGGER_LABEL[r.trigger]}</dd></div>
                     <div><dt className="inline font-semibold">IF </dt><dd className="inline">{conditionText(r, empName).join(" · ")}</dd></div>
+                    {(() => { const iss = automationIssues(s, r); return iss.length ? <div className="flex items-center gap-1.5 text-warning"><AlertTriangle className="size-3.5" />Won't run: {iss[0]!.text}</div> : null; })()}
                     <div><dt className="inline font-semibold">THEN </dt><dd className="inline">{r.actions.map((a) => ACTION_LABEL[a]).join(" · ")}{r.settings.escalateOwnerAfterMinutes !== undefined ? ` · escalate to Owner after ${r.settings.escalateOwnerAfterMinutes} min` : ""}</dd></div>
                   </dl>
                   <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
