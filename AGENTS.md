@@ -14,7 +14,7 @@
 - Business rules live in pure modules (`finance.ts`, `insights.ts`, `parse.ts`, `dates.ts`, `validation.ts`) with vitest tests — keeps logic testable and backend-agnostic.
 - Store actions enforce edit/stage and payment validation and synchronize related records; datetime-local inputs use explicit business-zone conversion — keeps pages consistent regardless of device timezone.
 - CRM pages render after mount inside `Shell` — data is browser-local, so this avoids server/browser render mismatches.
-- `formatINRCompact` is hand-rolled (K/L/Cr) — Intl compact output differs between server and browser.
+- `formatINRCompact` is hand-rolled (K/L/Cr) — Intl compact differs server vs browser.
 - Navigation is a collapsible graphite left sidebar in Shell (grouped Workspace/Business/Personal/System; collapse state in its own localStorage key) plus a minimal top utility bar for global actions; mobile uses a slide-out drawer, floating bottom bar and More sheet — primary nav and global actions stay separate.
 - Shared CRM presentation belongs in Shell and semantic global CSS; page components preserve store actions and pure calculations so visual redesigns cannot change business behavior.
 - The pipeline uses native drag-and-drop with named stage targets plus per-card stage selects for touch; clicking a card opens an inspector selected via the `?lead=` search param (docked at ≥1280px, portaled overlay/bottom sheet below); stage age and stall flags come only from recorded stage-change activity via pure `pipeline.ts` — no invented ages.
@@ -29,6 +29,6 @@
 - Data Vault backups are built by pure `vault.ts` (fflate ZIP + SHA-256 manifest, credential keys scrubbed, employee scope = currently assigned leads) and only reported successful after self-validation; restore is read-only until the backend exists — never a false "complete" backup.
 - Bulk selection/distribution is pure in `bulk.ts` (ids or matching-snapshot minus exclusions; equal/balanced/custom) and applied only via store `applyAssignmentPlan`, which re-checks each item and reports skips; Undo via snapshot.
 - Team Activity events come only from `activity.ts` `deriveEvents` in the store wrapper (outer Owner action, never preview), deduped by eventId; demo events stay in component memory.
-- Performance/goals are pure in `performance.ts`: contribution counts only events whose actor is that person (else "Not measurable yet"), assignment is workload only; goal edits version with revisions — keeps metrics honest and history stable.
+- Performance/goals are pure in `performance.ts`: contribution counts only events whose actor is that person (else "Not measurable yet"), assignment is workload only; goal edits version with revisions — honest metrics, stable history.
 - Smart Inbox rules are pure in `inbox.ts` (country-aware phone match; name+company = suggestion only); review/duplicate state lives in `inboxMeta`/`leadRelations`, never on Lead; merge stays disabled until the backend can move linked records atomically.
 - Automation rules are pure in `automation.ts` (idempotency key rule|target|signature + cooldown), applied by store `runAutomations` and run only by `automationRunner.ts` while the app is open (never in preview); contact = saved call outcomes/confirmed sends only; `opId` "auto:" rows never re-trigger.
