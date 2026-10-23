@@ -33,4 +33,4 @@
 - Smart Inbox rules are pure in `inbox.ts` (country-aware phone match; name+company = suggestion only); review/duplicate state lives in `inboxMeta`/`leadRelations`, never on Lead; merge stays disabled until the backend can move linked records atomically.
 - Automation rules are pure in `automation.ts` (idempotency key rule|target|signature + cooldown), applied by store `runAutomations` and run only by `automationRunner.ts` while the app is open (never in preview); contact = saved call outcomes/confirmed sends only; `opId` "auto:" rows never re-trigger.
 - Custom fields, tags and Saved Views are pure in `customize.ts` (values keyed by stable field ids, never on Lead; views are versioned JSON filters run by `runView`); archived fields keep values and dependent views/automations warn instead of changing meaning.
-- Project Desk: pure `projects.ts` + slices (`projectStore.ts`, `projectCustomStore.ts`); fields/tags/rules reuse `customize.ts`/`automation.ts` with entity/subject — one engine, money only via `finance.ts`.
+- Project Desk: pure `projects.ts` + store slices; fields/tags/rules reuse `customize.ts`/`automation.ts` — one engine, money via `finance.ts`.
