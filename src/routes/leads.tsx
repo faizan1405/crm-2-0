@@ -17,6 +17,9 @@ import { useCRM } from "@/lib/crm/store";
 import { formatINR, formatINRCompact, relative, formatDateTime, digits } from "@/lib/crm/format";
 import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, type LeadStatus, type LeadSource, type LeadPriority } from "@/lib/crm/types";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { AssignDialog, AssigneeTag } from "@/components/team/AssignDialog";
+import { UserCheck, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -58,6 +61,9 @@ function Leads() {
   const [selected, setSelected] = useState<string | null>(null);
   const navigate = useNavigate();
   const [fu, setFu] = useState<string | null>(null);
+  // Owner-only bulk assignment; selection survives filter changes and never alters lead data.
+  const [picked, setPicked] = useState<string[]>([]), [assignFor, setAssignFor] = useState<string[] | null>(null);
+  const togglePick = (id: string, v: boolean) => setPicked((x) => (v ? (x.includes(id) ? x : [...x, id]) : x.filter((y) => y !== id)));
   useEffect(() => setSort(defaultLeadSort), [defaultLeadSort]);
 
   const rows = useMemo(() => {
@@ -94,22 +100,23 @@ function Leads() {
         <div className="grid gap-6 lg:grid-cols-[minmax(320px,0.9fr)_1.4fr]">
           <div role="listbox" aria-label="Lead directory" className="max-h-[calc(100vh-180px)] overflow-y-auto border-t border-foreground scrollbar-thin lg:sticky lg:top-32">
             {rows.map((l) => { const st = staleDays(l, now); return (
-              <div key={l.id} role="option" tabIndex={0} aria-selected={sel?.id === l.id} data-priority={l.priority} onClick={() => pick(l.id)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(l.id); } }} className="prospect-row">
+              <div key={l.id} role="option" tabIndex={0} aria-selected={sel?.id === l.id} data-priority={l.priority} onClick={() => pick(l.id)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(l.id); } }} className="prospect-row prospect-row-pick">
+                <span onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} className="flex items-center"><Checkbox aria-label={`Select ${l.name}`} checked={picked.includes(l.id)} onCheckedChange={(v) => togglePick(l.id, !!v)} /></span>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2"><span className="prio-dot shrink-0" /><span className="truncate text-sm font-semibold">{l.name}</span>{l.pinned && <Pin className="size-3 shrink-0" aria-label="Pinned" />}{st !== undefined && <span className="aging is-old shrink-0">stale {st}d</span>}</div>
-                  <div className="mt-1 flex items-center gap-2 truncate pl-4 text-xs text-muted-foreground"><span className="stage-chip shrink-0" data-stage={l.status}>{STATUS_LABEL[l.status]}</span><span className="truncate">{l.company ?? l.source} · {l.lastContact ? `spoke ${relative(l.lastContact)}` : "not contacted"}</span></div>
+                  <div className="mt-1 flex items-center gap-2 truncate pl-4 text-xs text-muted-foreground"><span className="stage-chip shrink-0" data-stage={l.status}>{STATUS_LABEL[l.status]}</span><span className="truncate">{l.company ?? l.source} · {l.lastContact ? `spoke ${relative(l.lastContact)}` : "not contacted"}</span><AssigneeTag leadId={l.id} /></div>
                 </div>
                 <div className="text-right"><div className="num text-sm">{formatINRCompact(l.quotedAmount ?? l.budget ?? 0)}</div><div className="eyebrow mt-0.5">{l.source}</div></div>
               </div>); })}
           </div>
-          {sel && <Inspector key={sel.id} id={sel.id} onFollowUp={() => setFu(sel.id)} onStage={(s) => changeStatus(sel.id, s)} onRemove={(k) => removeLead(sel.id, sel.name, k)} quickSel={quickSel(sel.id, sel.quickStatus)} />}
+          {sel && <Inspector key={sel.id} id={sel.id} onFollowUp={() => setFu(sel.id)} onStage={(s) => changeStatus(sel.id, s)} onRemove={(k) => removeLead(sel.id, sel.name, k)} onAssign={() => setAssignFor([sel.id])} quickSel={quickSel(sel.id, sel.quickStatus)} />}
         </div>
       ) : view === "cards" ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {rows.map((l, i) => { const st = staleDays(l, now); return (
             <article key={l.id} data-priority={l.priority} style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }} className={cn("prospect-tile", l.pinned && "is-pinned")}>
               <span className="tile-score num" aria-hidden>{l.aiScore ?? ""}</span>
-              <div className="flex items-start justify-between gap-2"><div className="flex items-center gap-2"><span className="prio-dot" /><span className="eyebrow">{l.priority} · {l.source}</span></div><Button size="icon" variant="ghost" aria-label={l.pinned ? "Unpin" : "Pin"} onClick={() => updateLead(l.id, { pinned: !l.pinned })} className="relative size-8 rounded-full"><Pin className={cn("size-4", !l.pinned && "opacity-40")} /></Button></div>
+              <div className="flex items-start justify-between gap-2"><div className="relative flex items-center gap-2"><Checkbox aria-label={`Select ${l.name}`} checked={picked.includes(l.id)} onCheckedChange={(v) => togglePick(l.id, !!v)} /><span className="prio-dot" /><span className="eyebrow">{l.priority} · {l.source}</span></div><Button size="icon" variant="ghost" aria-label={l.pinned ? "Unpin" : "Pin"} onClick={() => updateLead(l.id, { pinned: !l.pinned })} className="relative size-8 rounded-full"><Pin className={cn("size-4", !l.pinned && "opacity-40")} /></Button></div>
               <Link to="/leads/$id" params={{ id: l.id }} className="relative"><h3 className="editorial text-[30px]">{l.name}</h3><p className="mt-1 text-xs text-muted-foreground">{l.company ?? "Independent"} · {l.phone}</p></Link>
               <div className="relative flex flex-wrap items-center gap-1.5"><span className="stage-chip" data-stage={l.status}>{STATUS_LABEL[l.status]}</span>{l.quickStatus && <span className="aging">{QUICK_LABEL[l.quickStatus]}</span>}{st !== undefined && <span className="aging is-old"><Clock className="mr-1 inline size-3" />stale {st}d</span>}</div>
               <dl className="relative grid grid-cols-3 gap-3 border-t pt-3 text-xs"><div><dt className="eyebrow">{l.quotedAmount ? "Quoted" : "Budget"}</dt><dd className="num mt-1 text-sm">{formatINRCompact(l.quotedAmount ?? l.budget ?? 0)}</dd></div><div><dt className="eyebrow">Next</dt><dd className="mt-1">{l.nextFollowUp ? formatDateTime(l.nextFollowUp) : "—"}</dd></div><div><dt className="eyebrow">Updated</dt><dd className="mt-1">{relative(l.updatedAt)}</dd></div></dl>
@@ -130,10 +137,10 @@ function Leads() {
             <tbody>
               {rows.map((l) => (
                 <tr key={l.id} className="border-b hover:bg-card">
-                  <td className="pl-1"><Button size="icon" variant="ghost" title={l.pinned ? "Unpin" : "Pin"} aria-label={l.pinned ? "Unpin" : "Pin"} onClick={() => updateLead(l.id, { pinned: !l.pinned })} className={cn("rounded-full", !l.pinned && "opacity-30 hover:opacity-80")}><Pin className="size-3.5" /></Button></td>
+                  <td className="pl-1"><span className="inline-flex items-center gap-1"><Checkbox aria-label={`Select ${l.name}`} checked={picked.includes(l.id)} onCheckedChange={(v) => togglePick(l.id, !!v)} /><Button size="icon" variant="ghost" title={l.pinned ? "Unpin" : "Pin"} aria-label={l.pinned ? "Unpin" : "Pin"} onClick={() => updateLead(l.id, { pinned: !l.pinned })} className={cn("rounded-full", !l.pinned && "opacity-30 hover:opacity-80")}><Pin className="size-3.5" /></Button></span></td>
                   <td className="min-w-52 px-3"><Link to="/leads/$id" params={{ id: l.id }} className="hover:underline"><Identity name={l.name} company={l.company} /></Link></td>
                   <td className="num px-3 text-muted-foreground"><a href={`tel:${l.phone}`} className="hover:text-foreground" onClick={() => startCall(l.id, "Leads")}>{l.phone}</a></td>
-                  <td className="px-3">{l.source}</td>
+                  <td className="px-3">{l.source}<div className="mt-0.5"><AssigneeTag leadId={l.id} /></div></td>
                   <td className="px-3"><PriorityBadge p={l.priority} /></td>
                   <td className="num px-3">{l.aiScore ?? "—"}</td>
                   <td className="num px-3">{formatINR(l.quotedAmount)}</td>
@@ -146,6 +153,8 @@ function Leads() {
             </tbody>
           </table>
         </div>}
+      {picked.length > 0 && <div className="as-bulk" role="region" aria-label="Bulk actions"><span className="text-sm font-semibold"><span className="num">{picked.length}</span> lead{picked.length === 1 ? "" : "s"} selected</span><Button size="sm" onClick={() => setAssignFor(picked)}><UserCheck />Assign / reassign</Button><Button size="sm" variant="ghost" onClick={() => setPicked(rows.map((r) => r.id))}>Select all {rows.length}</Button><Button size="sm" variant="ghost" aria-label="Clear selection" onClick={() => setPicked([])}><X />Clear</Button></div>}
+      <AssignDialog open={!!assignFor} leadIds={assignFor ?? []} source={assignFor && assignFor.length > 1 ? "Leads bulk" : "Leads inspector"} onClose={() => setAssignFor(null)} onDone={() => { if (assignFor && assignFor.length > 1) setPicked([]); }} />
       <FollowUpDialog open={!!fu} onOpenChange={(o) => !o && setFu(null)} {...(fu ? { leadId: fu } : {})} />
       <AddLeadDialog open={open} onOpenChange={setOpen} />
       <BulkLeadDialog open={bulk} onOpenChange={setBulk} />
@@ -154,7 +163,7 @@ function Leads() {
   );
 }
 
-function Inspector({ id, onFollowUp, onStage, onRemove, quickSel }: { id: string; onFollowUp: () => void; onStage: (s: LeadStatus) => void; onRemove: (k: "waste" | "deleted") => void; quickSel: React.ReactNode }) {
+function Inspector({ id, onFollowUp, onStage, onRemove, onAssign, quickSel }: { id: string; onFollowUp: () => void; onAssign: () => void; onStage: (s: LeadStatus) => void; onRemove: (k: "waste" | "deleted") => void; quickSel: React.ReactNode }) {
   const { leads, deals, payments, activities, followUps, updateLead } = useCRM();
   const l = leads.find((x) => x.id === id);
   if (!l) return null;
@@ -180,6 +189,7 @@ function Inspector({ id, onFollowUp, onStage, onRemove, quickSel }: { id: string
         <div><dt className="eyebrow">{l.quotedAmount ? "Quoted" : "Budget"}</dt><dd className="num mt-1.5 text-lg">{formatINR(l.quotedAmount ?? l.budget)}</dd></div>
         <div><dt className="eyebrow">Next follow-up</dt><dd className="mt-1.5 text-sm">{fu ? formatDateTime(fu.dueAt) : "None booked"}</dd></div>
       </dl>
+      <div className="as-insp"><span className="eyebrow">Responsible</span><AssigneeTag leadId={l.id} /><Button size="sm" variant="outline" className="ml-auto rounded-full" onClick={onAssign}><UserCheck className="size-3.5" />Assign to employee</Button></div>
       {l.requirement && <p className="mt-6 border-l-2 border-clay pl-4 text-sm leading-relaxed">{l.requirement}</p>}
       {l.status === "lost" && l.lostReason && <p className="mt-4 text-sm text-destructive">Lost · {l.lostReason}</p>}
       <div className="mt-8 grid gap-8 md:grid-cols-2">

@@ -13,3 +13,11 @@ Ready as a reviewed **local frontend baseline**, not a production application.
 9. Provide deployment secrets, production tests, backup/restore, monitoring, security review and accessibility audit before release.
 
 No backend, authentication service, AI service or notification delivery was configured during Phase 2.5. Production remains untouched. Browser-only data must not be described as database persistence.
+## Phase 3B — backend authorization rules (Hostinger)
+- Derive the acting user from the server session only; never trust a client-sent employee id.
+- Resolve permissions server-side: Owner full access → owner-only resources (Team Management) denied to employees → employee overrides → role preset → deny.
+- Apply lead scope (assigned / all) to every query: lead lists, pipeline, follow-ups, global search, lookups, activity timelines, notifications, dashboard and analytics totals, exports.
+- Finance levels: none / status only / assigned-client amounts / payment management. Company revenue only with `analytics.company`. Payment proofs need `proofs.*` separately, served from private storage.
+- Personal notes belong to their author; no role can read the Owner's notes.
+- Assignment endpoints: assign, bulk assign, reassign, unassign; reject inactive targets; write a trusted audit event per change.
+- Rule engine runs server-side, deterministic priority, once per lead per event, never replaces manual assignments unless the policy allows; historical redistribution is a separate confirmed action.

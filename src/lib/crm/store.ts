@@ -39,6 +39,7 @@ import { demoLeads, demoDeals, demoPayments, demoFollowUps, demoNotes, demoActiv
 import { uid, digits, dayKey } from "./format";
 import { dealOutstanding } from "./finance";
 import { leadEditError } from "./validation";
+import { applyAssign, assignable, evaluate, fireKey, ruleError, DEFAULT_RULE_SETTINGS, OWNER_ONLY_KEYS, type Assignment, type AssignmentEvent, type AssignmentRule, type EmployeeAccess, type RuleSettings, type RuleTrigger } from "./access";
 import { buildEmployee, employeeError, withStatus, type AccountStatus, type Employee, type EmployeeInput } from "./team";
 import { builtInTemplates, DEFAULT_DEMO_CATEGORIES, quotationTemplateError, safeUrl, type BusinessProfile, type Demo, type LegacyQuotation, type QuotationShare, type QuotationTemplate, type WaTemplate } from "./studio";
 
@@ -130,6 +131,24 @@ interface CRMState extends Prefs {
   addEmployee: (input: EmployeeInput) => { ok: true; id: string } | { ok: false; error: string };
   updateEmployee: (id: string, input: EmployeeInput) => string | null;
   setEmployeeStatus: (id: string, status: AccountStatus) => void;
+  // Phase 3B — permissions + lead assignment (local simulation; backend enforces later). Not cleared by reset().
+  employeeAccess: Record<string, EmployeeAccess>;
+  saveEmployeeAccess: (employeeId: string, access: Omit<EmployeeAccess, "updatedAt">) => void;
+  assignments: Record<string, Assignment>;
+  assignmentEvents: AssignmentEvent[];
+  /** Returns how many leads changed, or an error. */
+  assignLeads: (leadIds: string[], employeeId: string | null, source: string) => { ok: true; changed: number } | { ok: false; error: string };
+  /** Undo helper: restores exactly the given previous assignments for these leads. */
+  restoreAssignments: (snapshot: Record<string, Assignment | undefined>) => void;
+  assignmentRules: AssignmentRule[];
+  ruleSettings: RuleSettings;
+  firedRules: string[];
+  saveRule: (r: Omit<AssignmentRule, "createdAt" | "updatedAt" | "priority"> & { priority?: number }) => string | null;
+  deleteRule: (id: string) => void;
+  moveRule: (id: string, dir: -1 | 1) => void;
+  setRuleSettings: (p: Partial<RuleSettings>) => void;
+  /** Explicit, confirmed historical redistribution. Returns the number of leads assigned. */
+  applyRulesToExisting: () => number;
 }
 
 export function duplicatePhone(leads: Lead[], phone: string): Lead | undefined {
@@ -184,6 +203,17 @@ export const useCRM = create<CRMState>()(
           activities: s.activities.filter((a) => a.leadId !== id),
         }));
       };
+      const autoAssign = (leadId: string, trigger: RuleTrigger) => {
+        const st = get();
+        if (!st.ruleSettings.autoEnabled) return;
+        const lead = st.leads.find((l) => l.id === leadId); if (!lead) return;
+        const o = evaluate(lead, trigger, st.assignmentRules, st.employees, st.assignments[leadId], st.ruleSettings);
+        if (!o.winner) return;
+        const key = fireKey(o.winner, leadId, trigger, lead.status);
+        if (st.firedRules.includes(key)) return;
+        const { next, events } = applyAssign(st.assignments, [leadId], o.winner.targetEmployeeId, new Date().toISOString(), `Rule: ${o.winner.name}`, false, () => uid("asg"));
+        set((s) => ({ assignments: next, assignmentEvents: [...events, ...s.assignmentEvents].slice(0, 500), firedRules: [key, ...s.firedRules].slice(0, 2000) }));
+      };
       return {
       ...initialData,
       ...defaultPrefs,
@@ -194,6 +224,7 @@ export const useCRM = create<CRMState>()(
           leads: [{ ...lead, id, createdAt: at, updatedAt: at }, ...s.leads],
           activities: [{ id: uid("activity"), leadId: id, type: "created", text: "Lead added to Scale Flow", at }, ...s.activities],
         }));
+        autoAssign(id, "lead_created");
         return id;
       },
       updateLead: (id, patch) => {
@@ -203,7 +234,7 @@ export const useCRM = create<CRMState>()(
           leads: s.leads.map((l) => (l.id === id ? { ...l, ...patch, ...(patch.status && patch.status !== "lost" ? { lostReason: undefined } : {}), updatedAt: new Date().toISOString() } : l)),
           deals: s.deals.map((d) => d.leadId === id ? { ...d, ...(patch.name !== undefined ? { clientName: patch.name } : {}), ...(patch.company !== undefined ? { company: patch.company } : {}) } : d),
         }));
-        if (patch.status && prev && prev.status !== patch.status) get().addActivity(id, `Status changed to ${patch.status}`, "status");
+        if (patch.status && prev && prev.status !== patch.status) { get().addActivity(id, `Status changed to ${patch.status}`, "status"); autoAssign(id, "stage_entered"); }
         return true;
       },
       deleteLead: (id) => moveToBin(id, "deleted"),
@@ -441,6 +472,42 @@ export const useCRM = create<CRMState>()(
         const next = { ...buildEmployee(input, id, now), createdAt: cur.createdAt, lastLoginAt: cur.lastLoginAt, invitedAt: cur.invitedAt, activatedAt: cur.activatedAt, deactivatedAt: cur.accountStatus === input.accountStatus ? cur.deactivatedAt : input.accountStatus === "inactive" ? now : null };
         set((s) => ({ employees: s.employees.map((e) => (e.id === id ? next : e)) }));
         return null;
+      },
+      employeeAccess: {},
+      saveEmployeeAccess: (employeeId, access) => set((s) => ({ employeeAccess: { ...s.employeeAccess, [employeeId]: { overrides: Object.fromEntries(Object.entries(access.overrides).filter(([k]) => !OWNER_ONLY_KEYS.includes(k))), ...(access.leadScope ? { leadScope: access.leadScope } : {}), ...(access.finance ? { finance: access.finance } : {}), updatedAt: new Date().toISOString() } } })),
+      assignments: {},
+      assignmentEvents: [],
+      assignLeads: (leadIds, employeeId, source) => {
+        if (employeeId) { const e = get().employees.find((x) => x.id === employeeId); if (!e || !assignable(e)) return { ok: false, error: "Choose an active employee." }; }
+        const known = leadIds.filter((id) => get().leads.some((l) => l.id === id));
+        const { next, events } = applyAssign(get().assignments, known, employeeId, new Date().toISOString(), source, true, () => uid("asg"));
+        set((s) => ({ assignments: next, assignmentEvents: [...events, ...s.assignmentEvents].slice(0, 500) }));
+        return { ok: true, changed: events.length };
+      },
+      restoreAssignments: (snap) => set((s) => { const next = { ...s.assignments }; for (const [id, a] of Object.entries(snap)) { if (a) next[id] = a; else delete next[id]; } return { assignments: next }; }),
+      assignmentRules: [],
+      ruleSettings: DEFAULT_RULE_SETTINGS,
+      firedRules: [],
+      saveRule: (r) => {
+        const err = ruleError(r, get().employees); if (err) return err;
+        const now = new Date().toISOString();
+        set((s) => { const cur = s.assignmentRules.find((x) => x.id === r.id);
+          return { assignmentRules: cur ? s.assignmentRules.map((x) => (x.id === r.id ? { ...cur, ...r, priority: cur.priority, updatedAt: now } : x)) : [...s.assignmentRules, { ...r, priority: s.assignmentRules.length + 1, createdAt: now, updatedAt: now }] }; });
+        return null;
+      },
+      deleteRule: (id) => set((s) => ({ assignmentRules: s.assignmentRules.filter((x) => x.id !== id).map((x, i) => ({ ...x, priority: i + 1 })) })),
+      moveRule: (id, dir) => set((s) => { const l = [...s.assignmentRules].sort((x, y) => x.priority - y.priority); const i = l.findIndex((x) => x.id === id), j = i + dir; if (i < 0 || j < 0 || j >= l.length) return {}; [l[i], l[j]] = [l[j]!, l[i]!]; return { assignmentRules: l.map((x, k) => ({ ...x, priority: k + 1 })) }; }),
+      setRuleSettings: (p) => set((s) => ({ ruleSettings: { ...s.ruleSettings, ...p } })),
+      applyRulesToExisting: () => {
+        let n = 0;
+        for (const l of get().leads) {
+          const st = get();
+          const o = evaluate(l, "lead_created", st.assignmentRules, st.employees, st.assignments[l.id], st.ruleSettings);
+          if (!o.winner) continue;
+          const { next, events } = applyAssign(st.assignments, [l.id], o.winner.targetEmployeeId, new Date().toISOString(), `Rule: ${o.winner.name} (bulk)`, false, () => uid("asg"));
+          set((s) => ({ assignments: next, assignmentEvents: [...events, ...s.assignmentEvents].slice(0, 500) })); n += events.length;
+        }
+        return n;
       },
       setEmployeeStatus: (id, status) => set((s) => ({ employees: s.employees.map((e) => (e.id === id ? withStatus(e, status, new Date().toISOString()) : e)) })),
     };
