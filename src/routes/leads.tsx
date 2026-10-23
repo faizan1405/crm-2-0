@@ -169,6 +169,7 @@ function Leads() {
 
 function Inspector({ id, onFollowUp, onStage, onRemove, onAssign, quickSel }: { id: string; onFollowUp: () => void; onAssign: () => void; onStage: (s: LeadStatus) => void; onRemove: (k: "waste" | "deleted") => void; quickSel: React.ReactNode }) {
   const { leads, deals, payments, activities, followUps, updateLead } = useCRM();
+  const canDel = useAccess().can("leads.delete");
   const l = leads.find((x) => x.id === id);
   if (!l) return null;
   const myDeals = deals.filter((d) => d.leadId === l.id);
@@ -200,7 +201,7 @@ function Inspector({ id, onFollowUp, onStage, onRemove, onAssign, quickSel }: { 
         <div><div className="eyebrow mb-3">Deals</div>{myDeals.length ? <ul className="grid gap-3">{myDeals.map((d) => { const got = dealCollected(d.id, payments); return <li key={d.id}><Link to="/deals" className="block rounded-xl border p-3 hover:bg-secondary"><div className="flex justify-between gap-2 text-sm"><span className="truncate font-medium">{d.name}</span><span className="num">{formatINRCompact(d.finalAmount)}</span></div><div className="balance-track mt-2 h-1.5"><div style={{ width: `${d.finalAmount ? Math.min(got / d.finalAmount, 1) * 100 : 0}%` }} /></div><div className="num mt-1 text-[11px] text-muted-foreground">{formatINRCompact(got)} received · {formatINRCompact(dealOutstanding(d, payments))} due</div></Link></li>; })}</ul> : <p className="text-xs text-muted-foreground">No deal yet.</p>}</div>
         <div><div className="eyebrow mb-3">Conversation history</div><ol className="timeline grid gap-4">{hist.map((a) => <li key={a.id} data-kind={a.type}><p className="text-xs leading-relaxed">{a.text}</p><span className="eyebrow">{relative(a.at)}</span></li>)}{!hist.length && <li className="text-xs text-muted-foreground">No activity yet.</li>}</ol></div>
       </div>
-      {useAccess().can("leads.delete") && <div className="mt-8 flex gap-2 border-t pt-4"><Button variant="ghost" size="sm" className="rounded-full text-muted-foreground" onClick={() => onRemove("waste")}><Ban className="size-3.5" />Move to Waste</Button><Button variant="ghost" size="sm" className="rounded-full text-muted-foreground hover:text-destructive" onClick={() => onRemove("deleted")}><Trash2 className="size-3.5" />Delete</Button></div>}
+      {canDel && <div className="mt-8 flex gap-2 border-t pt-4"><Button variant="ghost" size="sm" className="rounded-full text-muted-foreground" onClick={() => onRemove("waste")}><Ban className="size-3.5" />Move to Waste</Button><Button variant="ghost" size="sm" className="rounded-full text-muted-foreground hover:text-destructive" onClick={() => onRemove("deleted")}><Trash2 className="size-3.5" />Delete</Button></div>}
     </aside>
   );
 }
