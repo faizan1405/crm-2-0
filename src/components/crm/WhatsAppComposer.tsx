@@ -2,19 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import { create } from "zustand";
 import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
-import { MessageCircle, MessagesSquare, FileText, LayoutTemplate, PenLine, Copy, ExternalLink, AlertTriangle, Check, Download, Plus, RefreshCw, Globe, Pencil } from "lucide-react";
+import { MessageCircle, MessagesSquare, FileText, LayoutTemplate, PenLine, Copy, ExternalLink, AlertTriangle, Check, Plus, RefreshCw, Globe, Settings2 } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
 import { STATUS_LABEL, type Lead } from "@/lib/crm/types";
-import { formatINR, dayKey } from "@/lib/crm/format";
+import { formatINR } from "@/lib/crm/format";
 import { WA_LABEL, WA_PURPOSES, waLink, waNumber, type WaPurpose } from "@/lib/crm/whatsapp";
-import { composeDraft, effectiveStatus, quoteTotals, quotesForLead, selectedDemos, shareBlocker, syncDraft, safeUrl, QUOTE_STATUS_LABEL } from "@/lib/crm/studio";
+import { activeQuotationTemplates, composeDraft, formatPackagePrice, selectedDemos, syncDraft, safeUrl } from "@/lib/crm/studio";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { QuotationEditor } from "@/components/studio/QuotationEditor";
+import { QuotationTemplateEditor } from "@/components/studio/QuotationTemplateEditor";
 import { cn } from "@/lib/utils";
 
-export interface ComposerPreset { purpose?: WaPurpose; quoteId?: string }
+export interface ComposerPreset { purpose?: WaPurpose; packageId?: string }
 /** UI-only state: which lead the composer is open for. Never persisted. */
 export const useWhatsApp = create<{ leadId: string | null; source: string; preset: ComposerPreset; nonce: number; open: (leadId: string, source: string, preset?: ComposerPreset) => void; close: () => void }>()((set) => ({
   leadId: null, source: "", preset: {}, nonce: 0,
@@ -46,20 +46,20 @@ export function WhatsAppComposer() {
 }
 
 function ComposerBody({ lead, source, preset, close }: { lead: Lead; source: string; preset: ComposerPreset; close: () => void }) {
-  const { deals, owner, business, addActivity, quotations, waTemplates, demos, businessProfile, setQuoteStatus } = useCRM();
+  const { deals, owner, business, addActivity, quotationTemplates, waTemplates, demos, logQuotationShare } = useCRM();
   const deal = useMemo(() => deals.find((d) => d.leadId === lead.id && d.status !== "cancelled"), [deals, lead.id]);
-  const today = dayKey(new Date());
-  const leadQuotes = useMemo(() => [...quotesForLead(quotations, lead.id)].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), [quotations, lead.id]);
+  // Global packages — the same list for every client, always the latest saved version.
+  const packages = useMemo(() => activeQuotationTemplates(quotationTemplates), [quotationTemplates]);
   const [purpose, setPurpose] = useState<WaPurpose>(preset.purpose ?? "followup");
   const [templateId, setTemplateId] = useState<string | null>(null);
-  const [quoteId, setQuoteId] = useState<string | null>(preset.quoteId ?? null);
+  const [packageId, setPackageId] = useState<string | null>(preset.packageId ?? null);
   const [override, setOverride] = useState<string[] | null>(null);
   const [creating, setCreating] = useState(false);
-  const quote = leadQuotes.find((q) => q.id === quoteId) ?? leadQuotes.find((q) => !shareBlocker(q, today)) ?? leadQuotes[0];
+  const pkg = packages.find((p) => p.id === packageId) ?? packages[0];
   const activeDemos = demos.filter((d) => d.active && safeUrl(d.url)).sort((a, b) => a.order - b.order);
   const picked = selectedDemos(demos, override);
-  const purposeTemplates = waTemplates.filter((t) => t.purpose === purpose && t.enabled);
-  const fresh = composeDraft({ purpose, templateId, lead, owner, business, dealName: deal?.name, templates: waTemplates, quote: purpose === "quotation" ? quote : undefined, demos: purpose === "samples" ? picked : [] });
+  const purposeTemplates = purpose === "quotation" ? [] : waTemplates.filter((t) => t.purpose === purpose && t.enabled);
+  const fresh = composeDraft({ purpose, templateId, lead, owner, business, dealName: deal?.name, templates: waTemplates, pkg: purpose === "quotation" ? pkg : undefined, demos: purpose === "samples" ? picked : [] });
   const [text, setText] = useState(fresh);
   const [base, setBase] = useState(fresh);
   const [edited, setEdited] = useState(false);
@@ -68,24 +68,26 @@ function ComposerBody({ lead, source, preset, close }: { lead: Lead; source: str
   useEffect(() => { if (sync.text !== text) setText(sync.text); if (sync.base !== base) setBase(sync.base); }, [fresh]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const number = waNumber(lead.phone);
-  const blocker = purpose === "quotation" && quote ? shareBlocker(quote, today) : null;
   const pick = (p: WaPurpose) => {
     if (p === purpose) return;
     if (edited && text.trim() && !window.confirm("Replace your edited message with the new template?")) return;
     setPurpose(p); setTemplateId(null); setEdited(false);
   };
+  const choosePackage = (id: string) => {
+    if (id === pkg?.id) return;
+    if (edited && text.trim() && !window.confirm("Replace your edited message with this package?")) return;
+    setPackageId(id); setEdited(false);
+  };
   const applyFresh = () => { setText(fresh); setBase(fresh); setEdited(false); };
   const copy = async () => { try { await navigator.clipboard.writeText(text); toast.success("Message copied"); } catch { toast.error("Couldn't copy — select the text and copy manually"); } };
-  const send = () => { if (!number || !text.trim() || blocker) return; window.open(waLink(number, text), "_blank", "noopener,noreferrer"); setOpened(true); };
-  const logIt = (markShared: boolean) => {
-    addActivity(lead.id, `WhatsApp ${WA_LABEL[purpose].toLowerCase()} message (from ${source})${markShared && quote ? ` — quotation ${quote.number}` : ""}: ${text.slice(0, 140)}${text.length > 140 ? "…" : ""}`, "whatsapp");
-    if (markShared && quote) setQuoteStatus(quote.id, "shared");
-    toast.success(markShared ? "Logged and quotation marked Shared" : "Logged to the lead's history");
+  const send = () => { if (!number || !text.trim()) return; window.open(waLink(number, text), "_blank", "noopener,noreferrer"); setOpened(true); };
+  const logIt = () => {
+    const isQuote = purpose === "quotation" && !!pkg;
+    addActivity(lead.id, `WhatsApp ${WA_LABEL[purpose].toLowerCase()} message (from ${source})${isQuote ? ` — ${pkg.name} (${formatPackagePrice(pkg)})` : ""}: ${text.slice(0, 140)}${text.length > 140 ? "…" : ""}`, "whatsapp");
+    // Snapshot of exactly what was sent; later template edits never change it.
+    if (isQuote) logQuotationShare({ leadId: lead.id, templateId: pkg.id, packageNameSnapshot: pkg.name, priceSnapshot: formatPackagePrice(pkg), messageSnapshot: text, userConfirmedSent: true });
+    toast.success("Logged to the lead's history");
     close();
-  };
-  const pdf = async () => {
-    if (!quote) return;
-    try { const { downloadQuotationPdf } = await import("@/lib/crm/quotepdf"); await downloadQuotationPdf(quote, businessProfile, business); toast.success("PDF downloaded — attach it in WhatsApp"); } catch { toast.error("Couldn't create the PDF"); }
   };
   const toggleDemo = (id: string) => { const cur = picked.map((d) => d.id); setOverride(cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]); };
 
@@ -98,30 +100,27 @@ function ComposerBody({ lead, source, preset, close }: { lead: Lead; source: str
       </section>
       {!number && <p role="alert" className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive-soft/50 p-2.5 text-xs text-destructive"><AlertTriangle className="size-4 shrink-0" />This phone number isn't a valid Indian mobile, so WhatsApp can't be opened. Fix it on the lead first.</p>}
       <div role="radiogroup" aria-label="Message purpose" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {WA_PURPOSES.map((p) => { const I = ICON[p]; return <button key={p} type="button" role="radio" aria-checked={purpose === p} onClick={() => pick(p)} className="wa-purpose"><I className="size-4" /><span className="text-[13px] font-semibold">{WA_LABEL[p]}</span><span className="text-[11px] text-muted-foreground">{p === "quotation" && leadQuotes.length ? `${leadQuotes.length} saved` : HINT[p]}</span></button>; })}
+        {WA_PURPOSES.map((p) => { const I = ICON[p]; return <button key={p} type="button" role="radio" aria-checked={purpose === p} onClick={() => pick(p)} className="wa-purpose"><I className="size-4" /><span className="text-[13px] font-semibold">{WA_LABEL[p]}</span><span className="text-[11px] text-muted-foreground">{p === "quotation" && packages.length ? `${packages.length} package${packages.length === 1 ? "" : "s"}` : HINT[p]}</span></button>; })}
       </div>
 
       {purpose === "quotation" && (
-        <section aria-label="Saved quotations" className="wa-assets">
-          <div className="flex flex-wrap items-center justify-between gap-2"><div className="text-sm font-semibold">{lead.name} — {leadQuotes.length} saved quotation{leadQuotes.length === 1 ? "" : "s"}</div><Button size="sm" variant="outline" onClick={() => setCreating(true)}><Plus />New quotation</Button></div>
-          {leadQuotes.length === 0 ? (
-            <div className="wa-empty"><FileText className="size-5" /><div><div className="text-sm font-semibold">No quotations for {lead.name.split(" ")[0]} yet</div><p className="text-xs text-muted-foreground">Create one here — you'll come straight back to this message.</p></div></div>
+        <section aria-label="Quotation packages" className="wa-assets">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm font-semibold">Choose a package</div>
+            <div className="flex gap-1"><Button size="sm" variant="ghost" onClick={() => setCreating(true)}><Plus />Create template</Button><Button size="sm" variant="ghost" asChild><Link to="/sales-studio" search={{ tab: "quotations", client: lead.id }} onClick={close}><Settings2 />Manage</Link></Button></div>
+          </div>
+          {packages.length === 0 ? (
+            <div className="wa-empty"><FileText className="size-5" /><div><div className="text-sm font-semibold">No quotation packages yet</div><p className="text-xs text-muted-foreground">Create one once and use it for every client — you'll come straight back here.</p></div></div>
           ) : (
-            <div role="radiogroup" aria-label="Choose quotation" className="grid gap-1.5">
-              {leadQuotes.map((q) => { const st = effectiveStatus(q, today); const sel = quote?.id === q.id; return (
-                <button key={q.id} type="button" role="radio" aria-checked={sel} onClick={() => setQuoteId(q.id)} className="wa-quote">
-                  <span className="min-w-0 flex-1 text-left"><span className="block truncate text-[13px] font-semibold">{q.title}</span><span className="num block text-[11px] text-muted-foreground">{q.number} · valid until {q.validUntil}</span></span>
-                  <span className="q-status" data-status={st}>{QUOTE_STATUS_LABEL[st]}</span>
-                  <span className="num text-sm font-semibold">{formatINR(quoteTotals(q).total)}</span>
+            <div role="radiogroup" aria-label="Choose package" className="grid gap-1.5">
+              {packages.map((p) => { const sel = pkg?.id === p.id; return (
+                <button key={p.id} type="button" role="radio" aria-checked={sel} onClick={() => choosePackage(p.id)} className="wa-quote">
+                  <span className="min-w-0 flex-1 truncate text-left text-[13px] font-semibold">{p.name}</span>
+                  <span className="num text-sm font-semibold">{formatPackagePrice(p)}</span>
                 </button>); })}
             </div>
           )}
-          {quote && <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="ghost" onClick={pdf}><Download />Download PDF</Button>
-            <Button size="sm" variant="ghost" asChild><Link to="/sales-studio" search={{ tab: "quotations", quote: quote.id }} onClick={close}><Pencil />Edit in Sales Studio</Link></Button>
-            <span className="text-[11px] text-muted-foreground">WhatsApp can't attach files from a link — download the PDF and attach it in the chat.</span>
-          </div>}
-          {blocker && <p role="alert" className="flex items-center gap-2 rounded-lg bg-warning-soft p-2.5 text-xs"><AlertTriangle className="size-4 shrink-0 text-warning" />{blocker}</p>}
+          {pkg && <p className="text-[11px] text-muted-foreground">Edits below apply to this message only — the saved package stays the same.</p>}
         </section>
       )}
 
@@ -156,14 +155,14 @@ function ComposerBody({ lead, source, preset, close }: { lead: Lead; source: str
         <Textarea id="wa-text" value={text} onChange={(e) => { setText(e.target.value); setEdited(true); }} rows={8} placeholder={purpose === "custom" ? "Write your message…" : ""} className="wa-editor min-h-40 text-sm leading-relaxed" />
       </div>
       {opened ? (
-        <div className="wa-after" role="status"><Check className="size-4 text-success" /><span className="flex-1 text-xs">WhatsApp opened. It isn't marked as sent — log it only if you actually sent it.</span><Button size="sm" variant="ghost" onClick={close}>Close</Button><Button size="sm" variant="outline" onClick={() => logIt(false)}>Log to history</Button>{purpose === "quotation" && quote && !blocker && <Button size="sm" onClick={() => logIt(true)}>I sent it — mark Shared</Button>}</div>
+        <div className="wa-after" role="status"><Check className="size-4 text-success" /><span className="flex-1 text-xs">WhatsApp opened. It isn't marked as sent — log it only if you actually sent it.</span><Button size="sm" variant="ghost" onClick={close}>Close</Button><Button size="sm" onClick={logIt}>{purpose === "quotation" && pkg ? "I sent it — log to history" : "Log to history"}</Button></div>
       ) : (
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Button variant="ghost" onClick={copy} disabled={!text.trim()}><Copy className="size-4" />Copy</Button>
-          <Button onClick={send} disabled={!number || !text.trim() || !!blocker}><ExternalLink className="size-4" />Open in WhatsApp</Button>
+          <Button onClick={send} disabled={!number || !text.trim()}><ExternalLink className="size-4" />Open in WhatsApp</Button>
         </div>
       )}
-      {creating && <QuotationEditor leadId={lead.id} onClose={() => setCreating(false)} onSaved={(id) => { setQuoteId(id); setPurpose("quotation"); }} />}
+      {creating && <QuotationTemplateEditor previewLeadId={lead.id} onClose={() => setCreating(false)} onSaved={(id) => { setPackageId(id); setPurpose("quotation"); setEdited(false); }} />}
     </>
   );
 }
