@@ -2,6 +2,16 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+import { Eye, Workflow, SlidersHorizontal, ArrowUpRight, UserPlus, UserMinus, Repeat } from "lucide-react";
+import { RulesPanel } from "@/components/team/RulesPanel";
+import { PermissionEditor } from "@/components/team/PermissionEditor";
+import { AssignDialog } from "@/components/team/AssignDialog";
+import { MODULES, resolve, FINANCE_LABEL, SCOPE_LABEL, assignable } from "@/lib/crm/access";
+import { isPending, followUpBucket } from "@/lib/crm/followups";
+import { STATUS_LABEL as STAGE_LABEL } from "@/lib/crm/types";
+import { PriorityBadge } from "@/components/crm/Shell";
+import { formatDateTime } from "@/lib/crm/format";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Search, ShieldCheck, X, Pencil, Power, KeyRound, Mail, Users, Activity, Lock, Trash2, Crown, Info } from "lucide-react";
 import { Shell, Empty, selectCls } from "@/components/crm/Shell";
 import { useCRM } from "@/lib/crm/store";
@@ -37,6 +47,9 @@ function Team() {
   const navigate = Route.useNavigate();
   const [q, setQ] = useState(""), [status, setStatus] = useState<TeamFilter>("all"), [sort, setSort] = useState<TeamSort>("newest");
   const [form, setForm] = useState<{ open: boolean; edit?: Employee }>({ open: false });
+  const [view, setView] = useState<"directory" | "rules">("directory");
+  const assignments = useCRM((st) => st.assignments);
+  const countFor = (id: string) => Object.values(assignments).filter((a) => a.employeeId === id).length;
   const [confirm, setConfirm] = useState<{ kind: "deactivate" | "remove"; e: Employee } | null>(null);
   const list = useMemo(() => filterEmployees(employees, q, status, sort), [employees, q, status, sort]);
   const sum = teamSummary(employees);
@@ -50,7 +63,8 @@ function Team() {
       <div className="tm-summary">
         {([["Total employees", sum.total], ["Active", sum.active], ["Pending setup", sum.pending], ["Inactive", sum.inactive]] as const).map(([l, v]) => <div key={l} className="tm-sum"><span className="eyebrow">{l}</span><span className="num tm-sum-v">{v}</span></div>)}
       </div>
-      <div className={cn("tm-layout", selected && "has-panel")}>
+      <div className="seg mb-4" role="tablist" aria-label="Team sections"><button type="button" role="tab" aria-selected={view === "directory"} aria-pressed={view === "directory"} onClick={() => setView("directory")}><Users className="size-3.5" />Directory</button><button type="button" role="tab" aria-selected={view === "rules"} aria-pressed={view === "rules"} onClick={() => setView("rules")}><Workflow className="size-3.5" />Assignment rules</button></div>
+      {view === "rules" ? <RulesPanel /> : <div className={cn("tm-layout", selected && "has-panel")}>
         <section className="surface tm-dir" aria-label="Employee directory">
           <div className="tm-owner"><span className="tm-avatar tm-avatar-owner"><Crown className="size-4" /></span><div className="min-w-0 flex-1"><div className="text-sm font-semibold">{owner}</div><div className="truncate text-xs text-muted-foreground">{email || "Owner email not set"}</div></div><span className="tm-role-owner">Owner · Super admin</span></div>
           <div className="tm-tools">
@@ -62,7 +76,7 @@ function Team() {
             <li key={e.id}><button type="button" className="tm-row" aria-current={e.id === selectedId ? "true" : undefined} onClick={() => select(e.id)}>
               <span className="tm-avatar">{initials(e.name)}</span>
               <span className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-semibold">{e.name}</span><span className="block truncate text-xs text-muted-foreground">{e.email}</span></span>
-              <span className="tm-col hidden text-xs sm:block">{roleLabel(e)}</span>
+              <span className="tm-col hidden text-xs sm:block">{roleLabel(e)}<span className="block text-muted-foreground">{countFor(e.id)} lead{countFor(e.id) === 1 ? "" : "s"}</span></span>
               <span className="tm-col tm-col-extra hidden text-xs text-muted-foreground lg:block">Added {fmt(e.createdAt)}</span>
               <span className="tm-col tm-col-extra hidden text-xs text-muted-foreground xl:block">{e.lastLoginAt ? `Last login ${fmt(e.lastLoginAt)}` : "Login: not yet available"}</span>
               <StatusPill s={e.accountStatus} />
@@ -70,12 +84,12 @@ function Team() {
             : <Empty icon={<Users />} title={employees.some((e) => e.accountStatus !== "archived") ? "No matching employees" : "No employees yet"} hint={employees.length ? "Try another search or status." : "Add your first team member to start building your sales team."} action={!employees.length ? <Button onClick={() => setForm({ open: true })}><Plus />Add employee</Button> : undefined} />}
         </section>
         {selected && <Inspector e={selected} onClose={() => select()} onEdit={() => setForm({ open: true, edit: selected })} onConfirm={(kind) => setConfirm({ kind, e: selected })} onActivate={() => { setEmployeeStatus(selected.id, "active"); toast.success(`${selected.name} marked active in the demo`); }} />}
-      </div>
+      </div>}
       <EmployeeForm key={form.edit?.id ?? (form.open ? "new" : "closed")} open={form.open} edit={form.edit} onClose={() => setForm({ open: false })} onCreated={(id) => select(id)} />
       <Dialog open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)}><DialogContent className="sm:max-w-md">
         <DialogHeader><DialogTitle>{confirm?.kind === "remove" ? `Remove ${confirm.e.name}?` : `Deactivate ${confirm?.e.name}?`}</DialogTitle>
-          <DialogDescription>{confirm?.kind === "remove" ? "The profile is archived, not erased, so any future history stays linked. It disappears from the directory." : "Only the saved profile status changes. There's no real sign-in yet, so no session is revoked."}</DialogDescription></DialogHeader>
-        <DialogFooter><Button variant="outline" onClick={() => setConfirm(null)}>Cancel</Button><Button variant="destructive" onClick={() => { if (!confirm) return; setEmployeeStatus(confirm.e.id, confirm.kind === "remove" ? "archived" : "inactive"); if (confirm.kind === "remove") select(); toast.success(confirm.kind === "remove" ? `${confirm.e.name} removed` : `${confirm.e.name} deactivated`); setConfirm(null); }}>{confirm?.kind === "remove" ? "Remove" : "Deactivate"}</Button></DialogFooter>
+          <DialogDescription>{confirm?.kind === "remove" ? "The profile is archived, not erased, so any future history stays linked. It disappears from the directory." : `Only the saved profile status changes — there's no real sign-in yet, so no session is revoked. They stop receiving new leads${confirm && countFor(confirm.e.id) ? `; their ${countFor(confirm.e.id)} current lead(s) stay linked for you to review` : ""}.`}</DialogDescription></DialogHeader>
+        <DialogFooter><Button variant="outline" onClick={() => setConfirm(null)}>Cancel</Button><Button variant="destructive" onClick={() => { if (!confirm) return; setEmployeeStatus(confirm.e.id, confirm.kind === "remove" ? "archived" : "inactive"); if (confirm.kind === "remove") select(); const n = countFor(confirm.e.id); toast.success(confirm.kind === "remove" ? `${confirm.e.name} removed` : `${confirm.e.name} deactivated`, n ? { description: `${n} assigned lead${n === 1 ? " stays" : "s stay"} linked. Review them under Assigned leads to reassign.` } : undefined); setConfirm(null); }}>{confirm?.kind === "remove" ? "Remove" : "Deactivate"}</Button></DialogFooter>
       </DialogContent></Dialog>
     </Shell>
   );
@@ -84,21 +98,20 @@ function Team() {
 function Inspector({ e, onClose, onEdit, onConfirm, onActivate }: { e: Employee; onClose: () => void; onEdit: () => void; onConfirm: (k: "deactivate" | "remove") => void; onActivate: () => void }) {
   const [wide, setWide] = useState(true);
   useEffect(() => { const mq = window.matchMedia("(min-width: 1280px)"); const f = () => setWide(mq.matches); f(); mq.addEventListener("change", f); return () => mq.removeEventListener("change", f); }, []);
-  const access = PLANNED_ACCESS[e.roleId];
   const panel = (
     <aside className="tm-inspector" role="dialog" aria-modal={!wide} aria-label={`${e.name} details`} key={e.id}>
       <div className="flex items-start gap-3">
         <span className="tm-avatar tm-avatar-lg">{initials(e.name)}</span>
         <div className="min-w-0 flex-1"><h2 className="truncate text-lg font-semibold">{e.name}</h2><p className="truncate text-xs text-muted-foreground">{e.email}</p><div className="mt-2 flex flex-wrap items-center gap-2"><span className="tm-role">{roleLabel(e)}</span><StatusPill s={e.accountStatus} /></div></div>
+        <Button asChild size="sm" variant="outline"><Link to="/team/preview/$id" params={{ id: e.id }}><Eye />Preview</Link></Button>
         <button type="button" className="topbar-icon" aria-label="Close employee details" onClick={onClose}><X className="size-4" /></button>
       </div>
       <section className="tm-sec"><h3 className="eyebrow">Overview</h3><dl className="tm-dl">
         <dt>Created</dt><dd>{fmt(e.createdAt)}</dd><dt>Last updated</dt><dd>{fmt(e.updatedAt)}</dd>
         <dt>Last login</dt><dd>{e.lastLoginAt ? fmt(e.lastLoginAt) : "Not yet available"}</dd>
         <dt>Production login</dt><dd>Not configured yet</dd></dl></section>
-      <section className="tm-sec"><h3 className="eyebrow">Access</h3><p className="text-xs text-muted-foreground">{ROLES.find((r) => r.id === e.roleId)?.description} Planned only — not enforced until the secure backend and the Permission Manager (Phase 3B).</p>
-        <div className="mt-2 flex flex-wrap gap-1.5">{access.length ? access.map((r) => <span key={r} className="tm-chip">{RESOURCE_LABEL[r]}</span>) : <span className="text-xs text-muted-foreground">Set in Phase 3B.</span>}<span className="tm-chip tm-chip-lock"><Lock className="size-3" />Team Management · Owner only</span></div></section>
-      <section className="tm-sec"><h3 className="eyebrow">Assigned leads</h3><p className="text-xs text-muted-foreground">0 assigned. Lead assignment arrives in Phase 3B; every lead currently stays with the Owner.</p></section>
+      <AccessSection e={e} />
+      <AssignedPanel e={e} />
       <section className="tm-sec"><h3 className="eyebrow">Activity</h3><p className="flex items-center gap-2 text-xs text-muted-foreground"><Activity className="size-3.5" />No trusted activity yet. Records will come from the secure backend.</p></section>
       <section className="tm-sec"><h3 className="eyebrow">Account controls</h3><div className="grid gap-2 sm:grid-cols-2">
         <Button variant="outline" onClick={onEdit}><Pencil />Edit profile</Button>
@@ -138,5 +151,54 @@ function EmployeeForm({ open, edit, onClose, onCreated }: { open: boolean; edit:
       {err && <p role="alert" className="text-sm font-medium text-destructive">{err}</p>}
       <DialogFooter><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit">{edit ? "Save changes" : "Add employee"}</Button></DialogFooter>
     </form>
+  </DialogContent></Dialog>;
+}
+
+function AccessSection({ e }: { e: Employee }) {
+  const acc = useCRM((st) => st.employeeAccess[e.id]);
+  const [open, setOpen] = useState(false);
+  const eff = resolve(e.roleId, acc);
+  const mods = MODULES.filter((m) => !m.ownerOnly && m.actions.some((x) => eff.can(x.key)));
+  const n = acc ? Object.keys(acc.overrides).length : 0;
+  return <section className="tm-sec"><div className="flex items-center justify-between gap-2"><h3 className="eyebrow">Permissions</h3><Button size="sm" variant="outline" onClick={() => setOpen(true)}><SlidersHorizontal />Edit permissions</Button></div>
+    <p className="text-xs text-muted-foreground">{roleLabel(e)} defaults{n ? ` + ${n} custom change${n === 1 ? "" : "s"}` : ""} · {SCOPE_LABEL[eff.leadScope]} · {FINANCE_LABEL[eff.finance]}. A plan for the secure backend, not enforced in the demo.</p>
+    <div className="mt-1 flex flex-wrap gap-1.5">{mods.map((m) => <span key={m.id} className="tm-chip">{m.label}</span>)}<span className="tm-chip tm-chip-lock"><Lock className="size-3" />Team Management · Owner only</span></div>
+    {open && <PermissionEditor e={e} open onClose={() => setOpen(false)} />}
+  </section>;
+}
+
+function AssignedPanel({ e }: { e: Employee }) {
+  const { leads, assignments, followUps, assignmentEvents, assignLeads, restoreAssignments } = useCRM();
+  const [sel, setSel] = useState<string[]>([]), [reassign, setReassign] = useState(false), [more, setMore] = useState(false);
+  const mine = leads.filter((l) => assignments[l.id]?.employeeId === e.id);
+  const now = new Date();
+  const pend = followUps.filter((f) => isPending(f) && mine.some((l) => l.id === f.leadId));
+  const stats: [string, number][] = [["Total", mine.length], ["New", mine.filter((l) => l.status === "new").length], ["Contacted", mine.filter((l) => l.status === "contacted").length], ["Qualified", mine.filter((l) => l.status === "qualified").length], ["Follow-ups", new Set(pend.map((f) => f.leadId)).size], ["Overdue", pend.filter((f) => followUpBucket(f, now) === "overdue").length]];
+  const recent = assignmentEvents.filter((x) => x.newAssigneeId === e.id || x.previousAssigneeId === e.id).slice(0, 4);
+  const unassign = () => { const snap = Object.fromEntries(sel.map((id) => [id, assignments[id]])); const r = assignLeads(sel, null, "Team Management"); if (r.ok) toast.success(`${r.changed} lead${r.changed === 1 ? "" : "s"} returned to Owner`, { action: { label: "Undo", onClick: () => restoreAssignments(snap) } }); setSel([]); };
+  return <section className="tm-sec"><div className="flex items-center justify-between gap-2"><h3 className="eyebrow">Assigned leads</h3>{assignable(e) && <Button size="sm" variant="outline" onClick={() => setMore(true)}><UserPlus />Assign more</Button>}</div>
+    <div className="as-stats">{stats.map(([l, v]) => <div key={l}><span className="num text-base font-medium">{v}</span><span className="eyebrow">{l}</span></div>)}</div>
+    {!assignable(e) && mine.length > 0 && <p className="text-xs text-warning">Inactive — review and reassign these leads.</p>}
+    {mine.length ? <ul className="grid gap-1">{mine.map((l) => { const fu = followUps.filter((f) => f.leadId === l.id && isPending(f)).sort((a, b) => a.dueAt.localeCompare(b.dueAt))[0]; return <li key={l.id} className="as-lead">
+      <Checkbox aria-label={`Select ${l.name}`} checked={sel.includes(l.id)} onCheckedChange={(v) => setSel((x) => (v ? [...x, l.id] : x.filter((y) => y !== l.id)))} />
+      <span className="min-w-0 flex-1"><span className="flex items-center gap-1.5 truncate text-sm font-medium">{l.name}<PriorityBadge p={l.priority} /></span><span className="block truncate text-[11px] text-muted-foreground">{l.company ?? "Independent"} · {STAGE_LABEL[l.status]} · {fu ? `next ${formatDateTime(fu.dueAt)}` : "no follow-up"} · since {fmt(assignments[l.id]!.assignedAt)}</span></span>
+      <Link to="/leads/$id" params={{ id: l.id }} aria-label={`Open ${l.name}`} className="topbar-icon"><ArrowUpRight className="size-4" /></Link>
+    </li>; })}</ul> : <p className="text-xs text-muted-foreground">No leads assigned yet.</p>}
+    {sel.length > 0 && <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => setReassign(true)}><Repeat />Reassign {sel.length}</Button><Button size="sm" variant="ghost" onClick={unassign}><UserMinus />Remove assignment</Button></div>}
+    {recent.length > 0 && <div className="mt-1"><div className="eyebrow mb-1">Recent assignments · local demo log</div><ul className="grid gap-0.5">{recent.map((x) => <li key={x.id} className="text-[11px] text-muted-foreground">{leads.find((l) => l.id === x.leadId)?.name ?? "Lead"} — {x.newAssigneeId === e.id ? "assigned" : "moved away"} · {x.source} · {fmt(x.at)}</li>)}</ul></div>}
+    <AssignDialog open={reassign} leadIds={sel} source="Team Management" onClose={() => setReassign(false)} onDone={() => setSel([])} />
+    {more && <PickLeads e={e} onClose={() => setMore(false)} />}
+  </section>;
+}
+
+function PickLeads({ e, onClose }: { e: Employee; onClose: () => void }) {
+  const { leads, assignments, employees, assignLeads, restoreAssignments } = useCRM();
+  const [q, setQ] = useState(""), [sel, setSel] = useState<string[]>([]);
+  const rows = leads.filter((l) => assignments[l.id]?.employeeId !== e.id && `${l.name} ${l.company ?? ""}`.toLowerCase().includes(q.toLowerCase()));
+  return <Dialog open onOpenChange={(o) => !o && onClose()}><DialogContent className="sm:max-w-lg">
+    <DialogHeader><DialogTitle>Assign leads to {e.name}</DialogTitle><DialogDescription>Pick leads. Ones already with someone else will be reassigned.</DialogDescription></DialogHeader>
+    <Input autoFocus aria-label="Find leads" placeholder="Search leads…" value={q} onChange={(x) => setQ(x.target.value)} />
+    <ul className="grid max-h-[45vh] gap-1 overflow-y-auto">{rows.map((l) => { const cur = employees.find((x) => x.id === assignments[l.id]?.employeeId); return <li key={l.id}><label className="as-lead cursor-pointer"><Checkbox checked={sel.includes(l.id)} onCheckedChange={(v) => setSel((x) => (v ? [...x, l.id] : x.filter((y) => y !== l.id)))} /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{l.name}</span><span className="block truncate text-[11px] text-muted-foreground">{l.company ?? "Independent"} · {STAGE_LABEL[l.status]} · {cur ? `with ${cur.name}` : "Owner"}</span></span></label></li>; })}</ul>
+    <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={!sel.length} onClick={() => { const snap = Object.fromEntries(sel.map((id) => [id, assignments[id]])); const r = assignLeads(sel, e.id, "Team Management"); if (!r.ok) { toast.error(r.error); return; } toast.success(`${r.changed} lead${r.changed === 1 ? "" : "s"} assigned to ${e.name}`, { action: { label: "Undo", onClick: () => restoreAssignments(snap) } }); onClose(); }}>Assign {sel.length || ""}</Button></DialogFooter>
   </DialogContent></Dialog>;
 }
