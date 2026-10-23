@@ -53,7 +53,7 @@ const GUARDS: Record<string, Guard> = {
   addLead: ["leads.create", "", "lead.created"],
   updateLead: [((_id: string, patch: object) => (statusOnly(patch) ? ["pipeline.edit", "leads.edit"] : "leads.edit")) as never, false, "lead.updated"],
   deleteLead: ["leads.delete", undefined], wasteLead: ["leads.delete", undefined], restoreLead: ["leads.delete", DENIED], purgeBin: ["leads.delete", undefined], emptyBin: ["leads.delete", undefined],
-  mergeIntoLead: ["leads.edit", false], setQuickStatus: ["leads.edit", undefined],
+  addActivity: ["leads.view", undefined, "client.note_added"], mergeIntoLead: ["leads.edit", false], setQuickStatus: ["leads.edit", undefined],
   addDeal: ["deals.create", undefined], addPayment: ["__finance", false], voidPayment: ["__finance", undefined],
   addFollowUp: ["followups.create", { ok: false, error: DENIED }, "followup.created"], completeFollowUp: ["followups.edit", undefined, "followup.completed"], rescheduleFollowUp: ["followups.edit", undefined],
   logCall: ["clients.calls", { ok: false, error: DENIED }, "call.logged"], undoCall: ["clients.calls", DENIED],
@@ -268,7 +268,7 @@ export const useCRM = create<CRMState>()(
         const { next, events } = applyAssign(st.assignments, [leadId], o.winner.targetEmployeeId, new Date().toISOString(), `Rule: ${o.winner.name}`, false, () => uid("asg"));
         set((s) => ({ assignments: next, assignmentEvents: [...events, ...s.assignmentEvents].slice(0, 500), firedRules: [key, ...s.firedRules].slice(0, 2000) }));
       };
-      return {
+      return guarded<CRMState>({
       ...initialData,
       ...defaultPrefs,
       addLead: (lead) => {
@@ -569,12 +569,12 @@ export const useCRM = create<CRMState>()(
         return n;
       },
       setEmployeeStatus: (id, status) => set((s) => ({ employees: s.employees.map((e) => (e.id === id ? withStatus(e, status, new Date().toISOString()) : e)) })),
-    };
+    });
     },
     {
       name: "scale-flow-crm-2-demo",
       version: 3,
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => guardedStorage),
       skipHydration: true,
       // v3: billing quotations are moved, unchanged, into a read-only backup. Nothing is converted automatically.
       migrate: (persisted, version) => migrateQuotations(persisted as Record<string, unknown>, version) as unknown as CRMState,
