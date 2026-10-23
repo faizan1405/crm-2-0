@@ -50,7 +50,7 @@ describe("applyAssignmentPlan", () => {
   beforeEach(() => {
     localStorage.clear(); s().reset();
     useCRM.setState({ assignments: {}, assignmentEvents: [], employees: [], employeeAccess: {} });
-    for (const n of ["Rahul", "Aman", "Neha", "Gone"]) s().addEmployee({ name: n, email: `${n.toLowerCase()}@x.in`, phone: "", roleId: "sales", department: "", notes: "" } as never);
+    for (const n of ["Rahul", "Aman", "Neha", "Gone"]) s().addEmployee({ name: n, email: `${n.toLowerCase()}@x.in`, roleId: ROLE, accountStatus: "active" });
   });
   const emp = (n: string) => s().employees.find((e) => e.name === n)!.id;
 
@@ -69,7 +69,7 @@ describe("applyAssignmentPlan", () => {
   it("assigned leads appear in that employee's preview scope", () => {
     const sel = s().leads.slice(0, 3).map((l) => l.id);
     s().applyAssignmentPlan(singlePlan(sel, emp("Rahul"), s().assignments), "test");
-    const w = scopeWorkspace(s(), emp("Rahul"), resolve("sales"));
+    const w = scopeWorkspace(s(), emp("Rahul"), resolve(ROLE));
     expect(w.leads.map((l) => l.id).sort()).toEqual([...sel].sort());
   });
 
@@ -93,7 +93,7 @@ describe("rule editor", () => {
   it("editing a rule keeps saved conditions", () => {
     localStorage.clear(); s().reset();
     useCRM.setState({ employees: [], assignmentRules: [] });
-    s().addEmployee({ name: "Rahul", email: "r@x.in", phone: "", roleId: "sales", department: "", notes: "" } as never);
+    s().addEmployee({ name: "Rahul", email: "r@x.in", roleId: ROLE, accountStatus: "active" });
     const t = s().employees[0]!.id;
     s().saveRule({ id: "r1", name: "Meta", trigger: "lead_created", conditions: { source: "Meta Ads" as never, priority: "hot" }, targetEmployeeId: t, enabled: true });
     s().saveRule({ ...s().assignmentRules[0]!, name: "Meta renamed" });
