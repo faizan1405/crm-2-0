@@ -4,6 +4,7 @@
 // scheduler — a future Hostinger scheduler will call the same `planAutomation` contract server-side.
 // Safety: stable idempotency keys (rule + target + signature), cooldowns, automation-origin markers
 // (never re-trigger themselves), no deletion, no money edits, no customer messages.
+import type { Project, ProjectMilestone, ProjectTask, SupportRequest } from "./projects";
 import type { FollowUp, Lead, LeadActivity, LeadPriority, LeadSource, LeadStatus } from "./types";
 import type { Assignment } from "./access";
 import { stageSince, daysIn } from "./pipeline";
@@ -45,14 +46,26 @@ export function lastActivityAt(lead: Lead, activities: LeadActivity[]): string {
 
 /* ---------- rule model ---------- */
 
-export type TriggerType = "lead_created" | "lead_assigned" | "lead_updated" | "stage_changed" | "followup_created" | "followup_overdue" | "followup_completed" | "call_logged" | "deal_won" | "inactivity";
+export type LeadTrigger = "lead_created" | "lead_assigned" | "lead_updated" | "stage_changed" | "followup_created" | "followup_overdue" | "followup_completed" | "call_logged" | "deal_won" | "inactivity";
+/** Project Desk triggers. "Event" triggers react to a recorded change; "time" triggers are re-checked on every evaluation. */
+export type ProjectTrigger = "project_created" | "project_stage_changed" | "task_completed" | "milestone_completed" | "task_overdue" | "project_due_soon" | "project_delivered" | "support_created" | "support_ending";
+export type TriggerType = LeadTrigger | ProjectTrigger;
+export type RuleSubject = "lead" | "project";
+export const PROJECT_TRIGGERS: ProjectTrigger[] = ["project_created", "project_stage_changed", "task_completed", "milestone_completed", "task_overdue", "project_due_soon", "project_delivered", "support_created", "support_ending"];
+export const LEAD_TRIGGERS: LeadTrigger[] = ["lead_created", "lead_assigned", "lead_updated", "stage_changed", "followup_created", "followup_overdue", "followup_completed", "call_logged", "deal_won", "inactivity"];
+export const TRIGGER_KIND: Record<ProjectTrigger, "event" | "time"> = { project_created: "event", project_stage_changed: "event", task_completed: "event", milestone_completed: "event", project_delivered: "event", support_created: "event", task_overdue: "time", project_due_soon: "time", support_ending: "time" };
+export const isProjectTrigger = (t: TriggerType): t is ProjectTrigger => (PROJECT_TRIGGERS as string[]).includes(t);
 export const TRIGGER_LABEL: Record<TriggerType, string> = {
   lead_created: "Lead created", lead_assigned: "Lead assigned", lead_updated: "Lead updated", stage_changed: "Pipeline stage changed",
   followup_created: "Follow-up created", followup_overdue: "Follow-up overdue", followup_completed: "Follow-up completed", call_logged: "Call logged",
   deal_won: "Deal marked Won", inactivity: "Time since last recorded activity",
+  project_created: "Project created", project_stage_changed: "Project stage changed", task_completed: "Project task completed", milestone_completed: "Milestone completed",
+  task_overdue: "Project task overdue", project_due_soon: "Project due date approaching", project_delivered: "Project delivered", support_created: "Support request created", support_ending: "Support end date approaching",
 };
-export type ActionType = "reminder" | "notify" | "flag" | "followup" | "activity" | "owner_review";
-export const ACTION_LABEL: Record<ActionType, string> = { reminder: "Create internal reminder", notify: "Generate CRM notification", flag: "Flag lead for attention", followup: "Create a follow-up", activity: "Add activity entry", owner_review: "Request Owner review" };
+export type ActionType = "reminder" | "notify" | "flag" | "followup" | "activity" | "owner_review" | "task";
+export const ACTION_LABEL: Record<ActionType, string> = { reminder: "Create internal reminder", notify: "Generate CRM notification", flag: "Flag for attention", followup: "Create a follow-up", activity: "Add activity entry", owner_review: "Request Owner review", task: "Create a project task" };
+/** Actions offered per subject. Project rules never message clients, change money or mark delivery. */
+export const ACTIONS_FOR: Record<RuleSubject, ActionType[]> = { lead: ["reminder", "notify", "flag", "followup", "activity", "owner_review"], project: ["reminder", "notify", "flag", "owner_review", "activity", "task"] };
 export type RuleStatus = "draft" | "enabled" | "paused" | "archived";
 
 export interface RuleConditions {
@@ -64,22 +77,30 @@ export interface RuleConditions {
   followupStatus?: "any" | "pending" | "overdue" | "completed";
   /** Phase 3G: custom field / tag conditions (Saved View condition shape). All must match. */
   custom?: { id: string; field: string; op: string; value?: unknown }[];
+  /** How `custom` conditions combine. Missing = "and" (every rule saved before Phase 3G.1.1). */
+  customMode?: "and" | "or";
 }
-export interface RuleSettings { overdueMinutes?: number; cooldownHours: number; escalateOwnerAfterMinutes?: number; followupInHours?: number; windowHours?: number }
+export interface RuleSettings { overdueMinutes?: number; cooldownHours: number; escalateOwnerAfterMinutes?: number; followupInHours?: number; windowHours?: number; withinDays?: number; taskTitle?: string; taskDueInDays?: number }
 export interface AutomationRule {
   id: string; name: string; description: string; templateId?: string;
   status: RuleStatus; trigger: TriggerType; conditions: RuleConditions; actions: ActionType[]; settings: RuleSettings;
+  /** Missing = "lead". Project rules evaluate Project Desk records with the same planner, keys and cooldowns. */
+  subject?: RuleSubject;
+  /** Set when the rule was paused automatically because a field/tag it relies on was archived. */
+  pausedReason?: string;
   createdAt: string; updatedAt: string; version: number; lastEvaluatedAt?: string; lastTriggeredAt?: string;
 }
 export type ReminderStatus = "open" | "done" | "dismissed" | "resolved";
 export interface Reminder {
   id: string; key: string; ruleId: string; ruleName: string; leadId: string; employeeId: string | null;
+  /** Set for Project rules. `leadId` is then the project's linked lead, or "". */
+  projectId?: string; taskId?: string;
   reason: string; dueAt: string; importance: "normal" | "high"; status: ReminderStatus; createdAt: string; closedAt?: string;
-  flag: boolean; ownerReview: boolean; escalated?: boolean; followUpId?: string; resolveWhen?: "contact" | "activity" | "followup_done" | "never";
+  flag: boolean; ownerReview: boolean; escalated?: boolean; followUpId?: string; resolveWhen?: "contact" | "activity" | "followup_done" | "task_done" | "delivered" | "never";
   origin: "automation"; history?: { at: string; text: string }[];
 }
 export type RunOutcome = "evaluated" | "triggered" | "skipped" | "failed" | "disabled";
-export interface AutomationRun { id: string; ruleId: string; ruleName: string; at: string; outcome: RunOutcome; leadId?: string; actions: string[]; skippedDuplicates: number; matched: number; error?: string; manual: boolean }
+export interface AutomationRun { id: string; ruleId: string; ruleName: string; at: string; outcome: RunOutcome; leadId?: string; projectId?: string; actions: string[]; skippedDuplicates: number; matched: number; error?: string; manual: boolean }
 export interface AutomationSettings { autoEvaluate: boolean; maxActionsPerRun: number; bulkConfirmThreshold: number; notifyOwnerOnEscalation: boolean }
 export const DEFAULT_AUTOMATION_SETTINGS: AutomationSettings = { autoEvaluate: true, maxActionsPerRun: 200, bulkConfirmThreshold: 20, notifyOwnerOnEscalation: true };
 
@@ -94,8 +115,17 @@ export const RULE_TEMPLATES: (Tpl & { templateId: string })[] = [
   { templateId: "tpl_assigned", name: "Newly assigned leads", description: "One summary reminder per employee for leads assigned recently.", trigger: "lead_assigned", conditions: { assigned: "assigned" }, actions: ["reminder"], settings: { cooldownHours: 24, windowHours: 24 } },
   { templateId: "tpl_won", name: "Won deal handoff", description: "Offer a project handoff checklist when a deal is won. The sales record is unchanged.", trigger: "deal_won", conditions: { stages: ["won"] }, actions: ["reminder", "owner_review"], settings: { cooldownHours: 24 * 365 } },
 ];
+/** Project templates — added disabled, like every template. */
+export const PROJECT_RULE_TEMPLATES: (Tpl & { templateId: string })[] = [
+  { templateId: "ptpl_overdue_task", subject: "project", name: "Overdue project task", description: "A project task is past its due date. The task is never changed.", trigger: "task_overdue", conditions: {}, actions: ["reminder", "flag"], settings: { cooldownHours: 24 } },
+  { templateId: "ptpl_due_soon", subject: "project", name: "Delivery date approaching", description: "Target delivery is within the set days and the project isn't delivered.", trigger: "project_due_soon", conditions: {}, actions: ["reminder", "owner_review"], settings: { cooldownHours: 72, withinDays: 3 } },
+  { templateId: "ptpl_waiting_content", subject: "project", name: "Waiting on client content", description: "Project is in Awaiting content — remind the project owner to chase the client.", trigger: "project_stage_changed", conditions: { custom: [{ id: "c_stage", field: "p.stage", op: "is", value: ["awaiting_content"] }] }, actions: ["reminder"], settings: { cooldownHours: 72 } },
+  { templateId: "ptpl_support_ending", subject: "project", name: "Support ending soon", description: "The support period ends within the set days.", trigger: "support_ending", conditions: {}, actions: ["reminder", "notify"], settings: { cooldownHours: 24 * 7, withinDays: 14 } },
+  { templateId: "ptpl_support_request", subject: "project", name: "New support request", description: "A support request was opened — remind the project owner.", trigger: "support_created", conditions: {}, actions: ["reminder"], settings: { cooldownHours: 24 } },
+  { templateId: "ptpl_delivered", subject: "project", name: "Delivered — check handover", description: "A project was delivered. Adds a handover check task; payment status is never changed.", trigger: "project_delivered", conditions: {}, actions: ["reminder", "task"], settings: { cooldownHours: 24 * 365, taskTitle: "Confirm handover and support details with the client" } },
+];
 export function ruleFromTemplate(tplId: string, id: string, at: string): AutomationRule | undefined {
-  const t = RULE_TEMPLATES.find((x) => x.templateId === tplId);
+  const t = [...RULE_TEMPLATES, ...PROJECT_RULE_TEMPLATES].find((x) => x.templateId === tplId);
   return t ? { ...structuredClone(t), id, status: "draft", createdAt: at, updatedAt: at, version: 1 } : undefined;
 }
 
@@ -110,6 +140,11 @@ export function ruleError(r: Pick<AutomationRule, "name" | "trigger" | "actions"
   if (![c.minCreatedMinutes, c.minSinceAttemptMinutes, c.minStageDays, c.minInactiveHours, r.settings.overdueMinutes, r.settings.escalateOwnerAfterMinutes, r.settings.followupInHours].every(n)) return "Times must be zero or more.";
   if (r.actions.includes("followup") && !(r.settings.followupInHours && r.settings.followupInHours > 0)) return "Set when the automatic follow-up should be due.";
   if (r.trigger === "deal_won" && c.stages && c.stages.some((s) => s !== "won")) return "A Won-deal rule can only match the Won stage.";
+  const subject = (r as { subject?: RuleSubject }).subject ?? "lead";
+  if (subject === "project" !== isProjectTrigger(r.trigger)) return subject === "project" ? "Choose a Project trigger for a Project rule." : "Choose a Lead trigger for a Lead rule.";
+  if (r.actions.some((a) => !ACTIONS_FOR[subject].includes(a))) return `“${ACTION_LABEL[r.actions.find((a) => !ACTIONS_FOR[subject].includes(a))!]}” isn't available for ${subject} rules.`;
+  if (r.actions.includes("task") && !r.settings.taskTitle?.trim()) return "Name the task this rule creates.";
+  if ((r.trigger === "project_due_soon" || r.trigger === "support_ending") && !(r.settings.withinDays !== undefined && r.settings.withinDays >= 0)) return "Set how many days ahead to look.";
   return null;
 }
 /** Enabled rules that would act on the same leads in contradictory or repeated ways. */
@@ -117,7 +152,7 @@ export function ruleConflicts(rule: AutomationRule, rules: AutomationRule[]): st
   const out: string[] = [];
   for (const o of rules) {
     if (o.id === rule.id || o.status !== "enabled") continue;
-    if (o.trigger !== rule.trigger) continue;
+    if (o.trigger !== rule.trigger || (o.subject ?? "lead") !== (rule.subject ?? "lead")) continue;
     const same = JSON.stringify(o.conditions) === JSON.stringify(rule.conditions);
     if (same) out.push(`"${o.name}" already uses the same trigger and conditions — reminders would double up.`);
     else if (o.actions.includes("followup") && rule.actions.includes("followup")) out.push(`"${o.name}" also creates follow-ups for this trigger. Only one follow-up per lead can be active, so the second is skipped.`);
@@ -131,9 +166,12 @@ export interface EvalCtx {
   leads: Lead[]; activities: LeadActivity[]; followUps: FollowUp[]; assignments: Record<string, Assignment>;
   inboxMeta: Record<string, { reviewedAt?: string }>; now: Date;
   /** Evaluates `conditions.custom` (custom fields / tags). Without it, custom conditions match nothing. */
-  customMatch?: (lead: Lead, conditions: NonNullable<RuleConditions["custom"]>) => boolean;
+  customMatch?: (lead: Lead, conditions: NonNullable<RuleConditions["custom"]>, mode?: "and" | "or") => boolean;
+  /** Project Desk records for Project rules (absent → Project rules match nothing). */
+  projects?: Project[]; projectTasks?: ProjectTask[]; projectMilestones?: ProjectMilestone[]; supportRequests?: SupportRequest[];
+  projectMatch?: (p: Project, conditions: NonNullable<RuleConditions["custom"]>, mode?: "and" | "or") => boolean;
 }
-export interface Match { leadId: string; employeeId: string | null; target: string; signature: string; reason: string; dueAt: string; resolveWhen: Reminder["resolveWhen"]; escalate: boolean }
+export interface Match { projectId?: string; taskId?: string; leadId: string; employeeId: string | null; target: string; signature: string; reason: string; dueAt: string; resolveWhen: Reminder["resolveWhen"]; escalate: boolean }
 
 const ago = (iso: string | undefined, now: Date) => (iso ? now.getTime() - new Date(iso).getTime() : Infinity);
 function leadPasses(l: Lead, c: RuleConditions, x: EvalCtx, contact: ContactState): boolean {
@@ -152,13 +190,15 @@ function leadPasses(l: Lead, c: RuleConditions, x: EvalCtx, contact: ContactStat
   if (c.minSinceAttemptMinutes !== undefined && ago(lastAttemptAt(l.id, x.activities), x.now) < c.minSinceAttemptMinutes * MIN) return false;
   if (c.minStageDays !== undefined) { const d = daysIn(stageSince(l, x.activities) ?? l.createdAt, x.now); if (d === null || d < c.minStageDays) return false; }
   if (c.minInactiveHours !== undefined && ago(lastActivityAt(l, x.activities), x.now) < c.minInactiveHours * HOUR) return false;
-  if (c.custom?.length && !(x.customMatch && x.customMatch(l, c.custom))) return false;
+  if (c.custom?.length && !(x.customMatch && x.customMatch(l, c.custom, c.customMode))) return false;
   return true;
 }
 const fmt = (ms: number) => (ms >= DAY ? `${Math.floor(ms / DAY)}d` : ms >= HOUR ? `${Math.floor(ms / HOUR)}h` : `${Math.max(1, Math.floor(ms / MIN))}m`);
 
 /** Pure: which leads/records match this rule right now, with stable targets for idempotency. */
 export function evaluateRule(rule: AutomationRule, x: EvalCtx): Match[] {
+  if ((rule.subject ?? "lead") === "project") return evaluateProjectRule(rule, x);
+  if (isProjectTrigger(rule.trigger)) return [];
   const out: Match[] = [];
   const nowIso = x.now.toISOString();
   const esc = (sinceMs: number) => rule.settings.escalateOwnerAfterMinutes !== undefined && sinceMs >= rule.settings.escalateOwnerAfterMinutes * MIN;
@@ -218,6 +258,62 @@ export function evaluateRule(rule: AutomationRule, x: EvalCtx): Match[] {
   return out;
 }
 
+/** Project rules. Event triggers only see changes recorded after the rule was created, so enabling a rule never floods
+ *  reminders for old history; time triggers re-check current dates on every evaluation. */
+function evaluateProjectRule(rule: AutomationRule, x: EvalCtx): Match[] {
+  const out: Match[] = [];
+  const projects = (x.projects ?? []).filter((p) => !p.archived && p.status !== "cancelled");
+  const tasks = x.projectTasks ?? [], ms = x.projectMilestones ?? [], reqs = x.supportRequests ?? [];
+  const today = x.now.toISOString().slice(0, 10), nowIso = x.now.toISOString();
+  const since = rule.createdAt || "";
+  const c = rule.conditions;
+  const passes = (p: Project) => !c.custom?.length || !!(x.projectMatch && x.projectMatch(p, c.custom, c.customMode));
+  const resp = (p: Project) => (p.ownerId && p.ownerId !== "owner" ? p.ownerId : null);
+  const days = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
+  const esc = (ms_: number) => rule.settings.escalateOwnerAfterMinutes !== undefined && ms_ >= rule.settings.escalateOwnerAfterMinutes * MIN;
+  const push = (p: Project, m: Omit<Match, "leadId" | "employeeId" | "dueAt" | "projectId"> & { employeeId?: string | null }) =>
+    out.push({ leadId: p.leadId ?? "", projectId: p.id, employeeId: m.employeeId === undefined ? resp(p) : m.employeeId, dueAt: nowIso, ...m });
+  const within = rule.settings.withinDays ?? 0;
+  for (const p of projects) {
+    if (!passes(p)) continue;
+    switch (rule.trigger) {
+      case "project_created": if (p.createdAt >= since) push(p, { target: `prj:${p.id}`, signature: "created", reason: `New project “${p.name}” for ${p.clientName}.`, resolveWhen: "never", escalate: false }); break;
+      case "project_stage_changed": {
+        const last = [...p.history].reverse().find((h) => h.change.startsWith("Stage"));
+        const at = last?.at ?? p.createdAt;
+        if (at >= since || c.custom?.some((k) => k.field === "p.stage")) push(p, { target: `prj:${p.id}`, signature: `${p.stage}@${at}`, reason: `“${p.name}” is in ${p.stage.replace(/_/g, " ")}.`, resolveWhen: "never", escalate: esc(ago(at, x.now)) });
+        break;
+      }
+      case "task_completed": for (const t of tasks) if (t.projectId === p.id && t.status === "done" && t.completedAt && t.completedAt >= since) push(p, { target: `task:${t.id}`, taskId: t.id, signature: t.completedAt, reason: `Task “${t.title}” on “${p.name}” was completed — review the next step.`, resolveWhen: "never", escalate: false }); break;
+      case "milestone_completed": for (const m of ms) {
+        if (m.projectId !== p.id) continue;
+        const mt = tasks.filter((t) => t.milestoneId === m.id); if (!mt.length || mt.some((t) => t.status !== "done")) continue;
+        const doneAt = mt.map((t) => t.completedAt ?? "").sort().pop() ?? "";
+        if (doneAt >= since) push(p, { target: `ms:${m.id}`, signature: doneAt, reason: `Milestone “${m.title}” on “${p.name}” is complete.`, resolveWhen: "never", escalate: false });
+      } break;
+      case "task_overdue": for (const t of tasks) {
+        if (t.projectId !== p.id || t.status !== "open" || !t.dueDate || t.dueDate >= today) continue;
+        push(p, { target: `task:${t.id}`, taskId: t.id, signature: t.dueDate, employeeId: t.assigneeId && t.assigneeId !== "owner" ? t.assigneeId : resp(p), reason: `Task “${t.title}” on “${p.name}” is ${days(t.dueDate, today)} day(s) overdue.`, resolveWhen: "task_done", escalate: esc(ago(`${t.dueDate}T23:59:59Z`, x.now)) });
+      } break;
+      case "project_due_soon": {
+        if (p.delivery || !p.targetDelivery) break;
+        const d = days(today, p.targetDelivery);
+        if (d <= within) push(p, { target: `prj:${p.id}`, signature: p.targetDelivery, reason: d < 0 ? `“${p.name}” passed its target delivery (${p.targetDelivery}).` : `“${p.name}” is due in ${d} day(s) (${p.targetDelivery}).`, resolveWhen: "delivered", escalate: d < 0 });
+        break;
+      }
+      case "project_delivered": if (p.delivery && p.delivery.date >= since.slice(0, 10)) push(p, { target: `prj:${p.id}`, signature: `delivered@${p.delivery.date}`, reason: `“${p.name}” was delivered on ${p.delivery.date}.`, resolveWhen: "never", escalate: false }); break;
+      case "support_created": for (const r of reqs) if (r.projectId === p.id && r.createdAt >= since && (r.status === "open" || r.status === "in_progress")) push(p, { target: `sr:${r.id}`, signature: r.createdAt, employeeId: r.assigneeId && r.assigneeId !== "owner" ? r.assigneeId : resp(p), reason: `Support request “${r.title}” opened on “${p.name}”.`, resolveWhen: "never", escalate: r.priority === "high" && esc(ago(r.createdAt, x.now)) }); break;
+      case "support_ending": {
+        const s = p.support; if (!s.included || !s.start || !s.end || s.start > today || s.end < today) break;
+        const d = days(today, s.end);
+        if (d <= within) push(p, { target: `prj:${p.id}`, signature: `support@${s.end}`, reason: `Support for “${p.name}” ends in ${d} day(s) (${s.end}).`, resolveWhen: "never", escalate: false });
+        break;
+      }
+    }
+  }
+  return out;
+}
+
 export const reminderKey = (ruleId: string, m: Pick<Match, "target" | "signature">) => `${ruleId}|${m.target}|${m.signature}`;
 
 export interface PlannedReminder extends Omit<Reminder, "id"> { followUpDueAt?: string }
@@ -238,8 +334,8 @@ export function planRule(rule: AutomationRule, x: EvalCtx, existing: Reminder[])
     if (last && ago(last, x.now) < rule.settings.cooldownHours * HOUR) { plan.cooldown++; continue; }
     keys.add(key);
     const wantsFu = rule.actions.includes("followup") && rule.settings.followupInHours;
-    plan.create.push({ key, ruleId: rule.id, ruleName: rule.name, leadId: m.leadId, employeeId: m.employeeId, reason: m.reason, dueAt: m.dueAt, importance: m.escalate ? "high" : "normal", status: "open", createdAt: at, flag: rule.actions.includes("flag"), ownerReview: rule.actions.includes("owner_review") || m.escalate, escalated: m.escalate, resolveWhen: m.resolveWhen ?? "never", origin: "automation", ...(wantsFu ? { followUpDueAt: new Date(x.now.getTime() + rule.settings.followupInHours! * HOUR).toISOString() } : {}) });
-    if (m.escalate) plan.escalations.push(m.leadId);
+    plan.create.push({ key, ruleId: rule.id, ruleName: rule.name, leadId: m.leadId, ...(m.projectId ? { projectId: m.projectId } : {}), ...(m.taskId ? { taskId: m.taskId } : {}), employeeId: m.employeeId, reason: m.reason, dueAt: m.dueAt, importance: m.escalate ? "high" : "normal", status: "open", createdAt: at, flag: rule.actions.includes("flag"), ownerReview: rule.actions.includes("owner_review") || m.escalate, escalated: m.escalate, resolveWhen: m.resolveWhen ?? "never", origin: "automation", ...(wantsFu ? { followUpDueAt: new Date(x.now.getTime() + rule.settings.followupInHours! * HOUR).toISOString() } : {}) });
+    if (m.escalate) plan.escalations.push(m.projectId ?? m.leadId);
     if (m.employeeId && !plan.affectedEmployees.includes(m.employeeId)) plan.affectedEmployees.push(m.employeeId);
   }
   return plan;
@@ -251,6 +347,15 @@ export function reconcileReminders(reminders: Reminder[], x: EvalCtx): { next: R
   const at = x.now.toISOString(); let changed = 0;
   const next = reminders.map((r) => {
     if (r.status !== "open") return r;
+    if (r.projectId) {
+      const close = (text: string): Reminder => { changed++; return { ...r, status: "resolved", closedAt: at, history: [...(r.history ?? []), { at, text }] }; };
+      const p = (x.projects ?? []).find((y) => y.id === r.projectId);
+      if (!x.projects) return r; // no project data in this context — leave untouched
+      if (!p || p.archived || p.status === "cancelled") return close("Project no longer active");
+      if (r.resolveWhen === "task_done") { const t = (x.projectTasks ?? []).find((y) => y.id === r.taskId); if (!t || t.status === "done") return close("Task completed"); }
+      if (r.resolveWhen === "delivered" && p.delivery) return close("Project delivered");
+      return r;
+    }
     const l = leads.get(r.leadId);
     const close = (text: string): Reminder => { changed++; return { ...r, status: "resolved", closedAt: at, history: [...(r.history ?? []), { at, text }] }; };
     if (!l) return close("Lead no longer active");
