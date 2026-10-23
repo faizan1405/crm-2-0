@@ -267,8 +267,9 @@ describe("data vault and migration", () => {
     s().addPayment({ dealId: DEAL.id, amount: 4000, date: "2026-10-20", method: "UPI", type: "advance" });
     s().addSupportRequest({ projectId: id, kind: "general", title: "Help", priority: "normal", assigneeId: null });
     expect(CATEGORIES.find((c) => c.id === "projects")!.keys).toEqual(["projects", "projectTasks", "projectMilestones", "projectTemplates", "supportRequests"]);
-    const r = await buildBackup({ type: "full", categories: ALL_CATEGORY_IDS }, s() as never, []);
-    const files = unzipSync(r.zip);
+    const st = Object.fromEntries(Object.entries(s()).filter(([, v]) => typeof v !== "function"));
+    const r = await buildBackup({ type: "full", categories: ALL_CATEGORY_IDS }, st, []);
+    const files = unzipSync(r.bytes);
     const data = JSON.parse(strFromU8(files["data/projects.json"]!));
     expect(data.projects[0].dealId).toBe(DEAL.id);
     expect(data.projectTasks.length).toBe(tpl.tasks.length);
