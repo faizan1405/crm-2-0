@@ -29,3 +29,6 @@ No backend, authentication service, AI service or notification delivery was conf
 - Implement `BackupService` (`vault.ts`) server-side; every backup/export/restore endpoint is Owner-only, verified from the session; no override can grant it.
 - Keep archive format v1 (manifest + checksums + data/*.json + files/payment-proofs). Restore: validate → preview → Owner confirm → pre-restore snapshot → conflict handling → rollback.
 - Configure Hostinger scheduled DB + private-file backups with retention and restore drills; don't assume hosting backups include proofs.
+
+## Employee workspace (Phase 3B.6)
+Preview actions emit `CrmEvent` objects (`session.ts`: lead.created/updated, call.logged, followup.created/completed, pipeline.stage_changed, client.note_added, lead.assigned) with actorId/timestamp/resource/change into a preview-only sink. Production: replace `previewSink` with an authenticated API that persists, broadcasts and notifies; enforce the same `GUARDS` permissions server-side; store employee notes with the owner employee id.
