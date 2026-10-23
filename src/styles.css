@@ -750,3 +750,38 @@ button.ph-chip:hover { background: var(--primary-soft); color: var(--primary); }
 @keyframes pipe-pop { from { transform: scale(.8); opacity: .4; } }
 @keyframes pipe-land { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--lime) 80%, transparent); } 100% { box-shadow: 0 0 0 10px transparent; } }
 @media (prefers-reduced-motion: reduce) { .pipe-inspector, .pipe-scrim, .pipe-count, .pipe-ticket.is-moved, .pipe-drop { animation: none !important; } .pipe-hover { transition: none !important; } }
+
+/* ── Personal Notes (Phase 2D) ── */
+.notes-ws { display: grid; gap: 20px; align-items: start; }
+@media (min-width: 1024px) { .notes-ws { grid-template-columns: 300px minmax(0, 1fr); } .notes-lib { position: sticky; top: 88px; max-height: calc(100vh - 110px); overflow-y: auto; } }
+@media (min-width: 1280px) { .notes-ws { grid-template-columns: 340px minmax(0, 1fr); } }
+.notes-lib { min-width: 0; }
+.notes-item { display: grid; gap: 4px; width: 100%; text-align: left; padding: 12px 14px; border-radius: 12px; border: 1px solid transparent; transition: background 140ms ease, border-color 140ms ease; }
+.notes-item:hover { background: var(--secondary); }
+.notes-item[aria-current="true"] { background: var(--card); border-color: var(--border); box-shadow: inset 3px 0 0 var(--lime), var(--shadow-card, 0 1px 2px oklch(0 0 0 / 6%)); }
+.notes-pane { min-width: 0; display: grid; gap: 10px; align-content: start; background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 18px 22px 28px; min-height: 60vh; }
+@media (max-width: 640px) { .notes-pane { padding: 12px 14px 24px; border-radius: 14px; } }
+.notes-title { width: 100%; background: transparent; border: 0; outline: none; font-size: 26px; font-weight: 600; letter-spacing: -0.02em; color: var(--foreground); padding: 2px 0; }
+.notes-title::placeholder { color: var(--muted-foreground); }
+.notes-save { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted-foreground); }
+.notes-toolbar { position: sticky; top: 64px; z-index: 5; display: flex; flex-wrap: wrap; gap: 2px; padding: 4px; border: 1px solid var(--border); border-radius: 12px; background: color-mix(in oklab, var(--card) 92%, transparent); backdrop-filter: blur(8px); }
+.notes-toolbar button { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 9px; color: var(--muted-foreground); transition: background 120ms ease, color 120ms ease; }
+.notes-toolbar button svg { width: 16px; height: 16px; }
+.notes-toolbar button:hover:not(:disabled) { background: var(--secondary); color: var(--foreground); }
+.notes-toolbar button[aria-pressed="true"] { background: var(--foreground); color: var(--background); }
+.notes-toolbar button:disabled { opacity: 0.35; }
+.notes-body { min-height: 320px; }
+.note-prose { outline: none; min-height: 320px; font-size: 15px; line-height: 1.75; color: var(--foreground); padding-top: 6px; }
+.note-prose > * + * { margin-top: 0.5em; }
+.note-prose p:empty::before, .note-prose p.is-empty:first-child::before { content: ""; }
+.note-prose ul:not([data-type="taskList"]) { list-style: disc; padding-left: 1.4em; }
+.note-prose ol { list-style: decimal; padding-left: 1.6em; }
+.note-prose li::marker { color: var(--muted-foreground); }
+.note-prose li > p { margin: 0; }
+.note-prose ul[data-type="taskList"] { list-style: none; padding: 0; }
+.note-prose ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 10px; padding: 2px 0; }
+.note-prose ul[data-type="taskList"] li > label { flex-shrink: 0; margin-top: 4px; display: grid; place-items: center; min-width: 22px; min-height: 22px; cursor: pointer; }
+.note-prose ul[data-type="taskList"] li > label input { width: 18px; height: 18px; accent-color: var(--foreground); cursor: pointer; }
+.note-prose ul[data-type="taskList"] li > div { flex: 1; min-width: 0; }
+.note-prose ul[data-type="taskList"] li[data-checked="true"] > div { color: var(--muted-foreground); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--muted-foreground) 60%, transparent); }
+.note-prose strong { font-weight: 650; }
