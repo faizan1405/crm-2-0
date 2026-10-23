@@ -19,6 +19,7 @@ import { Route as FollowUpsRouteImport } from './routes/follow-ups'
 import { Route as InboxRouteImport } from './routes/inbox'
 import { Route as LeadsRouteImport } from './routes/leads'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as MyPerformanceRouteImport } from './routes/my-performance'
 import { Route as NotesRouteImport } from './routes/notes'
 import { Route as PipelineRouteImport } from './routes/pipeline'
 import { Route as SalesStudioRouteImport } from './routes/sales-studio'
@@ -79,6 +80,11 @@ const LeadsRoute = LeadsRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MyPerformanceRoute = MyPerformanceRouteImport.update({
+  id: '/my-performance',
+  path: '/my-performance',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NotesRoute = NotesRouteImport.update({
@@ -148,6 +154,7 @@ export interface FileRoutesByFullPath {
   '/inbox': typeof InboxRoute
   '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
+  '/my-performance': typeof MyPerformanceRoute
   '/notes': typeof NotesRoute
   '/pipeline': typeof PipelineRoute
   '/sales-studio': typeof SalesStudioRoute
@@ -171,6 +178,7 @@ export interface FileRoutesByTo {
   '/inbox': typeof InboxRoute
   '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
+  '/my-performance': typeof MyPerformanceRoute
   '/notes': typeof NotesRoute
   '/pipeline': typeof PipelineRoute
   '/sales-studio': typeof SalesStudioRoute
@@ -195,6 +203,7 @@ export interface FileRoutesById {
   '/inbox': typeof InboxRoute
   '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
+  '/my-performance': typeof MyPerformanceRoute
   '/notes': typeof NotesRoute
   '/pipeline': typeof PipelineRoute
   '/sales-studio': typeof SalesStudioRoute
@@ -220,6 +229,7 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/leads'
     | '/login'
+    | '/my-performance'
     | '/notes'
     | '/pipeline'
     | '/sales-studio'
@@ -243,6 +253,7 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/leads'
     | '/login'
+    | '/my-performance'
     | '/notes'
     | '/pipeline'
     | '/sales-studio'
@@ -266,6 +277,7 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/leads'
     | '/login'
+    | '/my-performance'
     | '/notes'
     | '/pipeline'
     | '/sales-studio'
@@ -290,6 +302,7 @@ export interface RootRouteChildren {
   InboxRoute: typeof InboxRoute
   LeadsRoute: typeof LeadsRoute
   LoginRoute: typeof LoginRoute
+  MyPerformanceRoute: typeof MyPerformanceRoute
   NotesRoute: typeof NotesRoute
   PipelineRoute: typeof PipelineRoute
   SalesStudioRoute: typeof SalesStudioRoute
@@ -373,6 +386,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/my-performance': {
+      id: '/my-performance'
+      path: '/my-performance'
+      fullPath: '/my-performance'
+      preLoaderRoute: typeof MyPerformanceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/notes': {
@@ -466,6 +486,7 @@ const rootRouteChildren: RootRouteChildren = {
   InboxRoute: InboxRoute,
   LeadsRoute: LeadsRoute,
   LoginRoute: LoginRoute,
+  MyPerformanceRoute: MyPerformanceRoute,
   NotesRoute: NotesRoute,
   PipelineRoute: PipelineRoute,
   SalesStudioRoute: SalesStudioRoute,
