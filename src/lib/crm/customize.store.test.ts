@@ -132,8 +132,11 @@ describe("automation with custom fields", () => {
     s().setCustomFieldStatus("cf_service", "archived");
     const r = s().runAutomations({ manual: true });
     expect(r.created).toBe(0);
-    expect(s().automationRuns[0]!.outcome).toBe("failed");
-    expect(s().automationRuns[0]!.error).toMatch(/Not run/);
+    // Archiving pauses the rule instead of silently changing its meaning; it never runs while paused.
+    expect(s().automationRules[0]!.status).toBe("paused");
+    expect(s().automationRules[0]!.pausedReason).toMatch(/archived/);
+    expect(s().automationRuns[0]!.outcome).toBe("disabled");
+    expect(s().setAutomationStatus("r1", "enabled")).toMatch(/archived/);
   });
 });
 
