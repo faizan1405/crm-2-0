@@ -305,11 +305,9 @@ export function reportError(r: Pick<ReportDef, "name" | "source" | "metric" | "g
     if (r.source !== "leads") return "Custom fields can only group Lead reports.";
     const f = fields.find((x) => x.id === r.groupBy.slice(3));
     if (!f) return "That custom field no longer exists.";
-    if (f.type !== "select" && f.type !== "multi" && f.type !== "checkbox") return "Only choice fields (single or multiple choice, yes/no) can group a report.";
-    if (f.visibility === "owner" && false) return null;
+    if (f.type !== "select" && f.type !== "multiselect" && f.type !== "checkbox") return "Only choice fields (single or multiple choice, yes/no) can group a report.";
   } else if (!REPORT_DIMS[r.source].some((d) => d.id === r.groupBy)) return "That grouping doesn't apply to this data source.";
   if (r.source === "deals" && r.metric === "outstanding" && (r.groupBy === "month" || r.groupBy === "method")) return "Outstanding is a balance as of today — it can't be split by month or payment method.";
-  if (r.source === "deals" && r.metric === "received" && r.groupBy === "status") return null;
   if (r.source === "deals" && r.groupBy === "method" && r.metric !== "received") return "Payment method only applies to Payments received.";
   return null;
 }
