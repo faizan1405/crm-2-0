@@ -45,7 +45,8 @@ import type { PlanItem, SkipReason } from "./bulk";
 import { buildEmployee, employeeError, withStatus, type AccountStatus, type Employee, type EmployeeInput } from "./team";
 import { builtInTemplates, DEFAULT_DEMO_CATEGORIES, quotationTemplateError, safeUrl, type BusinessProfile, type Demo, type LegacyQuotation, type QuotationShare, type QuotationTemplate, type WaTemplate } from "./studio";
 import { activePreview, allows, previewSink, type CrmEventType } from "./session";
-import { pairKey, type InboxMeta, type LeadRelation, type RelationKind } from "./inbox";
+import { DEFAULT_AUTOMATION_SETTINGS, planRule, reconcileReminders, ruleError as automationRuleError, ruleFromTemplate, type AutomationRule, type AutomationRun, type AutomationSettings, type Reminder, type RuleStatus } from "./automation";
+import { pairKey, pairSignature, type InboxMeta, type LeadRelation, type RelationKind } from "./inbox";
 import { deriveEvents, mergeEvents, markRead, markAllRead, DEFAULT_NOTIFY_PREFS, EMPTY_READS, OWNER_ACTOR_ID, type ActivityEvent, type EventSnap, type NotifyPrefs, type ReadState } from "./activity";
 
 // ---- Preview guards: every action is checked against the previewed employee's permissions (Owner: always allowed). ----
@@ -65,6 +66,8 @@ const GUARDS: Record<string, Guard> = {
   saveTemplate: ["templates.manage", undefined], deleteTemplate: ["templates.manage", undefined], setDefaultTemplate: ["templates.manage", undefined], resetTemplates: ["templates.manage", undefined],
   saveDemo: ["demos.manage", false], deleteDemo: ["demos.manage", undefined], moveDemo: ["demos.manage", undefined], addDemoCategory: ["demos.manage", undefined],
   markReviewed: ["leads.edit", 0], unmarkReviewed: ["leads.edit", undefined], flagDuplicate: ["leads.edit", undefined], unflagDuplicate: ["leads.edit", undefined], resolveDuplicate: ["__owner", undefined], clearRelation: ["__owner", undefined],
+  saveAutomationRule: ["__owner", DENIED], setAutomationStatus: ["__owner", DENIED], duplicateAutomationRule: ["__owner", undefined], addRuleFromTemplate: ["__owner", undefined], setAutomationSettings: ["__owner", undefined],
+  runAutomations: ["__owner", { created: 0, resolved: 0 }], completeReminder: ["followups.view", undefined], dismissReminder: ["followups.view", undefined],
   assignLeads: ["leads.assign", { ok: false, error: DENIED }, "lead.assigned"], restoreAssignments: ["leads.assign", undefined], applyAssignmentPlan: ["leads.assign", { ok: false, error: DENIED }, "lead.assigned"],
   saveBusinessProfile: ["__owner", undefined], reset: ["__owner", undefined], logBackup: ["__owner", undefined], deleteLegacyQuotations: ["__owner", undefined],
   addEmployee: ["__owner", { ok: false, error: DENIED }], updateEmployee: ["__owner", DENIED], setEmployeeStatus: ["__owner", undefined], saveEmployeeAccess: ["__owner", undefined],
@@ -72,7 +75,7 @@ const GUARDS: Record<string, Guard> = {
 };
 /** Actions never recorded as Team Activity (bulk reset would be noise; settings/templates are not team activity). */
 const UNRECORDED = new Set(["reset", "logBackup"]);
-const snapOf = (s: CRMState): EventSnap => ({ leads: s.leads, followUps: s.followUps, deals: s.deals, payments: s.payments, activities: s.activities, assignments: s.assignments, employees: s.employees, employeeAccess: s.employeeAccess, inboxMeta: s.inboxMeta, leadRelations: s.leadRelations });
+const snapOf = (s: CRMState): EventSnap => ({ leads: s.leads, followUps: s.followUps, deals: s.deals, payments: s.payments, activities: s.activities, assignments: s.assignments, employees: s.employees, employeeAccess: s.employeeAccess, inboxMeta: s.inboxMeta, leadRelations: s.leadRelations, reminders: s.reminders });
 let depth = 0;
 function guarded<T extends object>(state: T, get: () => CRMState, set: (p: Partial<CRMState>) => void): T {
   const out = { ...state } as Record<string, unknown>;
@@ -89,7 +92,7 @@ function guarded<T extends object>(state: T, get: () => CRMState, set: (p: Parti
         try { r = fn(...args); } finally { depth--; }
         const after = get();
         const at = new Date().toISOString();
-        const evts = deriveEvents(before, snapOf(after), { action: name, operationId: uid("op"), at, actor: { id: OWNER_ACTOR_ID, role: "owner", name: after.owner || "Owner" } });
+        const evts = deriveEvents(before, snapOf(after), { action: name, operationId: uid("op"), at, actor: name === "runAutomations" ? { id: "automation", role: "automation", name: "Automation" } : { id: OWNER_ACTOR_ID, role: "owner", name: after.owner || "Owner" } });
         if (evts.length) set({ teamEvents: mergeEvents(after.teamEvents, evts) });
         return r;
       }
@@ -235,6 +238,19 @@ interface CRMState extends Prefs {
   unflagDuplicate: (id: string) => void;
   resolveDuplicate: (a: string, b: string, kind: RelationKind, note?: string) => void;
   clearRelation: (key: string) => void;
+  /** Sales Automation Studio (Owner-only rules; reminders are internal tasks, never customer messages). */
+  automationRules: AutomationRule[];
+  reminders: Reminder[];
+  automationRuns: AutomationRun[];
+  automationSettings: AutomationSettings;
+  saveAutomationRule: (r: AutomationRule) => string | null;
+  setAutomationStatus: (id: string, status: RuleStatus) => string | null;
+  duplicateAutomationRule: (id: string) => string | undefined;
+  addRuleFromTemplate: (templateId: string) => string | undefined;
+  setAutomationSettings: (p: Partial<AutomationSettings>) => void;
+  runAutomations: (opts?: { manual?: boolean; now?: string }) => { created: number; resolved: number };
+  completeReminder: (id: string) => void;
+  dismissReminder: (id: string) => void;
   teamEvents: ActivityEvent[];
   notifyPrefs: NotifyPrefs;
   notifyReads: ReadState;
@@ -325,9 +341,75 @@ export const useCRM = create<CRMState>()(
         if (a === b || !s.leads.some((l) => l.id === a) || !s.leads.some((l) => l.id === b)) return {};
         const key = pairKey(a, b);
         const clear = (id: string) => { const { flaggedAt: _f, flagNote: _n, ...rest } = s.inboxMeta[id] ?? {}; return rest; };
-        return { leadRelations: { ...s.leadRelations, [key]: { key, a: a < b ? a : b, b: a < b ? b : a, kind, at: new Date().toISOString(), ...(note ? { note } : {}) } }, inboxMeta: { ...s.inboxMeta, [a]: clear(a), [b]: clear(b) } };
+        const at = new Date().toISOString(); const la = s.leads.find((l) => l.id === a)!, lb = s.leads.find((l) => l.id === b)!;
+        const sig = pairSignature(la, lb); const prev = s.leadRelations[key];
+        const history = [...(prev?.history ?? []), ...(prev ? [{ kind: prev.kind, at: prev.at, ...(prev.sig ? { sig: prev.sig } : {}) }] : [])];
+        return { leadRelations: { ...s.leadRelations, [key]: { key, a: a < b ? a : b, b: a < b ? b : a, kind, at, sig, ...(history.length ? { history } : {}), ...(note ? { note } : {}) } }, inboxMeta: { ...s.inboxMeta, [a]: clear(a), [b]: clear(b) } };
       }),
       clearRelation: (key) => set((s) => { const { [key]: _x, ...rest } = s.leadRelations; return { leadRelations: rest }; }),
+      automationRules: [],
+      reminders: [],
+      automationRuns: [],
+      automationSettings: DEFAULT_AUTOMATION_SETTINGS,
+      saveAutomationRule: (r) => {
+        const err = automationRuleError(r); if (err && r.status === "enabled") return err;
+        const at = new Date().toISOString();
+        set((s) => { const ex = s.automationRules.find((x) => x.id === r.id); const row = { ...r, updatedAt: at, version: (ex?.version ?? 0) + 1, createdAt: ex?.createdAt ?? at };
+          return { automationRules: ex ? s.automationRules.map((x) => (x.id === r.id ? row : x)) : [...s.automationRules, row] }; });
+        return null;
+      },
+      setAutomationStatus: (id, status) => {
+        const r = get().automationRules.find((x) => x.id === id); if (!r) return "Rule not found";
+        if (status === "enabled") { const err = automationRuleError(r); if (err) return err; }
+        set((s) => ({ automationRules: s.automationRules.map((x) => (x.id === id ? { ...x, status, updatedAt: new Date().toISOString() } : x)) }));
+        return null;
+      },
+      duplicateAutomationRule: (id) => {
+        const r = get().automationRules.find((x) => x.id === id); if (!r) return undefined;
+        const nid = uid("auto"); const at = new Date().toISOString();
+        const { lastEvaluatedAt: _e, lastTriggeredAt: _t, ...rest } = r;
+        set((s) => ({ automationRules: [...s.automationRules, { ...rest, id: nid, name: `${r.name} (copy)`, status: "draft", createdAt: at, updatedAt: at, version: 1 }] }));
+        return nid;
+      },
+      addRuleFromTemplate: (tplId) => {
+        const r = ruleFromTemplate(tplId, uid("auto"), new Date().toISOString()); if (!r) return undefined;
+        set((s) => ({ automationRules: [...s.automationRules, r] })); return r.id;
+      },
+      setAutomationSettings: (p) => set((s) => ({ automationSettings: { ...s.automationSettings, ...p } })),
+      runAutomations: (opts) => {
+        const st = get(); const now = opts?.now ? new Date(opts.now) : new Date(); const at = now.toISOString(); const manual = !!opts?.manual;
+        const ctx = { leads: st.leads, activities: st.activities, followUps: st.followUps, assignments: st.assignments, inboxMeta: st.inboxMeta, now };
+        const rec = reconcileReminders(st.reminders, ctx);
+        let reminders = rec.next; let budget = st.automationSettings.maxActionsPerRun; let created = 0;
+        const runs: AutomationRun[] = []; const fuJobs: { reminderId: string; leadId: string; key: string; dueAt: string; rule: string }[] = [];
+        const rules = st.automationRules.map((r) => {
+          if (r.status !== "enabled") { if (manual && r.status !== "archived") runs.push({ id: uid("run"), ruleId: r.id, ruleName: r.name, at, outcome: "disabled", actions: [], skippedDuplicates: 0, matched: 0, manual }); return r; }
+          const plan = planRule(r, ctx, reminders);
+          const make = plan.create.slice(0, Math.max(0, budget)); budget -= make.length;
+          const failed = plan.create.length - make.length;
+          const rows: Reminder[] = make.map(({ followUpDueAt, ...p }) => { const id = uid("rem"); if (followUpDueAt) fuJobs.push({ reminderId: id, leadId: p.leadId, key: p.key, dueAt: followUpDueAt, rule: r.name }); return { ...p, id }; });
+          reminders = [...rows, ...reminders]; created += rows.length;
+          const actions = rows.length ? [`${rows.length} reminder${rows.length > 1 ? "s" : ""}`, ...(rows.some((x) => x.flag) ? ["flagged"] : []), ...(plan.escalations.length ? [`${plan.escalations.length} escalated to Owner`] : [])] : [];
+          if (rows.length) runs.push({ id: uid("run"), ruleId: r.id, ruleName: r.name, at, outcome: "triggered", ...(rows.length === 1 ? { leadId: rows[0]!.leadId } : {}), actions, skippedDuplicates: plan.skippedDuplicates + plan.cooldown, matched: plan.matched, manual });
+          if (failed) runs.push({ id: uid("run"), ruleId: r.id, ruleName: r.name, at, outcome: "failed", actions: [], skippedDuplicates: 0, matched: plan.matched, error: `Run limit of ${st.automationSettings.maxActionsPerRun} actions reached — ${failed} not created. They will be retried on the next evaluation.`, manual });
+          if (manual && !rows.length && !failed) runs.push({ id: uid("run"), ruleId: r.id, ruleName: r.name, at, outcome: plan.matched ? "skipped" : "evaluated", actions: [], skippedDuplicates: plan.skippedDuplicates + plan.cooldown, matched: plan.matched, manual });
+          return { ...r, lastEvaluatedAt: at, ...(rows.length ? { lastTriggeredAt: at } : {}) };
+        });
+        set({ reminders: reminders.slice(0, 3000), automationRules: rules, automationRuns: [...runs, ...st.automationRuns].slice(0, 2000) });
+        // Explicitly configured follow-ups go through the normal follow-up rules (one active per lead, opId idempotency).
+        for (const j of fuJobs) {
+          const res = get().addFollowUp({ leadId: j.leadId, type: "call", dueAt: j.dueAt, note: `Automation: ${j.rule}`, opId: `auto:${j.key}` });
+          const text = res.ok ? "Follow-up created" : "Follow-up skipped — one is already active for this lead";
+          set((s) => ({
+            reminders: s.reminders.map((x) => (x.id === j.reminderId ? { ...x, ...(res.ok ? { followUpId: res.id } : {}), history: [...(x.history ?? []), { at, text }] } : x)),
+            // Mark the follow-up's own activity row as automation-origin so it never counts as contact or re-triggers rules.
+            activities: res.ok ? (() => { let done = false; return s.activities.map((a) => (!done && a.leadId === j.leadId && a.type === "followup" && !a.opId ? ((done = true), { ...a, opId: `auto:${j.key}` }) : a)); })() : s.activities,
+          }));
+        }
+        return { created, resolved: rec.changed };
+      },
+      completeReminder: (id) => set((s) => ({ reminders: s.reminders.map((r) => (r.id === id && r.status === "open" ? { ...r, status: "done", closedAt: new Date().toISOString() } : r)) })),
+      dismissReminder: (id) => set((s) => ({ reminders: s.reminders.map((r) => (r.id === id && r.status === "open" ? { ...r, status: "dismissed", closedAt: new Date().toISOString() } : r)) })),
       teamEvents: [],
       notifyPrefs: DEFAULT_NOTIFY_PREFS,
       notifyReads: EMPTY_READS,
@@ -670,16 +752,21 @@ export const useCRM = create<CRMState>()(
     },
     {
       name: "scale-flow-crm-2-demo",
-      version: 4,
+      version: 5,
       storage: createJSONStorage(() => guardedStorage),
       skipHydration: true,
       // v3: billing quotations are moved, unchanged, into a read-only backup. Nothing is converted automatically.
       // v4: adds Smart Inbox maps (empty) — existing leads are untouched and start as "Needs review".
-      migrate: (persisted, version) => migrateInbox(migrateQuotations(persisted as Record<string, unknown>, version), version) as unknown as CRMState,
+      migrate: (persisted, version) => migrateAutomation(migrateInbox(migrateQuotations(persisted as Record<string, unknown>, version), version), version) as unknown as CRMState,
     },
   ),
 );
 
+/** v5: adds Automation Studio state (empty, nothing enabled). */
+export function migrateAutomation(state: Record<string, unknown>, version: number): Record<string, unknown> {
+  if (!state || version >= 5) return state;
+  return { ...state, automationRules: state["automationRules"] ?? [], reminders: state["reminders"] ?? [], automationRuns: state["automationRuns"] ?? [], automationSettings: state["automationSettings"] ?? DEFAULT_AUTOMATION_SETTINGS };
+}
 export function migrateInbox(state: Record<string, unknown>, version: number): Record<string, unknown> {
   if (!state || version >= 4) return state;
   return { ...state, inboxMeta: state["inboxMeta"] ?? {}, leadRelations: state["leadRelations"] ?? {} };
