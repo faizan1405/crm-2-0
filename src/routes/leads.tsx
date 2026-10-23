@@ -143,7 +143,7 @@ function Leads() {
     if (!r.changed) { toast.info(`No lead needed this change`); return; }
     toast.success(`${tagOp.mode === "add" ? "Added" : "Removed"} “${name}” · ${r.changed} lead${r.changed === 1 ? "" : "s"}`, { action: { label: "Undo", onClick: () => { const u = useCRM.getState().undoBulkTags(r.before, r.applied); toast(u.kept ? `Undone on ${u.restored} · ${u.kept} kept (changed since)` : `Undone on ${u.restored} lead${u.restored === 1 ? "" : "s"}`); } } });
   };
-  const activeTags = crm.tagDefs.filter((t) => t.status === "active");
+  const activeTags = crm.tagDefs.filter((t) => t.status === "active" && tagForLeads(t));
   const viewWarn = activeView ? viewIssues(activeView, viewCtxOf(crm, viewer)) : [];
   const pinnedViews = myViews.filter((v) => vprefs.pinned.includes(v.id));
   /** Bulk edit with one Undo; each lead goes through the normal guarded updateLead. Lost is excluded (needs a reason per lead). */
