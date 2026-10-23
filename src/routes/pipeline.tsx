@@ -11,6 +11,7 @@ import { CallButton } from "@/components/crm/CallButton";
 import { openCallLog } from "@/components/crm/PostCallDialog";
 import { WhatsAppButton } from "@/components/crm/WhatsAppComposer";
 import { useCRM } from "@/lib/crm/store";
+import { useAccess } from "@/lib/crm/session";
 import { formatINR, formatINRCompact, formatDateTime, relative } from "@/lib/crm/format";
 import { dealCollected, dealOutstanding } from "@/lib/crm/finance";
 import { cardSignals, isOpen, stageSummary, STALL_DAYS } from "@/lib/crm/pipeline";
@@ -56,7 +57,10 @@ function Pipeline() {
 
   useEffect(() => { if (!sel) return; const k = (e: KeyboardEvent) => { if (e.key === "Escape" && !document.querySelector("[role=dialog]")) select(undefined); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const { can } = useAccess();
+  const canMove = can("pipeline.edit") || can("leads.edit");
   const move = (id: string, status: LeadStatus) => {
+    if (!canMove) { toast.error("Moving stages isn't allowed for this employee"); return; }
     const lead = leads.find((l) => l.id === id);
     if (!lead || lead.status === status) return;
     if (status === "lost") { setPendingLost(id); return; }
@@ -113,7 +117,7 @@ function Pipeline() {
                 </div>
                 <div className="flex min-h-40 flex-col gap-2.5">
                   {col.map((l) => { const sig = cardSignals(l, activities, followUps, now); return (
-                    <div key={l.id} role="button" tabIndex={0} draggable data-priority={l.priority} aria-pressed={sel?.id === l.id} aria-label={`${l.name}${l.company ? `, ${l.company}` : ""} — open inspector`}
+                    <div key={l.id} role="button" tabIndex={0} draggable={canMove} data-priority={l.priority} aria-pressed={sel?.id === l.id} aria-label={`${l.name}${l.company ? `, ${l.company}` : ""} — open inspector`}
                       onDragStart={(e) => { e.dataTransfer.setData("text/plain", l.id); e.dataTransfer.effectAllowed = "move"; dragAt.current = Date.now(); setDragging(l.id); }}
                       onDragEnd={() => { dragAt.current = Date.now(); setDragging(null); setOver(null); }}
                       onClick={() => { if (Date.now() - dragAt.current < 250) return; select(l.id); }}
@@ -136,7 +140,7 @@ function Pipeline() {
                       {l.lostReason && s === "lost" && <div className="mt-2 text-[11px] text-destructive">Reason · {l.lostReason}</div>}
                       <div className="pipe-hover" onClick={(e) => e.stopPropagation()}>
                         <span className="text-[11px] text-muted-foreground">{l.lastContact ? `Spoke ${relative(l.lastContact)}` : "No contact yet"}</span>
-                        <select aria-label={`Move ${l.name}`} className="pipe-move" value={l.status} onClick={(e) => e.stopPropagation()} onChange={(e) => move(l.id, e.target.value as LeadStatus)}>
+                        <select aria-label={`Move ${l.name}`} disabled={!canMove} className="pipe-move" value={l.status} onClick={(e) => e.stopPropagation()} onChange={(e) => move(l.id, e.target.value as LeadStatus)}>
                           {LEAD_STATUSES.map((x) => <option key={x} value={x}>{STATUS_LABEL[x]}</option>)}
                         </select>
                       </div>
