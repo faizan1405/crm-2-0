@@ -146,7 +146,7 @@ function leadPasses(l: Lead, c: RuleConditions, x: EvalCtx, contact: ContactStat
   if (c.firstContactPending && contact !== "none") return false;
   if (c.minCreatedMinutes !== undefined && ago(l.createdAt, x.now) < c.minCreatedMinutes * MIN) return false;
   if (c.minSinceAttemptMinutes !== undefined && ago(lastAttemptAt(l.id, x.activities), x.now) < c.minSinceAttemptMinutes * MIN) return false;
-  if (c.minStageDays !== undefined) { const d = daysIn(stageSince(l, x.activities), x.now); if (d === null || d < c.minStageDays) return false; }
+  if (c.minStageDays !== undefined) { const d = daysIn(stageSince(l, x.activities) ?? l.createdAt, x.now); if (d === null || d < c.minStageDays) return false; }
   if (c.minInactiveHours !== undefined && ago(lastActivityAt(l, x.activities), x.now) < c.minInactiveHours * HOUR) return false;
   return true;
 }
