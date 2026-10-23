@@ -51,3 +51,5 @@ Frontend-only demo. No backend; production CRM untouched.
 - [x] Phase 3B.6/3B.7: bulk selection (page / all matching / exclusions), assign + distribute, pagination, assignee/created/follow-up filters, bulk priority/stage
 - [x] Phase 3B.8: employee workflow QA — Leads inspector gained priority + client note, Assign hidden without permission, preview banner wording; walkthrough verified at 1440/1024/768/390/360
 - [x] Phase 3G: custom fields, tags, saved views, CRM Configuration page, automation custom conditions, Data Vault coverage
+- [x] Phase 3G.1 Project Desk: deal→project handoff, board, tasks/milestones, requirements, finance view, delivery, support, permissions, backup
+- [ ] Phase 3G.1 follow-ups: project custom fields/tags and project automation rules; project file uploads (wait on backend storage)
