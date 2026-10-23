@@ -13,6 +13,7 @@ import { CallButton } from "@/components/crm/CallButton";
 import { Shell, PriorityBadge, Empty, Identity, selectCls } from "@/components/crm/Shell";
 import { AddLeadDialog } from "@/components/crm/AddLeadDialog";
 import { LostReasonDialog, FollowUpDialog } from "@/components/crm/Dialogs";
+import { useAccess } from "@/lib/crm/session";
 import { useCRM } from "@/lib/crm/store";
 import { formatINR, formatINRCompact, relative, formatDateTime, digits } from "@/lib/crm/format";
 import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, type LeadStatus, type LeadSource, type LeadPriority } from "@/lib/crm/types";
@@ -41,10 +42,13 @@ type Sort = "recent" | "score" | "value" | "name";
 
 function Leads() {
   const { leads, updateLead, deleteLead, wasteLead, restoreLead, setQuickStatus, bin, defaultLeadSort } = useCRM();
+  const { can } = useAccess();
+  const canDel = can("leads.delete");
   const [bulk, setBulk] = useState(false);
   const [quick, setQuick] = useState<"all" | "stale" | QuickStatus>("all");
   const now = useMemo(() => new Date(), [leads]);
   const removeLead = (id: string, name: string, kind: "waste" | "deleted") => {
+    if (!canDel) { toast.error("Not allowed by this employee's permissions"); return; }
     if (kind === "waste") wasteLead(id); else deleteLead(id);
     const binId = useCRM.getState().bin[0]?.id;
     toast.success(kind === "waste" ? `${name} moved to Waste` : `${name} deleted`, { action: binId ? { label: "Undo", onClick: () => { const e = restoreLead(binId); if (e) toast.error(e); } } : undefined });
@@ -89,7 +93,7 @@ function Leads() {
   const empty = <Empty icon={<Users />} title="No leads match" hint="Try clearing a filter or add a new lead." action={<Button variant="outline" onClick={() => { setQ(""); setStatus("all"); setSource("all"); setPrio("all"); setQuick("all"); }}>Clear filters</Button>} />;
 
   return (
-    <Shell title="Prospects" subtitle={`${rows.length} of ${leads.length} leads in view · select one to inspect it without leaving the list`} actions={<div className="flex flex-wrap gap-2"><Button variant="outline" asChild className="rounded-full"><Link to="/leads/bin"><Archive className="size-4" />Waste & deleted{bin.length ? <span className="num ml-1 text-xs text-muted-foreground">{bin.length}</span> : null}</Link></Button><Button variant="outline" onClick={() => setBulk(true)} className="rounded-full"><Layers className="size-4" />Bulk add</Button><Button onClick={() => setOpen(true)} className="rounded-full"><Plus className="size-4" />Add lead</Button></div>}>
+    <Shell title="Prospects" subtitle={`${rows.length} of ${leads.length} leads in view · select one to inspect it without leaving the list`} actions={<div className="flex flex-wrap gap-2">{canDel && <Button variant="outline" asChild className="rounded-full"><Link to="/leads/bin"><Archive className="size-4" />Waste & deleted{bin.length ? <span className="num ml-1 text-xs text-muted-foreground">{bin.length}</span> : null}</Link></Button>}{can("import.run") && <Button variant="outline" onClick={() => setBulk(true)} className="rounded-full"><Layers className="size-4" />Bulk add</Button>}{can("leads.create") && <Button onClick={() => setOpen(true)} className="rounded-full"><Plus className="size-4" />Add lead</Button>}</div>}>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-t border-foreground pt-4">
         <div className="flex max-w-full gap-4 overflow-x-auto scrollbar-thin">{(["all", ...LEAD_STATUSES] as const).map(s => <button key={s} type="button" aria-pressed={status === s} onClick={() => setStatus(s)} data-stage={s} className={cn("flex shrink-0 items-baseline gap-1.5 border-b-2 pb-1.5 text-sm transition-colors", status === s ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{s === "all" ? "Everyone" : STATUS_LABEL[s]}<span className="num text-[11px] opacity-70">{s === "all" ? leads.length : leads.filter(l => l.status === s).length}</span></button>)}</div>
         <div className="seg" role="group" aria-label="View">{([["workspace", Columns2, "Workspace"], ["table", List, "Ledger"], ["cards", LayoutGrid, "Tiles"]] as const).map(([v, I, label]) => <button key={v} type="button" aria-label={`${v} view`} aria-pressed={view === v} onClick={() => setView(v)}><I className="size-3.5" /><span className="hidden sm:inline">{label}</span></button>)}</div>
@@ -125,8 +129,8 @@ function Leads() {
                 <CallButton leadId={l.id} phone={l.phone} name={l.name} source="Leads cards" />
                 <WhatsAppButton leadId={l.id} name={l.name} source="Leads cards" />
                 <Button size="icon" variant="ghost" className="size-8 rounded-full" aria-label="Schedule follow-up" onClick={() => setFu(l.id)}><CalendarPlus className="size-4" /></Button>
-                <Button size="icon" variant="ghost" className="size-8 rounded-full" aria-label="Move to Waste" title="Move to Waste" onClick={() => removeLead(l.id, l.name, "waste")}><Ban className="size-4" /></Button>
-                <Button size="icon" variant="ghost" className="size-8 rounded-full" aria-label="Delete lead" onClick={() => removeLead(l.id, l.name, "deleted")}><Trash2 className="size-4" /></Button>
+                {canDel && <Button size="icon" variant="ghost" className="size-8 rounded-full" aria-label="Move to Waste" title="Move to Waste" onClick={() => removeLead(l.id, l.name, "waste")}><Ban className="size-4" /></Button>}
+                {canDel && <Button size="icon" variant="ghost" className="size-8 rounded-full" aria-label="Delete lead" onClick={() => removeLead(l.id, l.name, "deleted")}><Trash2 className="size-4" /></Button>}
                 <Button size="sm" variant="ghost" asChild className="ml-auto rounded-full"><Link to="/leads/$id" params={{ id: l.id }}>View<ArrowUpRight className="size-3.5" /></Link></Button>
               </div>
             </article>); })}
@@ -147,13 +151,13 @@ function Leads() {
                   <td className="px-3"><select aria-label="Stage" className={cn(selectCls, "h-8")} value={l.status} onChange={(e) => changeStatus(l.id, e.target.value as LeadStatus)}>{LEAD_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select></td>
                   <td className="px-3">{quickSel(l.id, l.quickStatus)}</td>
                   <td className="px-3 text-xs text-muted-foreground">{relative(l.updatedAt)}{staleDays(l, now) !== undefined && <span className="aging is-old ml-1.5">stale</span>}</td>
-                  <td className="pr-1"><Button size="icon" variant="ghost" title="Move to Waste" aria-label="Move to Waste" className="rounded-full text-muted-foreground" onClick={() => removeLead(l.id, l.name, "waste")}><Ban className="size-4" /></Button><Button size="icon" variant="ghost" title="Delete lead" aria-label="Delete lead" className="rounded-full text-muted-foreground hover:text-destructive" onClick={() => removeLead(l.id, l.name, "deleted")}><Trash2 className="size-4" /></Button></td>
+                  <td className="pr-1">{canDel && <><Button size="icon" variant="ghost" title="Move to Waste" aria-label="Move to Waste" className="rounded-full text-muted-foreground" onClick={() => removeLead(l.id, l.name, "waste")}><Ban className="size-4" /></Button><Button size="icon" variant="ghost" title="Delete lead" aria-label="Delete lead" className="rounded-full text-muted-foreground hover:text-destructive" onClick={() => removeLead(l.id, l.name, "deleted")}><Trash2 className="size-4" /></Button></>}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>}
-      {picked.length > 0 && <div className="as-bulk" role="region" aria-label="Bulk actions"><span className="text-sm font-semibold"><span className="num">{picked.length}</span> lead{picked.length === 1 ? "" : "s"} selected</span><Button size="sm" onClick={() => setAssignFor(picked)}><UserCheck />Assign / reassign</Button><Button size="sm" variant="ghost" onClick={() => setPicked(rows.map((r) => r.id))}>Select all {rows.length}</Button><Button size="sm" variant="ghost" aria-label="Clear selection" onClick={() => setPicked([])}><X />Clear</Button></div>}
+      {picked.length > 0 && <div className="as-bulk" role="region" aria-label="Bulk actions"><span className="text-sm font-semibold"><span className="num">{picked.length}</span> lead{picked.length === 1 ? "" : "s"} selected</span>{can("leads.assign") && <Button size="sm" onClick={() => setAssignFor(picked)}><UserCheck />Assign / reassign</Button>}<Button size="sm" variant="ghost" onClick={() => setPicked(rows.map((r) => r.id))}>Select all {rows.length}</Button><Button size="sm" variant="ghost" aria-label="Clear selection" onClick={() => setPicked([])}><X />Clear</Button></div>}
       <AssignDialog open={!!assignFor} leadIds={assignFor ?? []} source={assignFor && assignFor.length > 1 ? "Leads bulk" : "Leads inspector"} onClose={() => setAssignFor(null)} onDone={() => { if (assignFor && assignFor.length > 1) setPicked([]); }} />
       <FollowUpDialog open={!!fu} onOpenChange={(o) => !o && setFu(null)} {...(fu ? { leadId: fu } : {})} />
       <AddLeadDialog open={open} onOpenChange={setOpen} />
@@ -165,6 +169,7 @@ function Leads() {
 
 function Inspector({ id, onFollowUp, onStage, onRemove, onAssign, quickSel }: { id: string; onFollowUp: () => void; onAssign: () => void; onStage: (s: LeadStatus) => void; onRemove: (k: "waste" | "deleted") => void; quickSel: React.ReactNode }) {
   const { leads, deals, payments, activities, followUps, updateLead } = useCRM();
+  const canDel = useAccess().can("leads.delete");
   const l = leads.find((x) => x.id === id);
   if (!l) return null;
   const myDeals = deals.filter((d) => d.leadId === l.id);
@@ -196,7 +201,7 @@ function Inspector({ id, onFollowUp, onStage, onRemove, onAssign, quickSel }: { 
         <div><div className="eyebrow mb-3">Deals</div>{myDeals.length ? <ul className="grid gap-3">{myDeals.map((d) => { const got = dealCollected(d.id, payments); return <li key={d.id}><Link to="/deals" className="block rounded-xl border p-3 hover:bg-secondary"><div className="flex justify-between gap-2 text-sm"><span className="truncate font-medium">{d.name}</span><span className="num">{formatINRCompact(d.finalAmount)}</span></div><div className="balance-track mt-2 h-1.5"><div style={{ width: `${d.finalAmount ? Math.min(got / d.finalAmount, 1) * 100 : 0}%` }} /></div><div className="num mt-1 text-[11px] text-muted-foreground">{formatINRCompact(got)} received · {formatINRCompact(dealOutstanding(d, payments))} due</div></Link></li>; })}</ul> : <p className="text-xs text-muted-foreground">No deal yet.</p>}</div>
         <div><div className="eyebrow mb-3">Conversation history</div><ol className="timeline grid gap-4">{hist.map((a) => <li key={a.id} data-kind={a.type}><p className="text-xs leading-relaxed">{a.text}</p><span className="eyebrow">{relative(a.at)}</span></li>)}{!hist.length && <li className="text-xs text-muted-foreground">No activity yet.</li>}</ol></div>
       </div>
-      <div className="mt-8 flex gap-2 border-t pt-4"><Button variant="ghost" size="sm" className="rounded-full text-muted-foreground" onClick={() => onRemove("waste")}><Ban className="size-3.5" />Move to Waste</Button><Button variant="ghost" size="sm" className="rounded-full text-muted-foreground hover:text-destructive" onClick={() => onRemove("deleted")}><Trash2 className="size-3.5" />Delete</Button></div>
+      {canDel && <div className="mt-8 flex gap-2 border-t pt-4"><Button variant="ghost" size="sm" className="rounded-full text-muted-foreground" onClick={() => onRemove("waste")}><Ban className="size-3.5" />Move to Waste</Button><Button variant="ghost" size="sm" className="rounded-full text-muted-foreground hover:text-destructive" onClick={() => onRemove("deleted")}><Trash2 className="size-3.5" />Delete</Button></div>}
     </aside>
   );
 }

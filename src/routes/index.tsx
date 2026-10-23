@@ -11,6 +11,7 @@ import { Shell, Empty, PriorityBadge } from "@/components/crm/Shell";
 import { AddLeadDialog } from "@/components/crm/AddLeadDialog";
 import { Button } from "@/components/ui/button";
 import { useCRM } from "@/lib/crm/store";
+import { useAccess } from "@/lib/crm/session";
 import { financeSummary, dealOutstanding, dealPaymentStatus } from "@/lib/crm/finance";
 import { formatINRCompact, formatINR, formatPct, formatTime, greeting, dayKey, formatDate, relative, digits } from "@/lib/crm/format";
 import { FOLLOWUP_LABEL, LEAD_STATUSES, STATUS_LABEL } from "@/lib/crm/types";
@@ -48,6 +49,7 @@ const KIND_ICON = { overdue: AlarmClock, today: CalendarClock, hot: Flame, money
 
 function Dashboard() {
   const { leads, deals, payments, followUps, owner, activities, completeFollowUp } = useCRM();
+  const { can, preview } = useAccess();
   const [add, setAdd] = useState(false), [tab, setTab] = useState<(typeof TABS)[number][0]>("all");
   const [resched, setResched] = useState<{ leadId: string; id: string } | null>(null);
   const now = Date.now(), today = dayKey(new Date());
@@ -68,7 +70,8 @@ function Dashboard() {
   const won = stage.find((s) => s.s === "won")!.count, closed = won + stage.find((s) => s.s === "lost")!.count;
   const next7 = Array.from({ length: 7 }, (_, i) => { const k = dayKey(new Date(now + i * 864e5)); return pending.filter((f) => dayKey(f.dueAt) === k).length; });
   const max7 = Math.max(1, ...next7);
-  const first = owner.split(" ")[0] ?? owner;
+  const who = preview?.name ?? owner;
+  const first = who.split(" ")[0] ?? who;
 
   const tasks: Task[] = [
     ...overdue.map((f): Task => ({ key: f.id, kind: "overdue", leadId: f.leadId, followUpId: f.id, title: lead(f.leadId)?.name ?? "Lead", detail: `${FOLLOWUP_LABEL[f.type]}${f.note ? ` · ${f.note}` : ""}`, when: `Due ${relative(f.dueAt)}`, phone: lead(f.leadId)?.phone })),
@@ -83,7 +86,7 @@ function Dashboard() {
   const segs = [["Received", fin.collected, "var(--success)"], ["Outstanding (not yet due)", Math.max(fin.outstanding - fin.overdue, 0), "var(--chart-2)"], ["Overdue", fin.overdue, "var(--destructive)"]] as const;
   const segTotal = Math.max(1, segs.reduce((a, s) => a + s[1], 0));
 
-  return <Shell title="Command center" subtitle={formatDate(new Date().toISOString(), { weekday: "long", day: "numeric", month: "long", year: "numeric" })} actions={<div className="flex gap-2"><Button variant="outline" asChild className="rounded-lg"><Link to="/daily-briefing"><Sunrise />Daily briefing</Link></Button><Button onClick={() => setAdd(true)} className="rounded-lg"><Plus />Add lead</Button></div>}>
+  return <Shell title="Command center" subtitle={formatDate(new Date().toISOString(), { weekday: "long", day: "numeric", month: "long", year: "numeric" })} actions={<div className="flex gap-2">{can("briefing.view") && <Button variant="outline" asChild className="rounded-lg"><Link to="/daily-briefing"><Sunrise />Daily briefing</Link></Button>}{can("leads.create") && <Button onClick={() => setAdd(true)} className="rounded-lg"><Plus />Add lead</Button>}</div>}>
     <section className="cc-welcome p-6 sm:p-7">
       <div className="relative z-10 grid gap-6 lg:grid-cols-[1.4fr_1fr] lg:items-end">
         <div>

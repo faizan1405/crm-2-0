@@ -1,3 +1,4 @@
+import { allows, useSession } from "@/lib/crm/session";
 import { useEffect, useMemo, useState } from "react";
 import { create } from "zustand";
 import { toast } from "sonner";
@@ -28,6 +29,7 @@ const HINT: Record<WaPurpose, string> = { followup: "Continue the conversation",
 
 /** Icon button for any WhatsApp action point — always opens the composer, never WhatsApp directly. */
 export function WhatsAppButton({ leadId, name, source, label, className }: { leadId: string; name: string; source: string; label?: boolean; className?: string }) {
+  if (!allows(useSession.getState().preview, "clients.whatsapp")) return null;
   return <button type="button" draggable={false} aria-label={`WhatsApp ${name}`} title={`WhatsApp ${name}`} onClick={(e) => { e.stopPropagation(); openWhatsApp(leadId, source); }} className={cn("wa-btn", label && "has-label", className)}><MessageCircle className="size-3.5" />{label && <span>WhatsApp</span>}</button>;
 }
 
