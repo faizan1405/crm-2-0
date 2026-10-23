@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AutomationRouteImport } from './routes/automation'
+import { Route as CrmConfigRouteImport } from './routes/crm-config'
 import { Route as DailyBriefingRouteImport } from './routes/daily-briefing'
 import { Route as DataVaultRouteImport } from './routes/data-vault'
 import { Route as DealsRouteImport } from './routes/deals'
@@ -45,6 +46,11 @@ const AnalyticsRoute = AnalyticsRouteImport.update({
 const AutomationRoute = AutomationRouteImport.update({
   id: '/automation',
   path: '/automation',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CrmConfigRoute = CrmConfigRouteImport.update({
+  id: '/crm-config',
+  path: '/crm-config',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DailyBriefingRoute = DailyBriefingRouteImport.update({
@@ -147,6 +153,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/automation': typeof AutomationRoute
+  '/crm-config': typeof CrmConfigRoute
   '/daily-briefing': typeof DailyBriefingRoute
   '/data-vault': typeof DataVaultRoute
   '/deals': typeof DealsRoute
@@ -171,6 +178,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/automation': typeof AutomationRoute
+  '/crm-config': typeof CrmConfigRoute
   '/daily-briefing': typeof DailyBriefingRoute
   '/data-vault': typeof DataVaultRoute
   '/deals': typeof DealsRoute
@@ -196,6 +204,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/automation': typeof AutomationRoute
+  '/crm-config': typeof CrmConfigRoute
   '/daily-briefing': typeof DailyBriefingRoute
   '/data-vault': typeof DataVaultRoute
   '/deals': typeof DealsRoute
@@ -222,6 +231,7 @@ export interface FileRouteTypes {
     | '/'
     | '/analytics'
     | '/automation'
+    | '/crm-config'
     | '/daily-briefing'
     | '/data-vault'
     | '/deals'
@@ -246,6 +256,7 @@ export interface FileRouteTypes {
     | '/'
     | '/analytics'
     | '/automation'
+    | '/crm-config'
     | '/daily-briefing'
     | '/data-vault'
     | '/deals'
@@ -270,6 +281,7 @@ export interface FileRouteTypes {
     | '/'
     | '/analytics'
     | '/automation'
+    | '/crm-config'
     | '/daily-briefing'
     | '/data-vault'
     | '/deals'
@@ -295,6 +307,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnalyticsRoute: typeof AnalyticsRoute
   AutomationRoute: typeof AutomationRoute
+  CrmConfigRoute: typeof CrmConfigRoute
   DailyBriefingRoute: typeof DailyBriefingRoute
   DataVaultRoute: typeof DataVaultRoute
   DealsRoute: typeof DealsRoute
@@ -337,6 +350,13 @@ declare module '@tanstack/react-router' {
       path: '/automation'
       fullPath: '/automation'
       preLoaderRoute: typeof AutomationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/crm-config': {
+      id: '/crm-config'
+      path: '/crm-config'
+      fullPath: '/crm-config'
+      preLoaderRoute: typeof CrmConfigRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/daily-briefing': {
@@ -479,6 +499,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnalyticsRoute: AnalyticsRoute,
   AutomationRoute: AutomationRoute,
+  CrmConfigRoute: CrmConfigRoute,
   DailyBriefingRoute: DailyBriefingRoute,
   DataVaultRoute: DataVaultRoute,
   DealsRoute: DealsRoute,

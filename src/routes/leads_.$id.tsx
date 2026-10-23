@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { AdditionalInfo, TagPicker } from "@/components/crm/Customize";
 
 export const Route = createFileRoute("/leads_/$id")({
   head: () => ({
@@ -75,6 +76,8 @@ function LeadDetail() {
                 {lead.notes && <div className="sm:col-span-3"><dt className="text-xs text-muted-foreground">Notes</dt><dd className="mt-0.5 whitespace-pre-line">{lead.notes}</dd></div>}
               </dl>
             )}
+            <div className="mt-5 flex flex-wrap items-center gap-2 border-t pt-4"><span className="text-xs text-muted-foreground">Tags</span><TagPicker leadId={lead.id} /></div>
+            <AdditionalInfo leadId={lead.id} compact />
           </section>
           <section className="surface p-5">
             <h2 className="mb-3 font-semibold">Activity</h2>

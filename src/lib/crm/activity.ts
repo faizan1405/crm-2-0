@@ -20,6 +20,7 @@ export type EventType =
   | "bulk.completed" | "bulk.reversed"
   | "lead.reviewed" | "lead.duplicate_flagged" | "lead.duplicate_resolved" | "lead.related" | "lead.merged" | "lead.intake_status_changed"
   | "automation.reminder" | "automation.escalated"
+  | "lead.tag_added" | "lead.tag_removed" | "lead.fields_changed" | "config.field_changed" | "config.view_changed"
   | "employee.added" | "employee.updated" | "employee.status_changed" | "employee.permissions_changed";
 
 export type EntityType = "lead" | "followup" | "deal" | "payment" | "employee" | "bulk";
@@ -56,7 +57,10 @@ export interface EventSnap {
   leads: Lead[]; followUps: FollowUp[]; deals: Deal[]; payments: Payment[]; activities: LeadActivity[];
   assignments: Record<string, Assignment>; employees: Employee[]; employeeAccess: Record<string, EmployeeAccess>;
   reminders?: { id: string; leadId: string; ruleName: string; reason: string; escalated?: boolean; employeeId: string | null }[];
-  inboxMeta?: Record<string, { reviewedAt?: string; flaggedAt?: string }>; leadRelations?: Record<string, { a: string; b: string; kind: string }>;
+  inboxMeta?: Record<string, { reviewedAt?: string; flaggedAt?: string }>;
+  leadTags?: Record<string, string[]>; fieldValues?: Record<string, Record<string, unknown>>;
+  customFields?: { id: string; label: string; status: string; version: number }[]; tagDefs?: { id: string; name: string }[];
+  savedViews?: { id: string; name: string; visibility: string; version: number }[]; leadRelations?: Record<string, { a: string; b: string; kind: string }>;
 }
 export interface DeriveCtx { action: string; operationId: string; at: string; actor: Actor; source?: EventSource }
 
@@ -64,6 +68,7 @@ export interface DeriveCtx { action: string; operationId: string; at: string; ac
 export const BULK_THRESHOLD = 5;
 
 export const MODULE_OF: Record<EventType, CrmModule> = {
+  "lead.tag_added": "leads", "lead.tag_removed": "leads", "lead.fields_changed": "leads", "config.field_changed": "leads", "config.view_changed": "leads",
   "lead.created": "leads", "lead.edited": "leads", "lead.removed": "leads", "lead.hot": "leads",
   "lead.assigned": "assignments", "lead.reassigned": "assignments", "lead.unassigned": "assignments",
   "call.logged": "calls", "call.reversed": "calls", "client.note_added": "leads",
@@ -85,11 +90,12 @@ export const EVENT_LABEL: Record<EventType, string> = {
   "bulk.completed": "Bulk operation", "bulk.reversed": "Bulk operation reversed",
   "lead.reviewed": "Lead reviewed", "lead.duplicate_flagged": "Possible duplicate flagged", "lead.duplicate_resolved": "Duplicate kept separate", "lead.related": "Leads marked related", "lead.merged": "Leads merged", "lead.intake_status_changed": "Inbox status changed",
   "automation.reminder": "Automation reminder", "automation.escalated": "Escalated to Owner",
+  "lead.tag_added": "Lead tag added", "lead.tag_removed": "Lead tag removed", "lead.fields_changed": "Custom field changed", "config.field_changed": "Field definition changed", "config.view_changed": "Shared view changed",
   "employee.added": "Employee added", "employee.updated": "Employee updated", "employee.status_changed": "Account status changed", "employee.permissions_changed": "Permissions changed",
 };
 export const MODULE_LABEL: Record<CrmModule, string> = { leads: "Leads", calls: "Calls", followups: "Follow-ups", pipeline: "Pipeline", finance: "Finance", assignments: "Assignments", team: "Team" };
 const IMPORTANCE: Partial<Record<EventType, Importance>> = {
-  "lead.edited": "low", "followup.rescheduled": "low", "client.note_added": "low", "deal.created": "low", "employee.updated": "low",
+  "lead.edited": "low", "lead.fields_changed": "low", "lead.tag_added": "low", "lead.tag_removed": "low", "config.field_changed": "low", "config.view_changed": "low", "followup.rescheduled": "low", "client.note_added": "low", "deal.created": "low", "employee.updated": "low",
   "deal.won": "high", "deal.lost": "high", "lead.hot": "high", "bulk.completed": "high", "payment.updated": "high", "employee.status_changed": "high", "employee.permissions_changed": "high", "bulk.reversed": "high", "automation.escalated": "high",
 };
 
@@ -210,6 +216,30 @@ export function deriveEvents(prev: EventSnap, next: EventSnap, ctx: DeriveCtx): 
     push("lead.intake_status_changed", id, { entityType: "lead", entityId: id, relatedLeadId: id, summary: `${who} moved ${leadName(id)} back to Needs review.`, oldValues: { status: "reviewed" }, newValues: { status: "needs_review" } });
   }
   if (ctx.action === "flagDuplicate") for (const id of Object.keys(nm)) if (nm[id]?.flaggedAt && !pm[id]?.flaggedAt) push("lead.duplicate_flagged", id, { entityType: "lead", entityId: id, relatedLeadId: id, summary: `${who} flagged ${leadName(id)} as a possible duplicate.` });
+  // Phase 3G — tags and custom fields. Summaries name the field, never its value (values may be confidential).
+  const tagName = (id: string) => next.tagDefs?.find((t) => t.id === id)?.name ?? "a tag";
+  const pt = prev.leadTags ?? {}, nt = next.leadTags ?? {};
+  if (pt !== nt) {
+    const adds: [string, string][] = [], rems: [string, string][] = [];
+    for (const id of new Set([...Object.keys(pt), ...Object.keys(nt)])) { const a = pt[id] ?? [], b = nt[id] ?? []; for (const t of b) if (!a.includes(t)) adds.push([id, t]); for (const t of a) if (!b.includes(t)) rems.push([id, t]); }
+    for (const [list, type, verb] of [[adds, "lead.tag_added", "added"], [rems, "lead.tag_removed", "removed"]] as const) {
+      if (list.length >= BULK_THRESHOLD) { const tags = [...new Set(list.map((x) => x[1]))]; push(type, "bulk", { entityType: "bulk", entityId: ctx.operationId, summary: `${who} ${verb} ${tags.map(tagName).join(", ")} ${verb === "added" ? "to" : "from"} ${new Set(list.map((x) => x[0])).size} leads.`, newValues: { count: list.length, tagIds: tags } }); }
+      else for (const [id, t] of list) push(type, `${id}:${t}`, { entityType: "lead", entityId: id, relatedLeadId: id, summary: `${who} ${verb} tag “${tagName(t)}” ${verb === "added" ? "to" : "from"} ${leadName(id)}.`, newValues: { tagId: t } });
+    }
+  }
+  const pf = prev.fieldValues ?? {}, nf = next.fieldValues ?? {};
+  if (pf !== nf) for (const id of Object.keys(nf)) {
+    if (pf[id] === nf[id]) continue;
+    const a = pf[id] ?? {}, b = nf[id] ?? {};
+    const changed = [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => JSON.stringify(a[k]) !== JSON.stringify(b[k]));
+    if (!changed.length || !nextIds.has(id)) continue;
+    const labels = changed.map((k) => next.customFields?.find((f) => f.id === k)?.label ?? "a field");
+    push("lead.fields_changed", id, { entityType: "lead", entityId: id, relatedLeadId: id, summary: `${who} updated ${labels.join(", ")} on ${leadName(id)}.`, newValues: { fieldIds: changed } });
+  }
+  const pcf = new Map((prev.customFields ?? []).map((f) => [f.id, f]));
+  for (const f of next.customFields ?? []) { const o = pcf.get(f.id); if (o && o.version === f.version) continue; push("config.field_changed", `${f.id}:${f.version}`, { entityType: "lead", entityId: f.id, summary: !o ? `${who} created the field “${f.label}”.` : o.status !== f.status ? `${who} ${f.status === "archived" ? "archived" : "restored"} the field “${f.label}”. Stored values are kept.` : `${who} edited the field “${f.label}”.` }); }
+  const pv = new Map((prev.savedViews ?? []).map((v) => [v.id, v]));
+  for (const v of next.savedViews ?? []) { if (v.visibility === "personal") continue; const o = pv.get(v.id); if (o && o.version === v.version) continue; push("config.view_changed", `${v.id}:${v.version}`, { entityType: "lead", entityId: v.id, summary: `${who} ${o ? "updated" : "created"} the ${v.visibility} view “${v.name}”.` }); }
   const pr = prev.leadRelations ?? {}, nr = next.leadRelations ?? {};
   for (const [k, r] of Object.entries(nr)) {
     if (pr[k]?.kind === r.kind) continue;

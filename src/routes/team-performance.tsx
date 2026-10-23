@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Gauge, Plus, FlaskConical, Info, Users, Pencil, Pause, Play, Archive, Copy, History, AlertTriangle, ArrowUpDown, Bell } from "lucide-react";
 import { Shell, Empty, selectCls } from "@/components/crm/Shell";
 import { ATTRIBUTION_NOTE, GoalProgressCard, MetricTip, Stat, TrendChart, fmtMetric, fmtRate } from "@/components/crm/Performance";
@@ -9,7 +9,7 @@ import { roleLabel, STATUS_LABEL as ACCOUNT_LABEL, type Employee } from "@/lib/c
 import { STATUS_LABEL, LEAD_STATUSES } from "@/lib/crm/types";
 import { dayKey, formatDate, formatDateTime, initials } from "@/lib/crm/format";
 import {
-  PERIODS, METRICS, METRIC, GOAL_PERIOD_LABEL, cohortConversion, demoPerformanceEvents, followUpCompletion, goalAlerts, goalProgress, goalsFor, hasAttribution,
+  PERIODS, METRICS, METRIC, GOAL_PERIOD_LABEL, cohortConversion, demoPerformanceEvents, followUpCompletion, goalProgress, goalsFor, hasAttribution,
   indexEvents, metricSeries, metricValue, periodWindow, rate, workloadFor, workloadInsights,
   type GoalDef, type GoalInput, type GoalProgressRow, type MetricKey, type PeriodKey, type Workload,
 } from "@/lib/crm/performance";
@@ -69,7 +69,7 @@ function TeamPerformance() {
 
   // Goal rows for today's period (genuine records only — never demo — for alerts).
   const rows: GoalProgressRow[] = useMemo(() => st.goals.filter((g) => g.status !== "archived").flatMap((g) => (g.scope === "team" ? [null] : g.employeeIds).map((eid) => ({ goal: g, def: g, employeeId: eid, progress: goalProgress(g, st.goalRevisions, eid, realIdx, today, ctx) }))), [st.goals, st.goalRevisions, realIdx]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (!preview) st.recordGoalAlerts(goalAlerts(rows, loads, emps, st.perfPrefs, new Date().toISOString())); }, [rows, loads, st.perfPrefs]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Goal alerts are evaluated app-wide by the shared runner (automationRunner.ts), not by this page.
 
   if (preview) return <Shell title="Team Performance"><Empty icon={<Gauge />} title="Owner only" hint="Team-wide performance is never available to employees. Open My Performance instead." action={<Button asChild size="sm"><Link to="/my-performance">My Performance</Link></Button>} /></Shell>;
 

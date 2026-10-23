@@ -8,6 +8,7 @@ import {
   LayoutDashboard, Users, KanbanSquare, CalendarClock, Wallet, StickyNote, Moon, Sun,
   BarChart3, Sunrise, Settings, MoreHorizontal, Plus, Search, Bell, ArrowUpRight, PhoneCall, Menu, ChevronRight, PanelLeftClose, PanelLeftOpen, Presentation, ShieldCheck, Activity,
   Archive, Eye, Lock, Inbox, Workflow, Target, Gauge,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
 import { useSession, useAccess, routeAllowed, type PreviewSession } from "@/lib/crm/session";
@@ -39,6 +40,7 @@ const NAV = [
   { to: "/team-performance", label: "Team Performance", mobile: "Performance", icon: Gauge, section: "" },
   { to: "/team", label: "Team Management", mobile: "Team", icon: ShieldCheck, section: "Admin" },
   { to: "/automation", label: "Automation Studio", mobile: "Automation", icon: Workflow, section: "" },
+  { to: "/crm-config", label: "CRM Configuration", mobile: "Config", icon: SlidersHorizontal, section: "" },
   { to: "/data-vault", label: "Data Vault", mobile: "Vault", icon: Archive, section: "" },
   { to: "/settings", label: "Settings", mobile: "Settings", icon: Settings, section: "Manage" },
 ] as const;
@@ -74,7 +76,7 @@ const GROUPS = [
   { label: "Workspace", items: ["/", "/my-performance", "/inbox", "/leads", "/pipeline", "/follow-ups"] },
   { label: "Business", items: ["/deals", "/sales-studio", "/analytics", "/daily-briefing"] },
   { label: "Personal", items: ["/notes"] },
-  { label: "Owner admin", items: ["/team", "/team-performance", "/team-activity", "/automation", "/data-vault"] },
+  { label: "Owner admin", items: ["/team", "/team-performance", "/team-activity", "/automation", "/crm-config", "/data-vault"] },
   { label: "System", items: ["/settings"] },
 ] as const;
 const COLLAPSE_KEY = "scale-flow-sidebar-collapsed";

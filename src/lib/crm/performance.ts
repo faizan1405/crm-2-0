@@ -341,3 +341,14 @@ export function demoPerformanceEvents(employees: Employee[], leads: Lead[], now:
   });
   return out;
 }
+
+/** App-level goal alert evaluation (runs from the shared browser runner, not a page). Genuine events only; alert ids are stable, so re-runs never duplicate. */
+export function evaluateGoalAlerts(s: { goals: GoalDef[]; goalRevisions: GoalRevision[]; teamEvents: ActivityEvent[]; employees: Employee[]; payments: Payment[]; leads: Lead[]; followUps: FollowUp[]; assignments: Record<string, Assignment>; perfPrefs: PerfPrefs }, now: Date): GoalAlert[] {
+  const live = s.goals.filter((g) => g.status !== "archived"); if (!live.length) return [];
+  const idx = indexEvents(s.teamEvents, false); const day = dayKey(now); const ctx = { employees: s.employees, payments: s.payments };
+  const emps = s.employees.filter((e) => e.accountStatus !== "archived");
+  const rows: GoalProgressRow[] = live.flatMap((g) => (g.scope === "team" ? [null] : g.employeeIds).map((eid) => ({ goal: g, def: g, employeeId: eid, progress: goalProgress(g, s.goalRevisions, eid, idx, day, ctx) })));
+  const data = { leads: s.leads, followUps: s.followUps, assignments: s.assignments };
+  const loads = Object.fromEntries(emps.map((e) => [e.id, workloadFor(e.id, data, now)])) as Record<string, Workload>;
+  return goalAlerts(rows, loads, emps, s.perfPrefs, now.toISOString());
+}

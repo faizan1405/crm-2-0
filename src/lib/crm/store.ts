@@ -48,6 +48,7 @@ import { activePreview, allows, previewSink, type CrmEventType } from "./session
 import { DEFAULT_AUTOMATION_SETTINGS, planRule, reconcileReminders, ruleError as automationRuleError, ruleFromTemplate, type AutomationRule, type AutomationRun, type AutomationSettings, type Reminder, type RuleStatus } from "./automation";
 import { pairKey, pairSignature, type InboxMeta, type LeadRelation, type RelationKind } from "./inbox";
 import { buildGoal, goalError, reviseGoal, mergeAlerts, DEFAULT_PERF_PREFS, type GoalAlert, type GoalDef, type GoalInput, type GoalRevision, type GoalStatus, type PerfPrefs } from "./performance";
+import { activeFields, bulkTag, fieldDefError, matchCondition, filterFields, removedUsedOptions, starterViews, tagError, typeChangeImpact, convertValue, undoTags, validateLeadValues, viewEditable, viewError, viewIssues, CUSTOMIZE_SCHEMA, type CustomFieldDef, type FieldValues, type FieldValue, type LeadTags, type SavedView, type TagDef, type ViewCtx, type ViewPrefs, type Viewer, type ViewCondition } from "./customize";
 import { deriveEvents, mergeEvents, markRead, markAllRead, DEFAULT_NOTIFY_PREFS, EMPTY_READS, OWNER_ACTOR_ID, type ActivityEvent, type EventSnap, type NotifyPrefs, type ReadState } from "./activity";
 
 // ---- Preview guards: every action is checked against the previewed employee's permissions (Owner: always allowed). ----
@@ -72,12 +73,15 @@ const GUARDS: Record<string, Guard> = {
   assignLeads: ["leads.assign", { ok: false, error: DENIED }, "lead.assigned"], restoreAssignments: ["leads.assign", undefined], applyAssignmentPlan: ["leads.assign", { ok: false, error: DENIED }, "lead.assigned"],
   saveBusinessProfile: ["__owner", undefined], reset: ["__owner", undefined], logBackup: ["__owner", undefined], deleteLegacyQuotations: ["__owner", undefined],
   addEmployee: ["__owner", { ok: false, error: DENIED }], updateEmployee: ["__owner", DENIED], setEmployeeStatus: ["__owner", undefined], saveEmployeeAccess: ["__owner", undefined],
+  saveCustomField: ["__owner", DENIED], setCustomFieldStatus: ["__owner", undefined], moveCustomField: ["__owner", undefined], saveTag: ["__owner", DENIED], setTagStatus: ["__owner", undefined],
+  setLeadFieldValues: ["leads.edit", { ok: false, errors: { _: DENIED } }], setLeadTags: ["leads.edit", false], bulkTagLeads: ["leads.edit", { changed: 0, before: {}, applied: {} }], undoBulkTags: ["leads.edit", { restored: 0, kept: 0 }],
+  saveView: ["leads.view", { ok: false, error: DENIED }], deleteView: ["leads.view", undefined], duplicateView: ["leads.view", undefined], setViewPref: ["leads.view", undefined],
   saveGoal: ["__owner", DENIED], setGoalStatus: ["__owner", undefined], duplicateGoal: ["__owner", undefined], setPerfPrefs: ["__owner", undefined], recordGoalAlerts: ["__owner", undefined],
   saveRule: ["__owner", DENIED], deleteRule: ["__owner", undefined], moveRule: ["__owner", undefined], setRuleSettings: ["__owner", undefined], applyRulesToExisting: ["__owner", 0],
 };
 /** Actions never recorded as Team Activity (bulk reset would be noise; settings/templates are not team activity). */
-const UNRECORDED = new Set(["reset", "logBackup", "recordGoalAlerts", "setPerfPrefs"]);
-const snapOf = (s: CRMState): EventSnap => ({ leads: s.leads, followUps: s.followUps, deals: s.deals, payments: s.payments, activities: s.activities, assignments: s.assignments, employees: s.employees, employeeAccess: s.employeeAccess, inboxMeta: s.inboxMeta, leadRelations: s.leadRelations, reminders: s.reminders });
+const UNRECORDED = new Set(["reset", "logBackup", "recordGoalAlerts", "setPerfPrefs", "setViewPref"]);
+const snapOf = (s: CRMState): EventSnap => ({ leads: s.leads, followUps: s.followUps, deals: s.deals, payments: s.payments, activities: s.activities, assignments: s.assignments, employees: s.employees, employeeAccess: s.employeeAccess, inboxMeta: s.inboxMeta, leadRelations: s.leadRelations, reminders: s.reminders, leadTags: s.leadTags, fieldValues: s.fieldValues, customFields: s.customFields, tagDefs: s.tagDefs, savedViews: s.savedViews });
 let depth = 0;
 function guarded<T extends object>(state: T, get: () => CRMState, set: (p: Partial<CRMState>) => void): T {
   const out = { ...state } as Record<string, unknown>;
@@ -273,6 +277,47 @@ interface CRMState extends Prefs {
   setPerfPrefs: (p: Partial<PerfPrefs>) => void;
   /** Deduplicated by stable alert id. */
   recordGoalAlerts: (alerts: GoalAlert[]) => void;
+  // Phase 3G — custom fields, tags, saved views. Values/tags live in maps keyed by lead id; Lead itself never changes shape.
+  customFields: CustomFieldDef[];
+  fieldValues: FieldValues;
+  tagDefs: TagDef[];
+  leadTags: LeadTags;
+  savedViews: SavedView[];
+  viewPrefs: ViewPrefs;
+  /** Create (empty id) or edit a field definition. Type changes only apply when every stored value converts cleanly. */
+  saveCustomField: (def: CustomFieldDef) => string | null;
+  setCustomFieldStatus: (id: string, status: CustomFieldDef["status"]) => void;
+  moveCustomField: (id: string, dir: -1 | 1) => void;
+  /** Validated per type; respects field-level visibility/editability for the current viewer. */
+  setLeadFieldValues: (leadId: string, input: Record<string, unknown>, opts?: { isNew?: boolean }) => { ok: true; needs: string[] } | { ok: false; errors: Record<string, string> };
+  saveTag: (t: Omit<TagDef, "createdAt" | "updatedAt"> & { id: string }) => string | null;
+  setTagStatus: (id: string, status: TagDef["status"]) => void;
+  setLeadTags: (leadId: string, tagIds: string[]) => boolean;
+  bulkTagLeads: (ids: string[], tagId: string, mode: "add" | "remove") => { changed: number; before: Record<string, string[] | undefined>; applied: Record<string, string[]> };
+  undoBulkTags: (before: Record<string, string[] | undefined>, applied: Record<string, string[]>) => { restored: number; kept: number };
+  saveView: (v: Omit<SavedView, "createdAt" | "updatedAt" | "version" | "schema" | "ownerId"> & { ownerId?: string }) => { ok: true; id: string } | { ok: false; error: string };
+  deleteView: (id: string) => void;
+  duplicateView: (id: string) => string | undefined;
+  setViewPref: (userId: string, patch: { defaultId?: string | undefined; pinned?: string[] }) => void;
+}
+
+/** Who is acting right now: the Owner, or the previewed employee. */
+export function currentViewer(): Viewer {
+  const pv = activePreview();
+  return pv ? { owner: false, employeeId: pv.employeeId, canEdit: allows(pv, "leads.edit") } : { owner: true };
+}
+/** Automation evaluation context — one place, shared by real runs and Automation Studio dry runs. */
+export function automationCtxOf(st: Pick<CRMState, "leads" | "activities" | "followUps" | "assignments" | "inboxMeta" | "fieldValues" | "leadTags" | "customFields" | "tagDefs" | "employees">, now = new Date()) {
+  const vctx = viewCtxOf(st, { owner: true }, now); const vfields = new Map(filterFields(vctx).map((f) => [f.key, f]));
+  return { leads: st.leads, activities: st.activities, followUps: st.followUps, assignments: st.assignments, inboxMeta: st.inboxMeta, now, customMatch: (l: Lead, cs: NonNullable<AutomationRule["conditions"]["custom"]>) => cs.every((c) => matchCondition(l, c as ViewCondition, vctx, vfields)) };
+}
+/** Custom-field/tag problems that stop a rule from running (archived/removed fields or options). */
+export function automationIssues(st: Pick<CRMState, "assignments" | "followUps" | "activities" | "inboxMeta" | "fieldValues" | "leadTags" | "customFields" | "tagDefs" | "employees">, r: AutomationRule) {
+  return r.conditions.custom?.length ? viewIssues({ filter: { mode: "and", conditions: r.conditions.custom as ViewCondition[] } }, viewCtxOf(st, { owner: true })) : [];
+}
+export const viewerId = (v: Viewer) => (v.owner ? OWNER_ACTOR_ID : v.employeeId);
+export function viewCtxOf(s: Pick<CRMState, "assignments" | "followUps" | "activities" | "inboxMeta" | "fieldValues" | "leadTags" | "customFields" | "tagDefs" | "employees">, viewer: Viewer, now = new Date()): ViewCtx {
+  return { assignments: s.assignments, followUps: s.followUps, activities: s.activities, inboxMeta: s.inboxMeta, fieldValues: s.fieldValues, leadTags: s.leadTags, customFields: s.customFields, tags: s.tagDefs, employees: s.employees.filter((e) => e.accountStatus !== "archived"), now, viewer };
 }
 
 export function duplicatePhone(leads: Lead[], phone: string): Lead | undefined {
@@ -392,12 +437,15 @@ export const useCRM = create<CRMState>()(
       setAutomationSettings: (p) => set((s) => ({ automationSettings: { ...s.automationSettings, ...p } })),
       runAutomations: (opts) => {
         const st = get(); const now = opts?.now ? new Date(opts.now) : new Date(); const at = now.toISOString(); const manual = !!opts?.manual;
-        const ctx = { leads: st.leads, activities: st.activities, followUps: st.followUps, assignments: st.assignments, inboxMeta: st.inboxMeta, now };
+        const vctx = viewCtxOf(st, { owner: true }, now);
+        const ctx = automationCtxOf(st, now);
         const rec = reconcileReminders(st.reminders, ctx);
         let reminders = rec.next; let budget = st.automationSettings.maxActionsPerRun; let created = 0;
         const runs: AutomationRun[] = []; const fuJobs: { reminderId: string; leadId: string; key: string; dueAt: string; rule: string }[] = [];
         const rules = st.automationRules.map((r) => {
           if (r.status !== "enabled") { if (manual && r.status !== "archived") runs.push({ id: uid("run"), ruleId: r.id, ruleName: r.name, at, outcome: "disabled", actions: [], skippedDuplicates: 0, matched: 0, manual }); return r; }
+          const broken = r.conditions.custom?.length ? viewIssues({ filter: { mode: "and", conditions: r.conditions.custom as ViewCondition[] } }, vctx) : [];
+          if (broken.length) { runs.push({ id: uid("run"), ruleId: r.id, ruleName: r.name, at, outcome: "failed", actions: [], skippedDuplicates: 0, matched: 0, error: `Not run: ${broken[0]!.text}`, manual }); return { ...r, lastEvaluatedAt: at }; }
           const plan = planRule(r, ctx, reminders);
           const make = plan.create.slice(0, Math.max(0, budget)); budget -= make.length;
           const failed = plan.create.length - make.length;
@@ -453,6 +501,92 @@ export const useCRM = create<CRMState>()(
       },
       setPerfPrefs: (p) => set((s) => ({ perfPrefs: { ...s.perfPrefs, ...p } })),
       recordGoalAlerts: (alerts) => set((s) => { const next = mergeAlerts(s.goalAlerts, alerts); return next === s.goalAlerts ? s : { goalAlerts: next }; }),
+      customFields: [],
+      fieldValues: {},
+      tagDefs: [],
+      leadTags: {},
+      savedViews: starterViews(OWNER_ACTOR_ID, "2026-01-01T00:00:00.000Z"),
+      viewPrefs: {},
+      saveCustomField: (input) => {
+        const st = get(); const at = new Date().toISOString();
+        const cur = input.id ? st.customFields.find((f) => f.id === input.id) : undefined;
+        const def: CustomFieldDef = { ...input, label: input.label.trim(), ...(input.description?.trim() ? { description: input.description.trim() } : { description: undefined }), id: input.id, order: cur?.order ?? (st.customFields.length ? Math.max(...st.customFields.map((f) => f.order)) + 1 : 0) };
+        if (!def.id) return "Missing internal id.";
+        const err = fieldDefError(def, st.customFields); if (err) return err;
+        if (!cur) { set((s) => ({ customFields: [...s.customFields, { ...def, createdAt: at, updatedAt: at, version: 1, history: [{ at, change: "Created" }] }] })); return null; }
+        const lost = removedUsedOptions(cur, def, st.fieldValues);
+        if (lost.length) return `Option ${lost.map((o) => `“${o.label}” (${o.count} lead${o.count > 1 ? "s" : ""})`).join(", ")} is in use — archive it instead of deleting it.`;
+        let values = st.fieldValues;
+        if (cur.type !== def.type) {
+          const imp = typeChangeImpact(cur, def, st.fieldValues);
+          if (imp.incompatible.length) return `${imp.incompatible.length} lead${imp.incompatible.length > 1 ? "s have values" : " has a value"} that can't become ${def.type}. Nothing was changed.`;
+          values = Object.fromEntries(Object.entries(st.fieldValues).map(([id, row]) => { const v = row[cur.id]; return [id, v === undefined ? row : { ...row, [cur.id]: convertValue(v, cur, def)! }]; }));
+        }
+        const changes = [cur.label !== def.label && `Renamed from “${cur.label}”`, cur.type !== def.type && `Type ${cur.type} → ${def.type}`, cur.required !== def.required && (def.required ? "Now required" : "Now optional"), (cur.visibility !== def.visibility || cur.editable !== def.editable) && "Visibility changed", JSON.stringify(cur.options) !== JSON.stringify(def.options) && "Options changed"].filter(Boolean) as string[];
+        set((s) => ({ fieldValues: values, customFields: s.customFields.map((f) => (f.id === cur.id ? { ...def, createdAt: cur.createdAt, updatedAt: at, version: cur.version + 1, history: [...cur.history, { at, change: changes.join(" · ") || "Edited" }].slice(-50) } : f)) }));
+        return null;
+      },
+      setCustomFieldStatus: (id, status) => set((s) => ({ customFields: s.customFields.map((f) => (f.id === id && f.status !== status ? { ...f, status, updatedAt: new Date().toISOString(), version: f.version + 1, history: [...f.history, { at: new Date().toISOString(), change: status === "archived" ? "Archived (values kept)" : "Restored" }] } : f)) })),
+      moveCustomField: (id, dir) => set((s) => { const l = [...s.customFields].sort((a, b) => a.order - b.order); const i = l.findIndex((f) => f.id === id), j = i + dir; if (i < 0 || j < 0 || j >= l.length) return {}; [l[i], l[j]] = [l[j]!, l[i]!]; return { customFields: l.map((f, k) => ({ ...f, order: k })) }; }),
+      setLeadFieldValues: (leadId, input, opts) => {
+        const st = get(); if (!st.leads.some((l) => l.id === leadId)) return { ok: false, errors: { _: "Lead not found." } };
+        const viewer = currentViewer();
+        const allowed = activeFields(st.customFields).filter((d) => viewer.owner || (d.visibility === "team" && d.editable === "team"));
+        const ok = new Set(allowed.map((d) => d.id));
+        const blocked = Object.keys(input).filter((k) => !ok.has(k));
+        if (blocked.length) return { ok: false, errors: Object.fromEntries(blocked.map((k) => [k, "You can't edit this field."])) };
+        const prev = st.fieldValues[leadId] ?? {};
+        const r = validateLeadValues(allowed, input, { isNew: !!opts?.isNew, previous: prev });
+        if (Object.keys(r.errors).length) return { ok: false, errors: r.errors };
+        const row: Record<string, FieldValue> = { ...prev };
+        for (const k of Object.keys(input)) { const v = r.values[k]; if (v === undefined) delete row[k]; else row[k] = v; }
+        set((s) => ({ fieldValues: { ...s.fieldValues, [leadId]: row } }));
+        return { ok: true, needs: r.needs };
+      },
+      saveTag: (t) => {
+        const st = get(); const err = tagError(t, st.tagDefs); if (err) return err; const at = new Date().toISOString();
+        const cur = st.tagDefs.find((x) => x.id === t.id);
+        set((s) => ({ tagDefs: cur ? s.tagDefs.map((x) => (x.id === t.id ? { ...x, ...t, name: t.name.trim(), updatedAt: at } : x)) : [...s.tagDefs, { ...t, name: t.name.trim(), createdAt: at, updatedAt: at }] }));
+        return null;
+      },
+      setTagStatus: (id, status) => set((s) => ({ tagDefs: s.tagDefs.map((t) => (t.id === id ? { ...t, status, updatedAt: new Date().toISOString() } : t)) })),
+      setLeadTags: (leadId, tagIds) => {
+        const st = get(); if (!st.leads.some((l) => l.id === leadId)) return false;
+        const known = new Map(st.tagDefs.map((t) => [t.id, t])); const cur = st.leadTags[leadId] ?? [];
+        // Archived tags already on the lead may stay; new ones must be active.
+        const next = [...new Set(tagIds)].filter((id) => known.has(id) && (known.get(id)!.status === "active" || cur.includes(id)));
+        set((s) => ({ leadTags: { ...s.leadTags, [leadId]: next } }));
+        return true;
+      },
+      bulkTagLeads: (ids, tagId, mode) => {
+        const st = get(); const tag = st.tagDefs.find((t) => t.id === tagId);
+        if (!tag || (mode === "add" && tag.status !== "active")) return { changed: 0, before: {}, applied: {} };
+        const live = new Set(st.leads.map((l) => l.id));
+        const r = bulkTag(st.leadTags, ids.filter((id) => live.has(id)), tagId, mode);
+        if (r.changed) set({ leadTags: r.next });
+        return { changed: r.changed, before: r.before, applied: r.applied };
+      },
+      undoBulkTags: (before, applied) => { const r = undoTags(get().leadTags, before, applied); if (r.restored) set({ leadTags: r.next }); return { restored: r.restored, kept: r.kept }; },
+      saveView: (input) => {
+        const st = get(); const viewer = currentViewer(); const at = new Date().toISOString();
+        const cur = input.id ? st.savedViews.find((v) => v.id === input.id) : undefined;
+        if (cur && !viewEditable(cur, viewer)) return { ok: false, error: "You can't edit this view." };
+        const ownerId = cur?.ownerId ?? viewerId(viewer);
+        const err = viewError({ ...input, ownerId }, viewer, st.savedViews, cur?.id); if (err) return { ok: false, error: err };
+        const id = cur?.id ?? uid("view");
+        const row: SavedView = { id, name: input.name.trim(), visibility: input.visibility, ownerId, filter: input.filter, sort: input.sort, ...(input.columns ? { columns: input.columns } : {}), archived: !!input.archived, schema: CUSTOMIZE_SCHEMA, createdAt: cur?.createdAt ?? at, updatedAt: at, version: (cur?.version ?? 0) + 1 };
+        set((s) => ({ savedViews: cur ? s.savedViews.map((v) => (v.id === id ? row : v)) : [...s.savedViews, row] }));
+        return { ok: true, id };
+      },
+      deleteView: (id) => { const v = get().savedViews.find((x) => x.id === id); if (!v || !viewEditable(v, currentViewer())) return; set((s) => ({ savedViews: s.savedViews.filter((x) => x.id !== id), viewPrefs: Object.fromEntries(Object.entries(s.viewPrefs).map(([u, p]) => [u, { ...p, pinned: p.pinned.filter((x) => x !== id), ...(p.defaultId === id ? { defaultId: undefined } : {}) }])) })); },
+      duplicateView: (id) => {
+        const st = get(); const v = st.savedViews.find((x) => x.id === id); const viewer = currentViewer(); if (!v) return undefined;
+        let name = `${v.name} (copy)`, n = 2; const mine = st.savedViews.filter((x) => x.ownerId === viewerId(viewer));
+        while (mine.some((x) => x.name.toLowerCase() === name.toLowerCase())) name = `${v.name} (copy ${n++})`;
+        const r = get().saveView({ id: "", name, visibility: "personal", filter: structuredClone(v.filter), sort: v.sort, columns: v.columns, archived: false });
+        return r.ok ? r.id : undefined;
+      },
+      setViewPref: (userId, patch) => set((s) => ({ viewPrefs: { ...s.viewPrefs, [userId]: { pinned: [], ...s.viewPrefs[userId], ...patch } } })),
       ...defaultPrefs,
       addLead: (lead) => {
         const id = uid("lead");
@@ -788,17 +922,22 @@ export const useCRM = create<CRMState>()(
     },
     {
       name: "scale-flow-crm-2-demo",
-      version: 6,
+      version: 7,
       storage: createJSONStorage(() => guardedStorage),
       skipHydration: true,
       // v3: billing quotations are moved, unchanged, into a read-only backup. Nothing is converted automatically.
       // v4: adds Smart Inbox maps (empty) — existing leads are untouched and start as "Needs review".
-      migrate: (persisted, version) => migratePerformance(migrateAutomation(migrateInbox(migrateQuotations(persisted as Record<string, unknown>, version), version), version), version) as unknown as CRMState,
+      migrate: (persisted, version) => migrateCustomization(migratePerformance(migrateAutomation(migrateInbox(migrateQuotations(persisted as Record<string, unknown>, version), version), version), version), version) as unknown as CRMState,
     },
   ),
 );
 
 /** v6: adds Sales Goals state (empty, no goal pre-created). */
+/** v7: custom fields, tags and saved views start empty (plus starter company views). No lead is modified. */
+export function migrateCustomization(state: Record<string, unknown>, version: number): Record<string, unknown> {
+  if (version >= 7) return state;
+  return { ...state, customFields: state["customFields"] ?? [], fieldValues: state["fieldValues"] ?? {}, tagDefs: state["tagDefs"] ?? [], leadTags: state["leadTags"] ?? {}, savedViews: state["savedViews"] ?? starterViews(OWNER_ACTOR_ID, new Date().toISOString()), viewPrefs: state["viewPrefs"] ?? {} };
+}
 export function migratePerformance(state: Record<string, unknown>, version: number): Record<string, unknown> {
   if (!state || version >= 6) return state;
   return { ...state, goals: state["goals"] ?? [], goalRevisions: state["goalRevisions"] ?? [], goalAlerts: state["goalAlerts"] ?? [], perfPrefs: state["perfPrefs"] ?? DEFAULT_PERF_PREFS };

@@ -14,6 +14,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { selectCls } from "./Shell";
 import { cn } from "@/lib/utils";
+import { FieldForm, TagPicker, toDraft, useViewer, type Draft } from "./Customize";
+import { activeFields, fieldEditable, validateLeadValues } from "@/lib/crm/customize";
 
 interface Form {
   name: string; phone: string; email: string; company: string; requirement: string;
@@ -24,7 +26,13 @@ const blank: Form = { name: "", phone: "", email: "", company: "", requirement: 
 const SAMPLE = "Rahul Sharma, 9876543210, owns an event company, wants a website, budget 40000, follow up next Monday.";
 
 export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
-  const { leads, addLead, addFollowUp } = useCRM();
+  const { leads, addLead, addFollowUp, customFields, setLeadFieldValues, setLeadTags } = useCRM();
+  const viewer = useViewer();
+  const cfDefs = activeFields(customFields).filter((d) => fieldEditable(d, viewer));
+  const cfInit = () => Object.fromEntries(cfDefs.map((d) => [d.id, toDraft(d, d.defaultValue)])) as Record<string, Draft>;
+  const [cf, setCf] = useState<Record<string, Draft>>(cfInit);
+  const [cfErr, setCfErr] = useState<Record<string, string>>({});
+  const [tagIds, setTagIds] = useState<string[]>([]);
   const [mode, setMode] = useState<"ai" | "manual">("ai");
   const [raw, setRaw] = useState("");
   const [f, setF] = useState<Form>(blank);
@@ -35,7 +43,7 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const dup = duplicatePhone(leads, f.phone);
   const set = (k: keyof Form) => (e: { target: { value: string } }) => setF((p) => ({ ...p, [k]: e.target.value }));
 
-  const close = () => { onOpenChange(false); setF(blank); setRaw(""); setStructured(false); setHint(undefined); setAllowDup(false); setErrors({}); };
+  const close = () => { setCf(cfInit()); setCfErr({}); setTagIds([]); onOpenChange(false); setF(blank); setRaw(""); setStructured(false); setHint(undefined); setAllowDup(false); setErrors({}); };
 
   const structure = () => {
     if (!raw.trim()) { toast.error("Paste some lead details first"); return; }
@@ -51,7 +59,9 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     if (!validPhone(f.phone)) e.phone = "Enter a 10-digit phone number";
     if (f.email && !/^\S+@\S+\.\S+$/.test(f.email)) e.email = "Invalid email";
     setErrors(e);
-    if (Object.keys(e).length) return;
+    const cfr = validateLeadValues(cfDefs, cf, { isNew: true });
+    setCfErr(cfr.errors);
+    if (Object.keys(e).length || Object.keys(cfr.errors).length) return;
     if (dup && !allowDup) { toast.error("Confirm the duplicate before saving"); return; }
     const num = (s: string) => (Number(s) > 0 ? Number(s) : undefined);
     const budget = num(f.budget), quoted = num(f.quotedAmount);
@@ -62,6 +72,9 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
       ...(budget ? { budget } : {}), ...(quoted ? { quotedAmount: quoted } : {}), ...(f.notes ? { notes: f.notes } : {}),
     };
     const id = addLead(lead);
+    if (!id) { toast.error("Not allowed by this employee's permissions"); return; }
+    if (cfDefs.length) setLeadFieldValues(id, cf, { isNew: true });
+    if (tagIds.length) setLeadTags(id, tagIds);
     if (f.followUp) addFollowUp({ leadId: id, type: "call", dueAt: businessDateTime(f.followUp), note: "First follow-up" });
     toast.success(`${lead.name} added to Leads and Pipeline`);
     close();
@@ -131,6 +144,8 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               <Input id="f-fu" type="datetime-local" value={f.followUp} onChange={set("followUp")} />
               {hint && !f.followUp && <p className="text-xs text-warning">Mentioned “{hint}” — please confirm the exact date and time.</p>}
             </div>
+            {cfDefs.length > 0 && <div className="grid gap-3 border-t pt-4 sm:col-span-2"><p className="text-sm font-semibold">Additional information</p><FieldForm defs={cfDefs} draft={cf} onChange={(k, v) => setCf((p) => ({ ...p, [k]: v }))} errors={cfErr} /></div>}
+            <div className="grid gap-1.5 sm:col-span-2"><Label>Tags</Label><TagPicker value={tagIds} onChange={setTagIds} /></div>
             <div className="grid gap-1.5 sm:col-span-2"><Label>Notes</Label><Textarea rows={2} value={f.notes} onChange={set("notes")} /></div>
             <div className="flex justify-end gap-2 sm:col-span-2">
               <Button variant="ghost" onClick={close}>Cancel</Button>

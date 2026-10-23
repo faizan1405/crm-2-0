@@ -6,10 +6,10 @@ import type { ProofMeta } from "./attachments";
 
 export const APP_NAME = "Scale Flow Sales OS";
 export const FORMAT_VERSION = 1;
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 export const BUSINESS_TZ = "Asia/Kolkata";
 
-export type CategoryId = "leads" | "activities" | "followups" | "deals" | "payments" | "proofs" | "notes" | "quotations" | "waTemplates" | "demos" | "employees" | "permissions" | "assignments" | "teamActivity" | "inbox" | "automation" | "performance" | "settings";
+export type CategoryId = "leads" | "activities" | "followups" | "deals" | "payments" | "proofs" | "notes" | "quotations" | "waTemplates" | "demos" | "employees" | "permissions" | "assignments" | "teamActivity" | "inbox" | "automation" | "performance" | "customization" | "settings";
 export interface Category { id: CategoryId; label: string; group: string; desc: string; keys: string[]; file: string; isPrivate?: boolean }
 
 export const CATEGORIES: Category[] = [
@@ -30,10 +30,11 @@ export const CATEGORIES: Category[] = [
   { id: "inbox", label: "Smart Inbox & duplicates", group: "Lead management", desc: "Inbox review status, duplicate flags, Keep Separate / Related decisions. Source and first-contact data are in Leads and Activity history.", keys: ["inboxMeta", "leadRelations"], file: "data/lead-inbox.json" },
   { id: "automation", label: "Automation Studio", group: "Team", desc: "Automation rules and status, settings, reminders and the full execution history (automation-origin markers included).", keys: ["automationRules", "automationSettings", "reminders", "automationRuns"], file: "data/automation.json" },
   { id: "performance", label: "Sales goals & scorecards", group: "Team", desc: "Goal definitions, individual and team goal assignments, full revision history, goal alerts and scorecard settings. Demo performance data is never included.", keys: ["goals", "goalRevisions", "goalAlerts", "perfPrefs"], file: "data/sales-goals.json" },
+  { id: "customization", label: "Custom fields, tags & views", group: "Lead management", desc: "Custom field definitions with options, visibility and history, every stored field value, tags, lead–tag links, saved views with their filters and visibility, and pin/default preferences.", keys: ["customFields", "fieldValues", "tagDefs", "leadTags", "savedViews", "viewPrefs"], file: "data/crm-customization.json" },
   { id: "settings", label: "Settings", group: "System", desc: "Workspace preferences, business profile and Daily Briefing state.", keys: ["owner", "email", "business", "theme", "accent", "density", "timeFormat", "dateStyle", "defaultLeadSort", "notifyFollowUps", "notifyPayments", "notifyDigest", "businessProfile", "briefingDone", "briefingDate"], file: "data/settings.json" },
 ];
 export const ALL_CATEGORY_IDS = CATEGORIES.map((c) => c.id);
-export const EMPLOYEE_CATEGORY_IDS: CategoryId[] = ["leads", "activities", "followups", "deals", "payments", "proofs", "assignments", "employees", "permissions"];
+export const EMPLOYEE_CATEGORY_IDS: CategoryId[] = ["customization", "leads", "activities", "followups", "deals", "payments", "proofs", "assignments", "employees", "permissions"];
 
 export type BackupType = "full" | "custom" | "employee";
 export interface BackupPlan { type: BackupType; categories: CategoryId[]; employeeId?: string }
@@ -72,6 +73,11 @@ export function employeeScope(s: Snapshot, employeeId: string): Snapshot {
     assignments: Object.fromEntries(Object.entries(asg).filter(([id]) => leadIds.has(id))),
     assignmentEvents: (arr(s, "assignmentEvents") as unknown as { previousAssigneeId: string | null; newAssigneeId: string | null }[]).filter((e) => e.previousAssigneeId === employeeId || e.newAssigneeId === employeeId),
     assignmentRules: [], ruleSettings: undefined, firedRules: [],
+    customFields: s["customFields"] ?? [],
+    fieldValues: Object.fromEntries(Object.entries((s["fieldValues"] ?? {}) as Record<string, unknown>).filter(([id]) => leadIds.has(id))),
+    tagDefs: s["tagDefs"] ?? [],
+    leadTags: Object.fromEntries(Object.entries((s["leadTags"] ?? {}) as Record<string, unknown>).filter(([id]) => leadIds.has(id))),
+    savedViews: (arr(s, "savedViews") as unknown as { ownerId: string; visibility: string }[]).filter((v) => v.ownerId === employeeId || v.visibility !== "personal"), viewPrefs: {},
   };
 }
 
@@ -112,7 +118,9 @@ export async function buildBackup(plan: BackupPlan, state: Snapshot, proofInputs
   if (!cats.length) throw new Error("Choose at least one category to back up.");
   const emp = plan.type === "employee" ? arr(state, "employees").find((e) => e.id === plan.employeeId) as (Rec & { name: string }) | undefined : undefined;
   if (plan.type === "employee" && !emp) throw new Error("That employee no longer exists.");
-  const src = scrub(emp ? employeeScope(state, emp.id) : state);
+  const raw = emp ? employeeScope(state, emp.id) : state;
+  // Custom field values are keyed by Owner-chosen field ids (e.g. "cf_session_date"); they are business data, not credentials, so they bypass the key scrubber.
+  const src: Snapshot = { ...scrub(raw), ...(raw["fieldValues"] !== undefined ? { fieldValues: raw["fieldValues"] } : {}) };
   const files: Record<string, Uint8Array> = {};
   const counts: Manifest["counts"] = {};
   const warnings: string[] = [], relationships: string[] = [];

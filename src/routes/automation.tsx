@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useCRM } from "@/lib/crm/store";
+import { useCRM, automationCtxOf, automationIssues } from "@/lib/crm/store";
+import { ConditionBuilder } from "@/components/crm/Customize";
+import type { ViewCondition } from "@/lib/crm/customize";
 import { formatDateTime } from "@/lib/crm/format";
 import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, type LeadPriority, type LeadSource, type LeadStatus } from "@/lib/crm/types";
 import { ACTION_LABEL, RULE_TEMPLATES, TRIGGER_LABEL, planRule, ruleConflicts, ruleError, type ActionType, type AutomationRule, type RulePlan, type RunOutcome, type TriggerType } from "@/lib/crm/automation";
@@ -29,7 +31,7 @@ export const Route = createFileRoute("/automation")({
 const STATUS_TONE: Record<AutomationRule["status"], string> = { enabled: "bg-success/15 text-success", paused: "bg-warning/15 text-warning", draft: "bg-secondary text-muted-foreground", archived: "bg-secondary text-muted-foreground" };
 const STATUS_TEXT: Record<AutomationRule["status"], string> = { enabled: "Enabled", paused: "Paused", draft: "Disabled · draft", archived: "Archived" };
 const OUTCOME_TONE: Record<RunOutcome, string> = { triggered: "bg-success/15 text-success", skipped: "bg-secondary text-muted-foreground", evaluated: "bg-secondary text-muted-foreground", failed: "bg-destructive/10 text-destructive", disabled: "bg-warning/15 text-warning" };
-const ctxOf = (s: ReturnType<typeof useCRM.getState>) => ({ leads: s.leads, activities: s.activities, followUps: s.followUps, assignments: s.assignments, inboxMeta: s.inboxMeta, now: new Date() });
+const ctxOf = (s: ReturnType<typeof useCRM.getState>) => automationCtxOf(s, new Date());
 
 function conditionText(r: AutomationRule, empName: (id: string) => string): string[] {
   const c = r.conditions; const out: string[] = [];
@@ -40,6 +42,7 @@ function conditionText(r: AutomationRule, empName: (id: string) => string): stri
   if (c.assigned && c.assigned !== "any") out.push(c.assigned === "assigned" ? "Assigned" : "Unassigned");
   if (c.inboxStatus && c.inboxStatus !== "any") out.push(c.inboxStatus === "needs_review" ? "Inbox: needs review" : "Inbox: reviewed");
   if (c.firstContactPending) out.push("No contact attempt recorded");
+  if (c.custom?.length) out.push(`${c.custom.length} custom field / tag condition${c.custom.length > 1 ? "s" : ""}`);
   if (c.minCreatedMinutes !== undefined) out.push(`Created ≥ ${c.minCreatedMinutes} min ago`);
   if (c.minSinceAttemptMinutes !== undefined) out.push(`Last attempt ≥ ${c.minSinceAttemptMinutes} min ago`);
   if (c.minStageDays !== undefined) out.push(`In stage ≥ ${c.minStageDays} days`);
@@ -93,6 +96,7 @@ function AutomationPage() {
                   <dl className="mt-3 grid gap-1 text-xs">
                     <div><dt className="inline font-semibold">WHEN </dt><dd className="inline">{TRIGGER_LABEL[r.trigger]}</dd></div>
                     <div><dt className="inline font-semibold">IF </dt><dd className="inline">{conditionText(r, empName).join(" · ")}</dd></div>
+                    {(() => { const iss = automationIssues(s, r); return iss.length ? <div className="flex items-center gap-1.5 text-warning"><AlertTriangle className="size-3.5" />Won't run: {iss[0]!.text}</div> : null; })()}
                     <div><dt className="inline font-semibold">THEN </dt><dd className="inline">{r.actions.map((a) => ACTION_LABEL[a]).join(" · ")}{r.settings.escalateOwnerAfterMinutes !== undefined ? ` · escalate to Owner after ${r.settings.escalateOwnerAfterMinutes} min` : ""}</dd></div>
                   </dl>
                   <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
@@ -232,6 +236,9 @@ function RuleEditor({ initial, onClose }: { initial: AutomationRule; onClose: ()
                 <div key={k} className="grid gap-1"><Label htmlFor={`c-${k}`} className="text-xs">{label}</Label><Input id={`c-${k}`} type="number" min={0} value={c[k] ?? ""} onChange={(e) => setC({ [k]: num(e.target.value) })} /></div>
               ))}
               {r.trigger === "followup_overdue" && <div className="grid gap-1"><Label htmlFor="s-od" className="text-xs">Minutes overdue before acting</Label><Input id="s-od" type="number" min={0} value={r.settings.overdueMinutes ?? ""} onChange={(e) => setS({ overdueMinutes: num(e.target.value) })} /></div>}
+            </div>
+            <div className="grid gap-1.5 border-t pt-2"><p className="text-xs font-semibold">Custom fields &amp; tags (all must match)</p>
+              <ConditionBuilder allowMode={false} only={(f) => f.key.startsWith("cf:") || f.key === "tags"} filter={{ mode: "and", conditions: (c.custom ?? []) as ViewCondition[] }} onChange={(f) => setC({ custom: f.conditions.length ? f.conditions : undefined })} />
             </div>
           </fieldset>
           <fieldset className="grid gap-2 rounded-lg border p-3"><legend className="px-1 text-xs font-semibold">THEN</legend>
