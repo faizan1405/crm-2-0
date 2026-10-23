@@ -12,11 +12,11 @@ import { STATUS_LABEL as STAGE_LABEL } from "@/lib/crm/types";
 import { PriorityBadge } from "@/components/crm/Shell";
 import { formatDateTime } from "@/lib/crm/format";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Search, ShieldCheck, X, Pencil, Power, KeyRound, Mail, Users, Activity, Lock, Trash2, Crown, Info } from "lucide-react";
+import { Eye as EyeIcon, EyeOff, Plus, Search, ShieldCheck, X, Pencil, Power, KeyRound, Mail, Users, Activity, Lock, Trash2, Crown, Info } from "lucide-react";
 import { Shell, Empty, selectCls } from "@/components/crm/Shell";
 import { useCRM } from "@/lib/crm/store";
 import { formatDate, initials } from "@/lib/crm/format";
-import { ROLES, PLANNED_ACCESS, RESOURCE_LABEL, STATUS_LABEL, demoAuth, filterEmployees, roleLabel, teamSummary, type Employee, type EmployeeInput, type TeamFilter, type TeamSort } from "@/lib/crm/team";
+import { ROLES, PLANNED_ACCESS, RESOURCE_LABEL, STATUS_LABEL, demoCredentials, passwordError, normalizeEmail, filterEmployees, roleLabel, teamSummary, type Employee, type EmployeeInput, type TeamFilter, type TeamSort } from "@/lib/crm/team";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -59,7 +59,7 @@ function Team() {
 
   return (
     <Shell title="Team Management" subtitle="Create and manage employee profiles. Sign-in and permissions arrive with the secure backend." actions={<Button onClick={() => setForm({ open: true })}><Plus />Add employee</Button>}>
-      <div className="tm-notice"><Info className="size-4 shrink-0" /><span><b>Local demo.</b> Profiles are saved in this browser only. Production login isn't configured yet, so employees can't sign in and no passwords are created. <Link to="/login" className="font-semibold underline underline-offset-2">Preview the login screen</Link></span></div>
+      <div className="tm-notice"><Info className="size-4 shrink-0" /><span><b>Local demo.</b> Profiles are saved in this browser only. You set each employee's email and password, but logins only work once the secure backend is connected — passwords are never saved in the browser. <Link to="/login" className="font-semibold underline underline-offset-2">Preview the login screen</Link></span></div>
       <div className="tm-summary">
         {([["Total employees", sum.total], ["Active", sum.active], ["Pending setup", sum.pending], ["Inactive", sum.inactive]] as const).map(([l, v]) => <div key={l} className="tm-sum"><span className="eyebrow">{l}</span><span className="num tm-sum-v">{v}</span></div>)}
       </div>
@@ -97,6 +97,7 @@ function Team() {
 
 function Inspector({ e, onClose, onEdit, onConfirm, onActivate }: { e: Employee; onClose: () => void; onEdit: () => void; onConfirm: (k: "deactivate" | "remove") => void; onActivate: () => void }) {
   const [wide, setWide] = useState(true);
+  const [cred, setCred] = useState<null | "email" | "password">(null);
   useEffect(() => { const mq = window.matchMedia("(min-width: 1280px)"); const f = () => setWide(mq.matches); f(); mq.addEventListener("change", f); return () => mq.removeEventListener("change", f); }, []);
   const panel = (
     <aside className="tm-inspector" role="dialog" aria-modal={!wide} aria-label={`${e.name} details`} key={e.id}>
@@ -116,10 +117,11 @@ function Inspector({ e, onClose, onEdit, onConfirm, onActivate }: { e: Employee;
       <section className="tm-sec"><h3 className="eyebrow">Account controls</h3><div className="grid gap-2 sm:grid-cols-2">
         <Button variant="outline" onClick={onEdit}><Pencil />Edit profile</Button>
         {e.accountStatus === "inactive" ? <Button variant="outline" onClick={onActivate}><Power />Activate</Button> : <Button variant="outline" onClick={() => onConfirm("deactivate")}><Power />Deactivate</Button>}
-        <Button variant="outline" onClick={async () => { const r = await demoAuth.requestPasswordReset(e.email); if (!r.ok) toast.info(r.message); }}><KeyRound />Password reset</Button>
-        <Button variant="outline" disabled title="Needs the secure backend"><Mail />Send invite · soon</Button>
+        <Button variant="outline" onClick={() => setCred("email")}><Mail />Change login email</Button>
+        <Button variant="outline" onClick={() => setCred("password")}><KeyRound />Reset password</Button>
         <Button variant="ghost" className="text-destructive sm:col-span-2" onClick={() => onConfirm("remove")}><Trash2 />Remove employee</Button>
       </div></section>
+      {cred && <CredentialDialog e={e} kind={cred} onClose={() => setCred(null)} />}
     </aside>
   );
   if (wide) return panel;
@@ -130,16 +132,24 @@ function EmployeeForm({ open, edit, onClose, onCreated }: { open: boolean; edit:
   const { addEmployee, updateEmployee } = useCRM();
   const [f, setF] = useState<EmployeeInput>(() => edit ? { name: edit.name, email: edit.email, roleId: edit.roleId, customRoleLabel: edit.customRoleLabel ?? "", accountStatus: edit.accountStatus === "inactive" ? "inactive" : edit.accountStatus === "active" ? "active" : "pending" } : { name: "", email: "", roleId: "salesperson", customRoleLabel: "", accountStatus: "pending" });
   const [err, setErr] = useState<string | null>(null);
-  const save = () => {
+  const [pw, setPw] = useState(""), [pw2, setPw2] = useState("");
+  const save = async () => {
     try {
       if (edit) { const e = updateEmployee(edit.id, f); if (e) return setErr(e); toast.success("Employee updated"); }
-      else { const r = addEmployee(f); if (!r.ok) return setErr(r.error); toast.success(`${f.name.trim()} added to your team`); onCreated(r.id); }
+      else {
+        const pe = passwordError(pw, pw2); if (pe) return setErr(pe);
+        const r = addEmployee(f); if (!r.ok) return setErr(r.error);
+        const c = await demoCredentials.createLogin(r.id, normalizeEmail(f.email), pw);
+        setPw(""); setPw2("");
+        toast.success(`${f.name.trim()} added to your team`, c.ok ? undefined : { description: "Profile saved. The login isn't active yet — " + c.message });
+        onCreated(r.id);
+      }
       onClose();
     } catch { setErr("Couldn't save in this browser. Check storage space and try again."); }
   };
   return <Dialog open={open} onOpenChange={(o) => !o && onClose()}><DialogContent className="sm:max-w-lg">
-    <DialogHeader><DialogTitle>{edit ? "Edit employee" : "Add employee"}</DialogTitle><DialogDescription>Creates a profile in this local demo. A real login is set up later with the secure backend.</DialogDescription></DialogHeader>
-    <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); save(); }} noValidate>
+    <DialogHeader><DialogTitle>{edit ? "Edit employee" : "Add employee"}</DialogTitle><DialogDescription>{edit ? "Update profile details." : "You choose the login email and password. No invitation is sent."}</DialogDescription></DialogHeader>
+    <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); void save(); }} noValidate>
       <label className="q-field"><span>Full name</span><Input autoFocus value={f.name} placeholder="Rahul Sharma" onChange={(e) => { setF({ ...f, name: e.target.value }); setErr(null); }} /></label>
       <label className="q-field"><span>Email address</span><Input type="email" value={f.email} placeholder="rahul@example.com" onChange={(e) => { setF({ ...f, email: e.target.value }); setErr(null); }} /></label>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -147,9 +157,42 @@ function EmployeeForm({ open, edit, onClose, onCreated }: { open: boolean; edit:
         <label className="q-field"><span>Account status</span><select className={selectCls} value={f.accountStatus} onChange={(e) => setF({ ...f, accountStatus: e.target.value as EmployeeInput["accountStatus"] })}><option value="pending">Pending setup</option>{edit && <option value="active">Active</option>}<option value="inactive">Inactive</option></select></label>
       </div>
       {f.roleId === "custom" && <label className="q-field"><span>Custom role name</span><Input value={f.customRoleLabel ?? ""} placeholder="e.g. Field Executive" onChange={(e) => { setF({ ...f, customRoleLabel: e.target.value }); setErr(null); }} /></label>}
-      <div className="tm-cred"><ShieldCheck className="size-4 shrink-0" /><span>No password is created or stored here. When the backend is ready, the employee gets a secure invite to set their own password.</span></div>
+      {!edit && <PasswordPair pw={pw} pw2={pw2} setPw={(v) => { setPw(v); setErr(null); }} setPw2={(v) => { setPw2(v); setErr(null); }} label="Password" />}
+      <div className="tm-cred"><ShieldCheck className="size-4 shrink-0" /><span>{edit ? "Login email and password are changed from Account controls in the employee details." : "The employee signs in with this email and password on the same login page as you. The password goes only to the secure backend and is never saved in this browser."}</span></div>
       {err && <p role="alert" className="text-sm font-medium text-destructive">{err}</p>}
       <DialogFooter><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit">{edit ? "Save changes" : "Add employee"}</Button></DialogFooter>
+    </form>
+  </DialogContent></Dialog>;
+}
+
+function PasswordPair({ pw, pw2, setPw, setPw2, label }: { pw: string; pw2: string; setPw: (v: string) => void; setPw2: (v: string) => void; label: string }) {
+  const [show, setShow] = useState(false);
+  const field = (v: string, set: (v: string) => void, l: string, ac: string) => <label className="q-field"><span>{l}</span><span className="relative block"><Input type={show ? "text" : "password"} autoComplete={ac} value={v} onChange={(e) => set(e.target.value)} className="pr-10" /><button type="button" aria-label={show ? "Hide passwords" : "Show passwords"} onClick={() => setShow(!show)} className="absolute top-1/2 right-2 -translate-y-1/2 p-1 text-muted-foreground">{show ? <EyeOff className="size-4" /> : <EyeIcon className="size-4" />}</button></span></label>;
+  return <div className="grid gap-4 sm:grid-cols-2">{field(pw, setPw, label, "new-password")}{field(pw2, setPw2, "Confirm password", "new-password")}<p className="-mt-2 text-xs text-muted-foreground sm:col-span-2">At least 10 characters, with a letter and a number.</p></div>;
+}
+
+function CredentialDialog({ e, kind, onClose }: { e: Employee; kind: "email" | "password"; onClose: () => void }) {
+  const [email, setEmail] = useState(""), [pw, setPw] = useState(""), [pw2, setPw2] = useState("");
+  const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
+  const submit = async () => {
+    setErr(null);
+    if (kind === "email") { const ne = normalizeEmail(email); if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(ne)) return setErr("Enter a valid email address."); if (ne === normalizeEmail(e.email)) return setErr("That's already their login email."); }
+    else { const pe = passwordError(pw, pw2); if (pe) return setErr(pe); }
+    setBusy(true);
+    const r = kind === "email" ? await demoCredentials.changeLoginEmail(e.id, normalizeEmail(email)) : await demoCredentials.setPassword(e.id, pw);
+    setBusy(false); setPw(""); setPw2("");
+    if (!r.ok) return setErr(r.message);
+    toast.success(kind === "email" ? "Login email changed" : "Password reset — old password no longer works and sessions were signed out");
+    onClose();
+  };
+  return <Dialog open onOpenChange={(o) => !o && onClose()}><DialogContent className="sm:max-w-md">
+    <DialogHeader><DialogTitle>{kind === "email" ? `Change login email for ${e.name}` : `Reset password for ${e.name}`}</DialogTitle>
+      <DialogDescription>{kind === "email" ? `Current login: ${e.email}. They'll sign in with the new email from now on.` : "Set a new password. Their old password stops working and they're signed out everywhere. The old password is never shown."}</DialogDescription></DialogHeader>
+    <form className="grid gap-4" noValidate onSubmit={(ev) => { ev.preventDefault(); void submit(); }}>
+      {kind === "email" ? <label className="q-field"><span>New login email</span><Input type="email" autoFocus value={email} onChange={(ev) => { setEmail(ev.target.value); setErr(null); }} placeholder="name@company.com" /></label>
+        : <PasswordPair pw={pw} pw2={pw2} setPw={(v) => { setPw(v); setErr(null); }} setPw2={(v) => { setPw2(v); setErr(null); }} label="New password" />}
+      {err && <p role="alert" className="text-sm font-medium text-destructive">{err}</p>}
+      <DialogFooter><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" disabled={busy}>{kind === "email" ? "Change email" : "Set new password"}</Button></DialogFooter>
     </form>
   </DialogContent></Dialog>;
 }

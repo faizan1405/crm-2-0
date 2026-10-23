@@ -122,3 +122,30 @@ export const demoAuth: AuthService = {
   requestPasswordReset: async () => ({ ...NEEDS_BACKEND, message: "Password reset needs the secure backend, which isn't connected yet." }),
   revokeSessions: async () => ({ ...NEEDS_BACKEND, message: "There are no real sessions to revoke in the demo." }),
 };
+
+// ---------- Owner-controlled credentials (Phase 3C). Contracts only; the backend hashes (Argon2id). ----------
+export const PASSWORD_MIN = 10;
+export const PASSWORD_MAX = 128;
+/** Pure strength/match check used before anything is sent to the backend. Never stores the value. */
+export function passwordError(password: string, confirm: string): string | null {
+  if (!password) return "Enter a password.";
+  if (password.length < PASSWORD_MIN) return `Password must be at least ${PASSWORD_MIN} characters.`;
+  if (password.length > PASSWORD_MAX) return "Password is too long.";
+  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return "Use at least one letter and one number.";
+  if (/^\s|\s$/.test(password)) return "Password can't start or end with a space.";
+  if (password !== confirm) return "Passwords don't match.";
+  return null;
+}
+/** Owner-only credential operations. The server authorizes the Owner, replaces the hash and revokes sessions. */
+export interface CredentialService {
+  createLogin(employeeId: string, email: string, password: string): Promise<BackendResult>;
+  changeLoginEmail(employeeId: string, newEmail: string): Promise<BackendResult>;
+  setPassword(employeeId: string, newPassword: string): Promise<BackendResult>;
+}
+const NO_BACKEND = (what: string) => ({ ok: false as const, reason: "backend_required" as const, message: `${what} needs the secure backend, which isn't connected yet. Nothing was saved.` });
+/** Demo implementation: discards the password immediately and never reports success. */
+export const demoCredentials: CredentialService = {
+  createLogin: async () => NO_BACKEND("Creating the login"),
+  changeLoginEmail: async () => NO_BACKEND("Changing the login email"),
+  setPassword: async () => NO_BACKEND("Setting a new password"),
+};

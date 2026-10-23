@@ -60,3 +60,19 @@ describe("Team Management", () => {
     expect((await demoAuth.requestPasswordReset("a@b.co")).ok).toBe(false);
   });
 });
+
+describe("Owner-controlled credentials", () => {
+  it("requires 10+ chars with a letter and number, and matching confirmation", async () => {
+    const { passwordError } = await import("./team");
+    expect(passwordError("short1", "short1")).toBe("Password must be at least 10 characters.");
+    expect(passwordError("onlyletters", "onlyletters")).toBe("Use at least one letter and one number.");
+    expect(passwordError("goodpass123", "goodpass124")).toBe("Passwords don't match.");
+    expect(passwordError("goodpass123", "goodpass123")).toBeNull();
+  });
+  it("demo credential service never reports success", async () => {
+    const { demoCredentials } = await import("./team");
+    expect((await demoCredentials.createLogin("e", "a@b.co", "goodpass123")).ok).toBe(false);
+    expect((await demoCredentials.setPassword("e", "goodpass123")).ok).toBe(false);
+    expect((await demoCredentials.changeLoginEmail("e", "x@b.co")).ok).toBe(false);
+  });
+});
