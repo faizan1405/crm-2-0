@@ -114,6 +114,8 @@ export interface Note {
   body: string;
   pinned: boolean;
   tag?: string;
+  /** Structured rich-text document (paragraphs, lists, checklists, bold/italic). `body` keeps the plain-text copy for search/preview and legacy readers. Missing on legacy notes. */
+  doc?: NoteDoc;
   createdAt: string;
   updatedAt: string;
 }
@@ -164,3 +166,6 @@ export interface BinEntry {
   followUps: FollowUp[];
   activities: LeadActivity[];
 }
+
+/** Editor document node (ProseMirror/Tiptap JSON shape). */
+export interface NoteDoc { type: string; attrs?: Record<string, unknown>; content?: NoteDoc[]; text?: string; marks?: { type: string }[] }
