@@ -67,7 +67,7 @@ const GUARDS: Record<string, Guard> = {
   saveRule: ["__owner", DENIED], deleteRule: ["__owner", undefined], moveRule: ["__owner", undefined], setRuleSettings: ["__owner", undefined], applyRulesToExisting: ["__owner", 0],
 };
 function guarded<T extends object>(state: T): T {
-  const out: Record<string, unknown> = { ...state };
+  const out = { ...state } as Record<string, unknown>;
   for (const [name, [perm, denied, event]] of Object.entries(GUARDS)) {
     const fn = out[name] as ((...a: unknown[]) => unknown) | undefined;
     if (typeof fn !== "function") continue;
@@ -80,7 +80,7 @@ function guarded<T extends object>(state: T): T {
       const r = fn(...args);
       if (event && r !== false && !(r && typeof r === "object" && "ok" in r && !(r as { ok: boolean }).ok)) {
         const type: CrmEventType = name === "updateLead" && statusOnly(args[1] as object) ? "pipeline.stage_changed" : event;
-        previewSink.emit({ id: uid("evt"), type, actorId: pv.employeeId, at: new Date().toISOString(), resourceId: typeof r === "string" && r ? r : typeof args[0] === "string" ? args[0] : undefined, change: args[1] });
+        previewSink.emit({ id: uid("evt"), type, actorId: pv.employeeId, at: new Date().toISOString(), resourceId: typeof r === "string" && r ? r : String(args[0] ?? ""), change: args[1] });
       }
       return r;
     };
