@@ -203,7 +203,7 @@ function RuleEditor({ initial, onClose }: { initial: AutomationRule; onClose: ()
   const [r, setR] = useState<AutomationRule>(initial);
   const c = r.conditions;
   const setC = (p: { [K in keyof AutomationRule["conditions"]]?: AutomationRule["conditions"][K] | undefined }) => setR((x) => ({ ...x, conditions: Object.fromEntries(Object.entries({ ...x.conditions, ...p }).filter(([, v]) => v !== undefined && v !== "" && !(Array.isArray(v) && !v.length))) as AutomationRule["conditions"] }));
-  const setS = (p: { [K in keyof AutomationRule["settings"]]?: AutomationRule["settings"][K] | undefined }) => setR((x) => ({ ...x, settings: Object.fromEntries(Object.entries({ ...x.settings, ...p }).filter(([, v]) => v !== undefined)) as AutomationRule["settings"] }));
+  const setS = (p: { [K in keyof AutomationRule["settings"]]?: AutomationRule["settings"][K] | undefined }) => setR((x) => ({ ...x, settings: Object.fromEntries(Object.entries({ ...x.settings, ...p }).filter(([, v]) => v !== undefined)) as unknown as AutomationRule["settings"] }));
   const num = (v: string) => (v === "" ? undefined : Math.max(0, Number(v)));
   const multi = <T extends string>(list: T[] | undefined, v: T, on: boolean) => (on ? [...new Set([...(list ?? []), v])] : (list ?? []).filter((x) => x !== v));
   const err = ruleError(r);
