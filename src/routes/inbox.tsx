@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useCRM } from "@/lib/crm/store";
+import { TagPicker } from "@/components/crm/Customize";
 import { useAccess } from "@/lib/crm/session";
 import { formatDate, formatINR } from "@/lib/crm/format";
 import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, type Lead, type LeadPriority } from "@/lib/crm/types";
@@ -117,6 +118,7 @@ function InboxPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <Identity name={l.name} company={l.company} />
                       <PriorityBadge p={l.priority} />
+                      <TagPicker leadId={l.id} />
                       <span className="rounded-md bg-secondary px-2 py-0.5 text-[10px] font-medium">{STATUS_LABEL[l.status]}</span>
                       <span className={`rounded-md px-2 py-0.5 text-[10px] font-medium ${r.status === "needs_review" ? "bg-warning/15 text-warning" : "bg-success/15 text-success"}`}>{r.status === "needs_review" ? "Needs review" : "Reviewed"}</span>
                       {dups.map((p) => <button key={p.key} type="button" onClick={() => setReview(p)} className="rounded-md bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive">{p.reasons.map((x) => DUP_LABEL[x]).join(" + ")}</button>)}
