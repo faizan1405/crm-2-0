@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Gauge, Plus, FlaskConical, Info, Users, Pencil, Pause, Play, Archive, Copy, History, AlertTriangle, ArrowUpDown, Bell } from "lucide-react";
 import { Shell, Empty, selectCls } from "@/components/crm/Shell";
 import { ATTRIBUTION_NOTE, GoalProgressCard, MetricTip, Stat, TrendChart, fmtMetric, fmtRate } from "@/components/crm/Performance";
@@ -9,7 +9,7 @@ import { roleLabel, STATUS_LABEL as ACCOUNT_LABEL, type Employee } from "@/lib/c
 import { STATUS_LABEL, LEAD_STATUSES } from "@/lib/crm/types";
 import { dayKey, formatDate, formatDateTime, initials } from "@/lib/crm/format";
 import {
-  PERIODS, METRICS, METRIC, GOAL_PERIOD_LABEL, cohortConversion, demoPerformanceEvents, followUpCompletion, goalAlerts, goalProgress, goalsFor, hasAttribution,
+  PERIODS, METRICS, METRIC, GOAL_PERIOD_LABEL, cohortConversion, demoPerformanceEvents, followUpCompletion, goalProgress, goalsFor, hasAttribution,
   indexEvents, metricSeries, metricValue, periodWindow, rate, workloadFor, workloadInsights,
   type GoalDef, type GoalInput, type GoalProgressRow, type MetricKey, type PeriodKey, type Workload,
 } from "@/lib/crm/performance";
