@@ -128,10 +128,10 @@ export async function buildBackup(plan: BackupPlan, state: Snapshot, proofInputs
   }
   if (plan.categories.includes("followups") && !plan.categories.includes("leads")) relationships.push("Follow-ups reference lead IDs; lead records were not selected.");
 
-  let missing: string[] = [], included = 0, expected = 0;
+  const missing: string[] = []; let included = 0, expected = 0;
   if (plan.categories.includes("proofs")) {
-    const payIds = ids("payments").size ? ids("payments") : new Set(arr(state, "payments").map((p) => p.id));
-    const inScope = proofInputs.filter((p) => (emp ? ids("payments").has(p.meta.paymentId) : payIds.has(p.meta.paymentId) || true));
+    const scoped = ids("payments");
+    const inScope = emp ? proofInputs.filter((p) => scoped.has(p.meta.paymentId)) : proofInputs;
     expected = inScope.length;
     const meta: (ProofMeta & { path: string | null; sha256: string | null })[] = [];
     for (const p of inScope) {
@@ -144,7 +144,6 @@ export async function buildBackup(plan: BackupPlan, state: Snapshot, proofInputs
     counts.proofs = included;
     if (missing.length) warnings.push(`${missing.length} payment proof file${missing.length === 1 ? " is" : "s are"} missing or unreadable and could not be included.`);
   }
-  missing = [...new Set(missing)];
   const omitted = ALL_CATEGORY_IDS.filter((id) => !cats.some((c) => c.id === id));
   const complete = plan.type === "full" && omitted.length === 0 && missing.length === 0;
   if (plan.type === "full" && !complete) warnings.push("This archive is NOT a complete backup.");
