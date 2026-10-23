@@ -21,10 +21,11 @@ export type EventType =
   | "lead.reviewed" | "lead.duplicate_flagged" | "lead.duplicate_resolved" | "lead.related" | "lead.merged" | "lead.intake_status_changed"
   | "automation.reminder" | "automation.escalated"
   | "lead.tag_added" | "lead.tag_removed" | "lead.fields_changed" | "config.field_changed" | "config.view_changed"
+  | "project.created" | "project.booked" | "project.started" | "project.stage_changed" | "project.task_created" | "project.task_completed" | "project.assigned" | "project.delivered" | "project.support_started" | "project.support_request_created" | "project.support_request_resolved"
   | "employee.added" | "employee.updated" | "employee.status_changed" | "employee.permissions_changed";
 
-export type EntityType = "lead" | "followup" | "deal" | "payment" | "employee" | "bulk";
-export type CrmModule = "leads" | "calls" | "followups" | "pipeline" | "finance" | "assignments" | "team";
+export type EntityType = "lead" | "followup" | "deal" | "payment" | "employee" | "bulk" | "project";
+export type CrmModule = "leads" | "calls" | "followups" | "pipeline" | "finance" | "assignments" | "team" | "projects";
 export type Importance = "low" | "normal" | "high";
 export type EventSource = "local" | "demo" | "backend";
 
@@ -60,7 +61,10 @@ export interface EventSnap {
   inboxMeta?: Record<string, { reviewedAt?: string; flaggedAt?: string }>;
   leadTags?: Record<string, string[]>; fieldValues?: Record<string, Record<string, unknown>>;
   customFields?: { id: string; label: string; status: string; version: number }[]; tagDefs?: { id: string; name: string }[];
-  savedViews?: { id: string; name: string; visibility: string; version: number }[]; leadRelations?: Record<string, { a: string; b: string; kind: string }>;
+  savedViews?: { id: string; name: string; visibility: string; version: number }[];
+  projects?: { id: string; name: string; leadId?: string | undefined; dealId?: string | undefined; status: string; stage: string; ownerId: string | null; memberIds: string[]; delivery?: unknown; support: { included: boolean | null; start?: string | undefined }; version: number }[];
+  projectTasks?: { id: string; projectId: string; title: string; status: string }[];
+  supportRequests?: { id: string; projectId: string; title: string; status: string }[]; leadRelations?: Record<string, { a: string; b: string; kind: string }>;
 }
 export interface DeriveCtx { action: string; operationId: string; at: string; actor: Actor; source?: EventSource }
 
@@ -68,6 +72,7 @@ export interface DeriveCtx { action: string; operationId: string; at: string; ac
 export const BULK_THRESHOLD = 5;
 
 export const MODULE_OF: Record<EventType, CrmModule> = {
+  "project.created": "projects", "project.booked": "projects", "project.started": "projects", "project.stage_changed": "projects", "project.task_created": "projects", "project.task_completed": "projects", "project.assigned": "projects", "project.delivered": "projects", "project.support_started": "projects", "project.support_request_created": "projects", "project.support_request_resolved": "projects",
   "lead.tag_added": "leads", "lead.tag_removed": "leads", "lead.fields_changed": "leads", "config.field_changed": "leads", "config.view_changed": "leads",
   "lead.created": "leads", "lead.edited": "leads", "lead.removed": "leads", "lead.hot": "leads",
   "lead.assigned": "assignments", "lead.reassigned": "assignments", "lead.unassigned": "assignments",
@@ -91,11 +96,12 @@ export const EVENT_LABEL: Record<EventType, string> = {
   "lead.reviewed": "Lead reviewed", "lead.duplicate_flagged": "Possible duplicate flagged", "lead.duplicate_resolved": "Duplicate kept separate", "lead.related": "Leads marked related", "lead.merged": "Leads merged", "lead.intake_status_changed": "Inbox status changed",
   "automation.reminder": "Automation reminder", "automation.escalated": "Escalated to Owner",
   "lead.tag_added": "Lead tag added", "lead.tag_removed": "Lead tag removed", "lead.fields_changed": "Custom field changed", "config.field_changed": "Field definition changed", "config.view_changed": "Shared view changed",
+  "project.created": "Project created", "project.booked": "Project booked", "project.started": "Project started", "project.stage_changed": "Project stage changed", "project.task_created": "Project task added", "project.task_completed": "Project task completed", "project.assigned": "Project team changed", "project.delivered": "Project delivered", "project.support_started": "Support configured", "project.support_request_created": "Support request opened", "project.support_request_resolved": "Support request resolved",
   "employee.added": "Employee added", "employee.updated": "Employee updated", "employee.status_changed": "Account status changed", "employee.permissions_changed": "Permissions changed",
 };
-export const MODULE_LABEL: Record<CrmModule, string> = { leads: "Leads", calls: "Calls", followups: "Follow-ups", pipeline: "Pipeline", finance: "Finance", assignments: "Assignments", team: "Team" };
+export const MODULE_LABEL: Record<CrmModule, string> = { leads: "Leads", calls: "Calls", followups: "Follow-ups", pipeline: "Pipeline", finance: "Finance", assignments: "Assignments", team: "Team", projects: "Projects" };
 const IMPORTANCE: Partial<Record<EventType, Importance>> = {
-  "lead.edited": "low", "lead.fields_changed": "low", "lead.tag_added": "low", "lead.tag_removed": "low", "config.field_changed": "low", "config.view_changed": "low", "followup.rescheduled": "low", "client.note_added": "low", "deal.created": "low", "employee.updated": "low",
+  "lead.edited": "low", "project.task_created": "low", "project.stage_changed": "low", "lead.fields_changed": "low", "lead.tag_added": "low", "lead.tag_removed": "low", "config.field_changed": "low", "config.view_changed": "low", "followup.rescheduled": "low", "client.note_added": "low", "deal.created": "low", "employee.updated": "low",
   "deal.won": "high", "deal.lost": "high", "lead.hot": "high", "bulk.completed": "high", "payment.updated": "high", "employee.status_changed": "high", "employee.permissions_changed": "high", "bulk.reversed": "high", "automation.escalated": "high",
 };
 
@@ -240,6 +246,33 @@ export function deriveEvents(prev: EventSnap, next: EventSnap, ctx: DeriveCtx): 
   for (const f of next.customFields ?? []) { const o = pcf.get(f.id); if (o && o.version === f.version) continue; push("config.field_changed", `${f.id}:${f.version}`, { entityType: "lead", entityId: f.id, summary: !o ? `${who} created the field “${f.label}”.` : o.status !== f.status ? `${who} ${f.status === "archived" ? "archived" : "restored"} the field “${f.label}”. Stored values are kept.` : `${who} edited the field “${f.label}”.` }); }
   const pv = new Map((prev.savedViews ?? []).map((v) => [v.id, v]));
   for (const v of next.savedViews ?? []) { if (v.visibility === "personal") continue; const o = pv.get(v.id); if (o && o.version === v.version) continue; push("config.view_changed", `${v.id}:${v.version}`, { entityType: "lead", entityId: v.id, summary: `${who} ${o ? "updated" : "created"} the ${v.visibility} view “${v.name}”.` }); }
+  // Project Desk events — derived from real before/after state, attributed to the acting Owner.
+  const pp = new Map((prev.projects ?? []).map((x) => [x.id, x]));
+  const pName = (id: string) => (next.projects ?? []).find((x) => x.id === id)?.name ?? "a project";
+  for (const p of next.projects ?? []) {
+    const o = pp.get(p.id); if (o && o.version === p.version) continue;
+    const base = { entityType: "project" as const, entityId: p.id, ...(p.leadId ? { relatedLeadId: p.leadId } : {}) };
+    const links = { projectId: p.id, ...(p.dealId ? { dealId: p.dealId } : {}), ...(p.leadId ? { leadId: p.leadId } : {}) };
+    if (!o) { push("project.created", p.id, { ...base, summary: `${who} created the project “${p.name}”.`, newValues: { ...links, status: p.status } }); continue; }
+    if (o.status !== p.status && p.status === "booked") push("project.booked", `${p.id}:${p.version}`, { ...base, summary: `${who} confirmed the booking for “${p.name}”.`, oldValues: { status: o.status }, newValues: { ...links, status: p.status } });
+    if (o.status !== p.status && p.status === "in_progress") push("project.started", `${p.id}:${p.version}`, { ...base, summary: `${who} started work on “${p.name}”.`, oldValues: { status: o.status }, newValues: { ...links, status: p.status } });
+    if (!o.delivery && p.delivery) push("project.delivered", `${p.id}`, { ...base, summary: `${who} marked “${p.name}” delivered.`, newValues: links });
+    else if (o.stage !== p.stage) push("project.stage_changed", `${p.id}:${p.version}`, { ...base, summary: `${who} moved “${p.name}” from ${o.stage} to ${p.stage}.`, oldValues: { stage: o.stage }, newValues: { ...links, stage: p.stage } });
+    if (o.ownerId !== p.ownerId || o.memberIds.join() !== p.memberIds.join()) push("project.assigned", `${p.id}:${p.version}`, { ...base, summary: `${who} changed the team on “${p.name}”.`, oldValues: { ownerId: o.ownerId, memberIds: o.memberIds }, newValues: { ...links, ownerId: p.ownerId, memberIds: p.memberIds } });
+    if (p.support.included && p.support.start && !(o.support.included && o.support.start)) push("project.support_started", `${p.id}:${p.version}`, { ...base, summary: `${who} configured support for “${p.name}” from ${p.support.start}.`, newValues: links });
+  }
+  const pt = new Map((prev.projectTasks ?? []).map((x) => [x.id, x]));
+  for (const t of next.projectTasks ?? []) {
+    const o = pt.get(t.id);
+    if (!o && !(prev.projects ?? []).every((x) => x.id !== t.projectId)) push("project.task_created", t.id, { entityType: "project", entityId: t.projectId, summary: `${who} added the task “${t.title}” to “${pName(t.projectId)}”.`, newValues: { projectId: t.projectId, taskId: t.id } });
+    if (o && o.status !== "done" && t.status === "done") push("project.task_completed", `${t.id}:done:${ctx.operationId}`, { entityType: "project", entityId: t.projectId, summary: `${who} completed “${t.title}” on “${pName(t.projectId)}”.`, newValues: { projectId: t.projectId, taskId: t.id } });
+  }
+  const psr = new Map((prev.supportRequests ?? []).map((x) => [x.id, x]));
+  for (const r of next.supportRequests ?? []) {
+    const o = psr.get(r.id);
+    if (!o) push("project.support_request_created", r.id, { entityType: "project", entityId: r.projectId, summary: `${who} opened the support request “${r.title}” on “${pName(r.projectId)}”.`, newValues: { projectId: r.projectId, requestId: r.id } });
+    else if (o.status !== "resolved" && r.status === "resolved") push("project.support_request_resolved", `${r.id}:resolved`, { entityType: "project", entityId: r.projectId, summary: `${who} resolved “${r.title}” on “${pName(r.projectId)}”.`, newValues: { projectId: r.projectId, requestId: r.id } });
+  }
   const pr = prev.leadRelations ?? {}, nr = next.leadRelations ?? {};
   for (const [k, r] of Object.entries(nr)) {
     if (pr[k]?.kind === r.kind) continue;
@@ -299,7 +332,7 @@ export function filterEvents(events: ActivityEvent[], f: ActivityFilter, now: Da
 export const canViewTeamActivity = (actor: "owner" | { employeeId: string }) => actor === "owner";
 
 // ---- Notifications ----
-export type NotifyCategory = "leads" | "calls" | "followups" | "overdue" | "deals" | "assignments" | "payments" | "team";
+export type NotifyCategory = "leads" | "calls" | "followups" | "overdue" | "deals" | "assignments" | "payments" | "team" | "projects";
 export const NOTIFY_CATEGORIES: { id: NotifyCategory; label: string; desc: string }[] = [
   { id: "leads", label: "New & Hot leads", desc: "A lead is created or becomes Hot." },
   { id: "calls", label: "Call logs", desc: "A call outcome is logged." },
@@ -309,9 +342,10 @@ export const NOTIFY_CATEGORIES: { id: NotifyCategory; label: string; desc: strin
   { id: "assignments", label: "Assignments", desc: "Leads assigned, reassigned or distributed in bulk." },
   { id: "payments", label: "Payments", desc: "A payment is recorded, updated or voided." },
   { id: "team", label: "Team & permissions", desc: "Employee account or permission changes." },
+  { id: "projects", label: "Projects", desc: "New projects, deliveries and support requests." },
 ];
 export type NotifyPrefs = Record<NotifyCategory, boolean>;
-export const DEFAULT_NOTIFY_PREFS: NotifyPrefs = { leads: true, calls: true, followups: true, overdue: true, deals: true, assignments: true, payments: true, team: true };
+export const DEFAULT_NOTIFY_PREFS: NotifyPrefs = { leads: true, calls: true, followups: true, overdue: true, deals: true, assignments: true, payments: true, team: true, projects: true };
 
 /** Which events notify, and under which category. Trivial edits (lead.edited, reschedules, notes) never notify. */
 export const NOTIFY_OF: Partial<Record<EventType, NotifyCategory>> = {
@@ -321,6 +355,7 @@ export const NOTIFY_OF: Partial<Record<EventType, NotifyCategory>> = {
   "automation.reminder": "followups", "automation.escalated": "overdue",
   "payment.recorded": "payments", "payment.updated": "payments",
   "employee.status_changed": "team", "employee.permissions_changed": "team", "employee.added": "team",
+  "project.created": "projects", "project.delivered": "projects", "project.support_request_created": "projects", "project.started": "projects",
 };
 
 export interface Notification { id: string; category: NotifyCategory; title: string; body: string; at: string; importance: Importance; leadId?: string; employeeId?: string; eventId?: string; source: EventSource }
@@ -331,7 +366,7 @@ export function deriveNotifications(events: ActivityEvent[], followUps: FollowUp
   const out: Notification[] = [];
   for (const e of events) {
     const cat = NOTIFY_OF[e.eventType];
-    if (!cat || !prefs[cat]) continue;
+    if (!cat || prefs[cat] === false) continue;
     out.push({ id: `n:${e.eventId}`, category: cat, title: EVENT_LABEL[e.eventType], body: e.summary, at: e.occurredAt, importance: e.importance, ...(e.relatedLeadId ? { leadId: e.relatedLeadId } : {}), ...(e.targetEmployeeId ? { employeeId: e.targetEmployeeId } : {}), eventId: e.eventId, source: e.eventSource });
   }
   if (prefs.overdue) {
