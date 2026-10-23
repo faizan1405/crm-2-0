@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useCRM, projectCtxOf } from "@/lib/crm/store";
+import { RemindersPanel } from "@/components/automation/RemindersPanel";
 import { TagChips, ConditionBuilder } from "@/components/crm/Customize";
 import { useProjectFieldViewer } from "@/components/projects/ProjectCustom";
 import { runProjectFilter } from "@/lib/crm/projectCustomize";
@@ -97,6 +98,7 @@ function Overview({ onCreate }: { onCreate: (d: Deal) => void }) {
   const kpis: [string, number, string?][] = [["Active projects", m.active], ["Awaiting client", m.awaiting, "Accepted, booked or waiting to start"], ["In progress", m.inProgress], ["Overdue", m.overdue, "Past target delivery"], ["Delivered", m.delivered], ["Open tasks", m.openTasks], ["Milestones in 14 days", m.upcomingMilestones], ["Open support requests", m.openRequests]];
   const name = (id: string) => projects.find((p) => p.id === id)?.name ?? "Project";
   return <div className="grid gap-6">
+    <RemindersPanel only="project" />
     <section className="pd-kpis" aria-label="Project metrics">{kpis.map(([k, n, h]) => <div key={k} className="pipe-kpi" data-tone={k === "Overdue" && n ? "warn" : undefined}><span className="eyebrow">{k}</span><span className="num pipe-kpi-v">{n}</span>{h && <span className="pipe-kpi-h">{h}</span>}</div>)}</section>
     <div className="grid gap-6 xl:grid-cols-2">
       <section className="receipt p-5 sm:p-6" aria-label="Needs attention">

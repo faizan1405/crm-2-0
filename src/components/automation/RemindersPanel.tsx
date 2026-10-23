@@ -7,13 +7,13 @@ import { formatDateTime } from "@/lib/crm/format";
 import { Button } from "@/components/ui/button";
 
 /** Automation reminders for leads and projects in the current workspace (employees only ever hold their scoped leads). */
-export function RemindersPanel({ limit = 8 }: { limit?: number }) {
+export function RemindersPanel({ limit = 8, only }: { limit?: number; only?: "project" }) {
   const { reminders, leads, projects, employees, completeReminder, dismissReminder } = useCRM();
   const { can } = useAccess();
   const ids = new Map(leads.map((l) => [l.id, l]));
   const pids = new Map(projects.map((p) => [p.id, p]));
   // Project reminders show only for projects in this workspace (employees hold only their assigned projects).
-  const open = reminders.filter((r) => r.status === "open" && (r.projectId ? pids.has(r.projectId) : ids.has(r.leadId))).sort((a, b) => (a.importance === b.importance ? b.createdAt.localeCompare(a.createdAt) : a.importance === "high" ? -1 : 1));
+  const open = reminders.filter((r) => r.status === "open" && (!only || !!r.projectId) && (r.projectId ? pids.has(r.projectId) : ids.has(r.leadId))).sort((a, b) => (a.importance === b.importance ? b.createdAt.localeCompare(a.createdAt) : a.importance === "high" ? -1 : 1));
   if (!open.length) return null;
   const emp = (id: string | null) => (id ? employees.find((e) => e.id === id)?.name ?? "Employee" : "Unassigned");
   return (
