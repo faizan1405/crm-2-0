@@ -91,7 +91,7 @@ describe("Employee Workspace Preview", () => {
 });
 
 describe("permission matrix in preview", () => {
-  const withAccess = (overrides: Record<string, boolean>) => { s().saveEmployeeAccess(empId, { overrides, updatedAt: new Date().toISOString() }); startPreview(emp()); };
+  const withAccess = (overrides: Record<string, boolean>) => { s().saveEmployeeAccess(empId, { overrides }); startPreview(emp()); };
   it("view-only employee cannot edit, move stage, log calls or create follow-ups", () => {
     withAccess({ "leads.edit": false, "pipeline.edit": false, "clients.calls": false, "followups.create": false });
     const id = mine[0]!;
