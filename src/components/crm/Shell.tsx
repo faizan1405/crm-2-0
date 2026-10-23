@@ -1,18 +1,16 @@
 import { WhatsAppComposer } from "@/components/crm/WhatsAppComposer";
 import { isPending } from "@/lib/crm/followups";
 import { PostCallDialog, openCallLog } from "@/components/crm/PostCallDialog";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   LayoutDashboard, Users, KanbanSquare, CalendarClock, Wallet, StickyNote, Moon, Sun,
   BarChart3, Sunrise, Settings, MoreHorizontal, Plus, Search, Bell, ArrowUpRight, PhoneCall, Menu, ChevronRight, PanelLeftClose, PanelLeftOpen, Presentation, ShieldCheck,
-  Archive,
+  Archive, Eye, Lock,
 } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
 import { useSession, useAccess, routeAllowed, type PreviewSession } from "@/lib/crm/session";
 import { exitPreview } from "@/lib/crm/preview";
-import { useNavigate } from "@tanstack/react-router";
-import { Eye, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { initials, displayPrefs, formatDate, dayKey, formatDateTime } from "@/lib/crm/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
