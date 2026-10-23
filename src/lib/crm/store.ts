@@ -513,39 +513,17 @@ export const useCRM = create<CRMState>()(
       savedViews: starterViews(OWNER_ACTOR_ID, "2026-01-01T00:00:00.000Z"),
       viewPrefs: {},
       saveCustomField: (input) => {
-        const st = get(); const at = new Date().toISOString();
-        const cur = input.id ? st.customFields.find((f) => f.id === input.id) : undefined;
-        const def: CustomFieldDef = { ...input, label: input.label.trim(), ...(input.description?.trim() ? { description: input.description.trim() } : { description: undefined }), id: input.id, order: cur?.order ?? (st.customFields.length ? Math.max(...st.customFields.map((f) => f.order)) + 1 : 0) };
-        if (!def.id) return "Missing internal id.";
-        const err = fieldDefError(def, st.customFields); if (err) return err;
-        if (!cur) { set((s) => ({ customFields: [...s.customFields, { ...def, createdAt: at, updatedAt: at, version: 1, history: [{ at, change: "Created" }] }] })); return null; }
-        const lost = removedUsedOptions(cur, def, st.fieldValues);
-        if (lost.length) return `Option ${lost.map((o) => `“${o.label}” (${o.count} lead${o.count > 1 ? "s" : ""})`).join(", ")} is in use — archive it instead of deleting it.`;
-        let values = st.fieldValues;
-        if (cur.type !== def.type) {
-          const imp = typeChangeImpact(cur, def, st.fieldValues);
-          if (imp.incompatible.length) return `${imp.incompatible.length} lead${imp.incompatible.length > 1 ? "s have values" : " has a value"} that can't become ${def.type}. Nothing was changed.`;
-          values = Object.fromEntries(Object.entries(st.fieldValues).map(([id, row]) => { const v = row[cur.id]; return [id, v === undefined ? row : { ...row, [cur.id]: convertValue(v, cur, def)! }]; }));
-        }
-        const changes = [cur.label !== def.label && `Renamed from “${cur.label}”`, cur.type !== def.type && `Type ${cur.type} → ${def.type}`, cur.required !== def.required && (def.required ? "Now required" : "Now optional"), (cur.visibility !== def.visibility || cur.editable !== def.editable) && "Visibility changed", JSON.stringify(cur.options) !== JSON.stringify(def.options) && "Options changed"].filter(Boolean) as string[];
-        set((s) => ({ fieldValues: values, customFields: s.customFields.map((f) => (f.id === cur.id ? { ...def, createdAt: cur.createdAt, updatedAt: at, version: cur.version + 1, history: [...cur.history, { at, change: changes.join(" · ") || "Edited" }].slice(-50) } : f)) }));
-        return null;
+        const st = get(); const r = applyFieldSave({ ...input, entity: "lead" }, st.customFields, st.fieldValues, new Date().toISOString());
+        if ("error" in r) return r.error;
+        set({ customFields: r.defs, fieldValues: r.values }); return null;
       },
       setCustomFieldStatus: (id, status) => set((s) => ({ customFields: s.customFields.map((f) => (f.id === id && f.status !== status ? { ...f, status, updatedAt: new Date().toISOString(), version: f.version + 1, history: [...f.history, { at: new Date().toISOString(), change: status === "archived" ? "Archived (values kept)" : "Restored" }] } : f)) })),
       moveCustomField: (id, dir) => set((s) => { const l = [...s.customFields].sort((a, b) => a.order - b.order); const i = l.findIndex((f) => f.id === id), j = i + dir; if (i < 0 || j < 0 || j >= l.length) return {}; [l[i], l[j]] = [l[j]!, l[i]!]; return { customFields: l.map((f, k) => ({ ...f, order: k })) }; }),
       setLeadFieldValues: (leadId, input, opts) => {
         const st = get(); if (!st.leads.some((l) => l.id === leadId)) return { ok: false, errors: { _: "Lead not found." } };
-        const viewer = currentViewer();
-        const allowed = activeFields(st.customFields).filter((d) => viewer.owner || (d.visibility === "team" && d.editable === "team"));
-        const ok = new Set(allowed.map((d) => d.id));
-        const blocked = Object.keys(input).filter((k) => !ok.has(k));
-        if (blocked.length) return { ok: false, errors: Object.fromEntries(blocked.map((k) => [k, "You can't edit this field."])) };
-        const prev = st.fieldValues[leadId] ?? {};
-        const r = validateLeadValues(allowed, input, { isNew: !!opts?.isNew, previous: prev });
-        if (Object.keys(r.errors).length) return { ok: false, errors: r.errors };
-        const row: Record<string, FieldValue> = { ...prev };
-        for (const k of Object.keys(input)) { const v = r.values[k]; if (v === undefined) delete row[k]; else row[k] = v; }
-        set((s) => ({ fieldValues: { ...s.fieldValues, [leadId]: row } }));
+        const r = applyFieldValues(st.customFields, st.fieldValues[leadId] ?? {}, input, currentViewer(), !!opts?.isNew);
+        if (!r.ok) return r;
+        set((s) => ({ fieldValues: { ...s.fieldValues, [leadId]: r.row } }));
         return { ok: true, needs: r.needs };
       },
       saveTag: (t) => {
