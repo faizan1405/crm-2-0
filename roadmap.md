@@ -40,4 +40,5 @@ Frontend-only demo. No backend; production CRM untouched.
 - [ ] Phase 2B Pipeline (waiting for your approval)
 
 - [x] Phase 2A.6: quotations rebuilt as reusable WhatsApp package templates
-- [ ] Pipeline Phase 2B (waiting for approval)
+- [x] Pipeline Phase 2B: Deal Theatre with client inspector
+- [ ] Phase 2C (waiting for approval)
