@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AlertTriangle, Briefcase, FolderKanban, LayoutGrid, ListChecks, Plus, Search, Settings2 } from "lucide-react";
@@ -173,5 +173,3 @@ function TemplateEditor({ t, onCancel, onSave, lines, split }: { t: ProjectTempl
   </section>;
 }
 
-export { useVisibleProjects };
-export const _nav = useNavigate;

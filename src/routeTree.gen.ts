@@ -23,6 +23,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as MyPerformanceRouteImport } from './routes/my-performance'
 import { Route as NotesRouteImport } from './routes/notes'
 import { Route as PipelineRouteImport } from './routes/pipeline'
+import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as SalesStudioRouteImport } from './routes/sales-studio'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as TeamRouteImport } from './routes/team'
@@ -103,6 +104,11 @@ const PipelineRoute = PipelineRouteImport.update({
   path: '/pipeline',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProjectsRoute = ProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SalesStudioRoute = SalesStudioRouteImport.update({
   id: '/sales-studio',
   path: '/sales-studio',
@@ -164,6 +170,7 @@ export interface FileRoutesByFullPath {
   '/my-performance': typeof MyPerformanceRoute
   '/notes': typeof NotesRoute
   '/pipeline': typeof PipelineRoute
+  '/projects': typeof ProjectsRoute
   '/sales-studio': typeof SalesStudioRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
@@ -189,6 +196,7 @@ export interface FileRoutesByTo {
   '/my-performance': typeof MyPerformanceRoute
   '/notes': typeof NotesRoute
   '/pipeline': typeof PipelineRoute
+  '/projects': typeof ProjectsRoute
   '/sales-studio': typeof SalesStudioRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
@@ -215,6 +223,7 @@ export interface FileRoutesById {
   '/my-performance': typeof MyPerformanceRoute
   '/notes': typeof NotesRoute
   '/pipeline': typeof PipelineRoute
+  '/projects': typeof ProjectsRoute
   '/sales-studio': typeof SalesStudioRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
@@ -242,6 +251,7 @@ export interface FileRouteTypes {
     | '/my-performance'
     | '/notes'
     | '/pipeline'
+    | '/projects'
     | '/sales-studio'
     | '/settings'
     | '/team'
@@ -267,6 +277,7 @@ export interface FileRouteTypes {
     | '/my-performance'
     | '/notes'
     | '/pipeline'
+    | '/projects'
     | '/sales-studio'
     | '/settings'
     | '/team'
@@ -292,6 +303,7 @@ export interface FileRouteTypes {
     | '/my-performance'
     | '/notes'
     | '/pipeline'
+    | '/projects'
     | '/sales-studio'
     | '/settings'
     | '/team'
@@ -318,6 +330,7 @@ export interface RootRouteChildren {
   MyPerformanceRoute: typeof MyPerformanceRoute
   NotesRoute: typeof NotesRoute
   PipelineRoute: typeof PipelineRoute
+  ProjectsRoute: typeof ProjectsRoute
   SalesStudioRoute: typeof SalesStudioRoute
   SettingsRoute: typeof SettingsRoute
   TeamRoute: typeof TeamRoute
@@ -429,6 +442,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PipelineRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/projects': {
+      id: '/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof ProjectsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sales-studio': {
       id: '/sales-studio'
       path: '/sales-studio'
@@ -510,6 +530,7 @@ const rootRouteChildren: RootRouteChildren = {
   MyPerformanceRoute: MyPerformanceRoute,
   NotesRoute: NotesRoute,
   PipelineRoute: PipelineRoute,
+  ProjectsRoute: ProjectsRoute,
   SalesStudioRoute: SalesStudioRoute,
   SettingsRoute: SettingsRoute,
   TeamRoute: TeamRoute,
