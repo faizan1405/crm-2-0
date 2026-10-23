@@ -38,3 +38,6 @@ Frontend-only demo. No backend; production CRM untouched.
 - [x] Sales Studio: quotations (builder, preview, PDF, revisions), WhatsApp templates, demo library
 - [x] Composer connected to saved quotations, templates and demos; edited drafts protected
 - [ ] Phase 2B Pipeline (waiting for your approval)
+
+- [x] Phase 2A.6: quotations rebuilt as reusable WhatsApp package templates
+- [ ] Pipeline Phase 2B (waiting for approval)
