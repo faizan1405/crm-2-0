@@ -55,7 +55,7 @@ export interface AnalyticsData {
   leadTags: Record<string, string[]>; tagDefs: TagDef[]; customFields: CustomFieldDef[]; fieldValues: FieldValues;
   leadRelations?: Record<string, { a: string; b: string; kind: string }>; inboxMeta?: Record<string, { flaggedAt?: string }>;
 }
-export interface LeadFilter { sources?: string[]; stages?: LeadStatus[]; priorities?: string[]; assignee?: string | "unassigned"; tagId?: string; leadIds?: Set<string> }
+export interface LeadFilter { sources?: string[] | undefined; stages?: LeadStatus[] | undefined; priorities?: string[] | undefined; assignee?: string | undefined; tagId?: string | undefined; leadIds?: Set<string> | undefined }
 export function filterLeads(leads: Lead[], f: LeadFilter, d: Pick<AnalyticsData, "assignments" | "leadTags">): Lead[] {
   return leads.filter((l) =>
     (!f.sources?.length || f.sources.includes(l.source)) && (!f.stages?.length || f.stages.includes(l.status)) && (!f.priorities?.length || f.priorities.includes(l.priority)) &&
@@ -130,7 +130,6 @@ export const median = (xs: number[]) => { if (!xs.length) return null; const s =
 /** Leads created in the window grouped by their recorded source (source values are never rewritten). */
 export function sourcePerformance(cohort: Lead[], d: Pick<AnalyticsData, "assignments" | "leadRelations" | "inboxMeta">, idx: ActivityIndex): SourceRow[] {
   const dup = new Set<string>();
-  for (const r of Object.values(d.leadRelations ?? {})) if (r.kind === "duplicate" || r.kind === "possible") { dup.add(r.a); dup.add(r.b); }
   for (const [id, m] of Object.entries(d.inboxMeta ?? {})) if (m.flaggedAt) dup.add(id);
   const by = new Map<string, Lead[]>();
   for (const l of cohort) by.set(l.source, [...(by.get(l.source) ?? []), l]);
@@ -277,7 +276,7 @@ export type ReportSource = "leads" | "calls" | "followups" | "deals" | "projects
 export type ReportChart = "bar" | "pie" | "table";
 export interface ReportDef {
   id: string; name: string; source: ReportSource; metric: string; groupBy: string; period: AnalyticsPeriod; from?: string | undefined; to?: string | undefined;
-  filter: { sources?: string[]; stages?: LeadStatus[]; tagId?: string | undefined }; chart: ReportChart; sort: "value" | "label";
+  filter: { sources?: string[] | undefined; stages?: LeadStatus[] | undefined; tagId?: string | undefined }; chart: ReportChart; sort: "value" | "label";
   pinned: boolean; favorite: boolean; archived: boolean; createdAt: string; updatedAt: string; version: number;
 }
 export const SOURCE_LABEL: Record<ReportSource, string> = { leads: "Leads", calls: "Call outcomes", followups: "Follow-ups", deals: "Deals & payments", projects: "Projects", support: "Support requests" };
