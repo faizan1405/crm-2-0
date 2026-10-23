@@ -76,6 +76,7 @@ function useStudio(search: Search) {
   return { s, now, data, idx, w, prev, leads, filter, view, compare: search.compare !== false };
 }
 type Studio = ReturnType<typeof useStudio>;
+type Patch = { [K in keyof Search]?: Search[K] | undefined };
 
 function Analytics() {
   const search = Route.useSearch();
@@ -83,7 +84,7 @@ function Analytics() {
   const st = useStudio(search);
   const [drill, setDrill] = useState<Drill | null>(null);
   const section = search.section ?? "overview";
-  const set = (patch: Partial<Search>) => nav({ search: (p) => ({ ...p, ...patch }), replace: true });
+  const set = (patch: Patch) => nav({ search: (p) => Object.fromEntries(Object.entries({ ...p, ...patch }).filter(([, v]) => v !== undefined)) as Search, replace: true });
   return (
     <Shell title="Analytics Studio" subtitle={`${fmtDay(st.w.start)} – ${fmtDay(st.w.end)} · India time${st.compare ? ` · compared with ${fmtDay(st.prev.start)} – ${fmtDay(st.prev.end)}` : ""}`}>
       <div className="as-notice mb-4"><ShieldCheck className="size-4 shrink-0" /><span><b>Owner only.</b> Every number is rebuilt from the records in this browser. Nothing here is connected to Meta Ads, Google Ads or a bank — ad cost, ROAS and CAC are not shown.</span></div>
@@ -106,7 +107,7 @@ function Analytics() {
 
 // ---------------------------------------------------------------- Filters
 const sel = "h-9 rounded-md border bg-card px-2 text-sm min-w-0";
-function Filters({ search, set, st }: { search: Search; set: (p: Partial<Search>) => void; st: Studio }) {
+function Filters({ search, set, st }: { search: Search; set: (p: Patch) => void; st: Studio }) {
   const { s } = st;
   const period = search.period ?? "30d";
   const leadTags = s.tagDefs.filter((t) => (t.scope ?? "lead") !== "project");
