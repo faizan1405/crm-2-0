@@ -24,6 +24,7 @@ import { UserCheck, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { BulkAssignDialog } from "@/components/team/BulkAssignDialog";
 import { EMPTY_SELECTION, addPage, isSelected, selectMatching, selectedIds, selectionCount, toggle, type Selection } from "@/lib/crm/bulk";
 import { dayKey } from "@/lib/crm/format";
+import { parseLeadsSearch, matchesCreatedRange } from "@/lib/crm/leadsSearch";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -35,14 +36,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Bookmark, BookmarkPlus, Star, Tag, AlertTriangle, Pencil } from "lucide-react";
 
 export const Route = createFileRoute("/leads")({
-  validateSearch: (s: Record<string, unknown>): { view?: string; from?: string; to?: string; src?: string } => {
-    const out: { view?: string; from?: string; to?: string; src?: string } = {};
-    const ymd = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
-    if (typeof s["view"] === "string" && s["view"]) out.view = s["view"];
-    const f = ymd(s["from"]), t = ymd(s["to"]); if (f) out.from = f; if (t) out.to = t;
-    if (typeof s["src"] === "string" && s["src"]) out.src = s["src"];
-    return out;
-  },
+  validateSearch: parseLeadsSearch,
   head: () => ({
     meta: [
       { property: "og:type", content: "website" },
@@ -123,7 +117,7 @@ function Leads() {
     const r = base.filter((l) => tagF === "all" || (crm.leadTags[l.id] ?? []).includes(tagF)).filter((l) => (status === "all" || l.status === status) && (source === "all" || l.source === source) && (prio === "all" || l.priority === prio) && (quick === "all" || (quick === "stale" ? staleDays(l, now) !== undefined : l.quickStatus === quick)) && `${l.name} ${l.company ?? ""} ${l.phone} ${l.email ?? ""}`.toLowerCase().includes(q.toLowerCase())
       && (who === "all" || (who === "__none" ? !assignments[l.id] : assignments[l.id]?.employeeId === who))
       && (created === "all" || now.getTime() - new Date(l.createdAt).getTime() <= Number(created) * 864e5)
-      && (!cFrom || dayKey(l.createdAt) >= cFrom) && (!cTo || dayKey(l.createdAt) <= cTo) && (!cSrc || l.source === cSrc)
+      && matchesCreatedRange(dayKey(l.createdAt), l.source, search)
       && (due === "all" || dueMatch(l.id)));
     const cmp = { recent: (a: typeof r[0], b: typeof r[0]) => b.createdAt.localeCompare(a.createdAt), score: (a: typeof r[0], b: typeof r[0]) => (b.aiScore ?? 0) - (a.aiScore ?? 0), value: (a: typeof r[0], b: typeof r[0]) => (b.quotedAmount ?? 0) - (a.quotedAmount ?? 0), name: (a: typeof r[0], b: typeof r[0]) => a.name.localeCompare(b.name) }[sort];
     return r.sort((a, b) => Number(b.pinned) - Number(a.pinned) || cmp(a, b));
