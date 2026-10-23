@@ -122,7 +122,7 @@ describe("automation with custom fields", () => {
     s().saveCustomField(SERVICE);
     const id = s().leads[0]!.id;
     s().setLeadFieldValues(id, { cf_service: "opt_3d" });
-    const base = ruleFromTemplate(RULE_TEMPLATES[0]!.id, "r1", new Date().toISOString())!;
+    const base = ruleFromTemplate(RULE_TEMPLATES[0]!.templateId, "r1", new Date().toISOString())!;
     const rule = { ...base, trigger: "lead_created" as const, status: "enabled" as const, conditions: { custom: [{ id: "c", field: "cf:cf_service", op: "is", value: ["opt_3d"] }] } };
     // Dry run: only the lead with 3D Website matches, and nothing is written.
     const before = s().reminders.length;
