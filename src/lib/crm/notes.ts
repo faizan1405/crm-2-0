@@ -18,8 +18,8 @@ export function sanitizeDoc(n: NoteDoc): NoteDoc {
   }
   if (!BLOCKS.has(n.type)) return { type: "paragraph", content: [{ type: "text", text: docToText(n) || " " }] };
   const out: NoteDoc = { type: n.type };
-  if (n.type === "taskItem") out.attrs = { checked: n.attrs?.checked === true };
-  if (n.type === "orderedList") out.attrs = { start: Number.isInteger(n.attrs?.start) ? (n.attrs!.start as number) : 1 };
+  if (n.type === "taskItem") out.attrs = { checked: n.attrs?["checked"] === true };
+  if (n.type === "orderedList") out.attrs = { start: Number.isInteger(n.attrs?["start"]) ? (n.attrs!["start"] as number) : 1 };
   if (n.content) out.content = n.content.filter((c) => !(c.type === "text" && !c.text)).map(sanitizeDoc);
   return out;
 }
@@ -34,15 +34,15 @@ export function docToText(n: NoteDoc): string {
   if (n.type === "hardBreak") return "\n";
   const kids = n.content ?? [];
   if (n.type === "paragraph") return kids.map(docToText).join("");
-  if (n.type === "taskItem") return `${n.attrs?.checked ? "☑" : "☐"} ${kids.map(docToText).join("\n")}`;
-  if (n.type === "orderedList") return kids.map((k, i) => `${((n.attrs?.start as number) ?? 1) + i}. ${docToText(k)}`).join("\n");
+  if (n.type === "taskItem") return `${n.attrs?["checked"] ? "☑" : "☐"} ${kids.map(docToText).join("\n")}`;
+  if (n.type === "orderedList") return kids.map((k, i) => `${((n.attrs?["start"] as number) ?? 1) + i}. ${docToText(k)}`).join("\n");
   if (n.type === "bulletList") return kids.map((k) => `• ${docToText(k)}`).join("\n");
   return kids.map(docToText).join("\n");
 }
 
 export function checklistProgress(n: NoteDoc): { done: number; total: number } {
   let done = 0, total = 0;
-  const walk = (x: NoteDoc) => { if (x.type === "taskItem") { total++; if (x.attrs?.checked) done++; } x.content?.forEach(walk); };
+  const walk = (x: NoteDoc) => { if (x.type === "taskItem") { total++; if (x.attrs?["checked"]) done++; } x.content?.forEach(walk); };
   walk(n);
   return { done, total };
 }
