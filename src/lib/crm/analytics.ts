@@ -77,6 +77,8 @@ export function indexActivity(activities: LeadActivity[]): ActivityIndex {
 }
 
 // ---------------------------------------------------------------- Executive & finance
+/** Won date used for period reporting: recorded wonAt, else creation date (legacy records). Counted once per Deal. */
+export const dealWonAt = (d: Deal): string => d.wonAt ?? d.createdAt;
 export interface FinanceKpis { wonValue: number; wonCount: number; received: number; paymentCount: number; outstanding: number; overdue: number; overdueKnown: boolean; wonIds: string[]; paymentIds: string[] }
 /**
  * Won Deal Value = final amount of non-cancelled Deals booked (created) in the window.
@@ -86,7 +88,7 @@ export interface FinanceKpis { wonValue: number; wonCount: number; received: num
 export function financeKpis(deals: Deal[], payments: Payment[], w: Window | null, now: Date): FinanceKpis {
   const eligible = deals.filter((d) => d.status !== "cancelled");
   const ids = new Set(eligible.map((d) => d.id));
-  const won = w ? eligible.filter((d) => inWindow(d.createdAt, w)) : eligible;
+  const won = w ? eligible.filter((d) => inWindow(dealWonAt(d), w)) : eligible;
   const pays = payments.filter((p) => !p.voided && ids.has(p.dealId) && (!w || inWindow(p.date, w)));
   const fin = financeSummary(deals, payments, now);
   return {
@@ -110,7 +112,7 @@ export function financeBreakdown(deals: Deal[], payments: Payment[], w: Window, 
     const m = byM.get(dayKey(p.date).slice(0, 7)); if (m) m.received += p.amount;
     const x = methods.get(p.method) ?? { method: p.method, amount: 0, count: 0 }; x.amount += p.amount; x.count++; methods.set(p.method, x);
   }
-  for (const d of eligible) if (inWindow(d.createdAt, w)) { const m = byM.get(dayKey(d.createdAt).slice(0, 7)); if (m) m.won += d.finalAmount; }
+  for (const d of eligible) if (inWindow(dealWonAt(d), w)) { const m = byM.get(dayKey(dealWonAt(d)).slice(0, 7)); if (m) m.won += d.finalAmount; }
   const fullyPaid: string[] = [], partial: string[] = [], awaiting: string[] = [], overdueIds: string[] = [];
   let noTerms = 0;
   for (const d of eligible) {
@@ -365,12 +367,12 @@ export function runReport(r: ReportDef, d: AnalyticsData, now: Date, ctx: { empl
     case "deals": {
       const eligible = d.deals.filter((x) => x.status !== "cancelled" || r.groupBy === "status");
       const srcOf = (x: Deal) => (x.leadId ? leadById.get(x.leadId)?.source ?? "Lead removed" : "Not from a CRM lead");
-      const dealKey = (x: Deal, at?: string): [string, string] => r.groupBy === "status" ? [x.status, x.status.replace("_", " ")] : r.groupBy === "source" ? [srcOf(x), srcOf(x)] : [dayKey(at ?? x.createdAt).slice(0, 7), MONTH_LABEL(dayKey(at ?? x.createdAt).slice(0, 7))];
+      const dealKey = (x: Deal, at?: string): [string, string] => r.groupBy === "status" ? [x.status, x.status.replace("_", " ")] : r.groupBy === "source" ? [srcOf(x), srcOf(x)] : [dayKey(at ?? dealWonAt(x)).slice(0, 7), MONTH_LABEL(dayKey(at ?? dealWonAt(x)).slice(0, 7))];
       if (r.metric === "received") { const ids = new Set(eligible.filter((x) => x.status !== "cancelled").map((x) => x.id)); for (const p of d.payments) {
         if (p.voided || !ids.has(p.dealId) || !inWindow(p.date, w)) continue; const x = eligible.find((y) => y.id === p.dealId)!;
         const [k, lab] = r.groupBy === "method" ? [p.method, p.method] : dealKey(x, p.date); add(k, lab, p.amount, x.id, "deal");
       } } else for (const x of eligible) {
-        if (r.metric !== "outstanding" && !inWindow(x.createdAt, w)) continue;
+        if (r.metric !== "outstanding" && !inWindow(dealWonAt(x), w)) continue;
         const v = r.metric === "count" ? 1 : r.metric === "value" ? (x.status === "cancelled" ? 0 : x.finalAmount) : dealOutstanding(x, d.payments);
         if (!v && r.metric !== "count") continue; const [k, lab] = dealKey(x); add(k, lab, v, x.id, "deal");
       }
@@ -409,7 +411,7 @@ export const DEFINITIONS: Record<string, string> = {
   newLeads: "Leads created in the selected range (business day, India time). Source: Leads. Waste-bin leads are excluded.",
   awaitingContact: "Open leads with no saved call outcome yet. Opening the dialer or WhatsApp does not count as contact.",
   qualified: "Leads created in the range that are now Qualified, Proposal Sent or Won.",
-  wonDeals: "Deals booked (created) in Deals & Payments during the range, excluding cancelled deals. A won deal does not prove payment.",
+  wonDeals: "Deals won (recorded won date; older deals use their creation date) in Deals & Payments during the range, excluding cancelled deals. A won deal does not prove payment.",
   wonValue: "Final amount of deals booked in the range, excluding cancelled deals. This is not money received.",
   received: "Sum of valid payments dated in the range for non-cancelled deals. Voided payments are excluded. Matches Deals & Payments.",
   outstanding: "Unpaid balance across all active deals as of today (final amount − valid payments, never below zero). Not a period value.",

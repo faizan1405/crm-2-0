@@ -174,7 +174,7 @@ interface CRMState extends Prefs, ProjectSlice, ProjectCustomSlice, AnalyticsSli
   mergeIntoLead: (id: string, incoming: ParsedLead, mode: "fill" | "overwrite") => boolean;
   setQuickStatus: (id: string, q: QuickStatus | undefined) => void;
   addActivity: (leadId: string, text: string, type?: LeadActivity["type"]) => void;
-  addDeal: (deal: Omit<Deal, "id" | "createdAt">) => void;
+  addDeal: (deal: Omit<Deal, "id" | "createdAt" | "wonAt">) => void;
   /** `id` lets callers pre-assign the identifier (e.g. to attach staged proof); rejected if already used. */
   addPayment: (payment: Omit<Payment, "id">, id?: string) => boolean;
   voidPayment: (id: string) => void;
@@ -671,7 +671,7 @@ export const useCRM = create<CRMState>()(
       },
       addActivity: (leadId, text, type = "note") =>
         set((s) => ({ activities: [{ id: uid("activity"), leadId, type, text, at: new Date().toISOString() }, ...s.activities] })),
-      addDeal: (deal) => set((s) => ({ deals: [{ ...deal, id: uid("deal"), createdAt: new Date().toISOString() }, ...s.deals] })),
+      addDeal: (deal) => set((s) => { const at = new Date().toISOString(); return { deals: [{ ...deal, id: uid("deal"), createdAt: at, wonAt: at }, ...s.deals] }; }),
       addPayment: (payment, id) => {
         if (id && get().payments.some((p) => p.id === id)) return false;
         const target = get().deals.find((d) => d.id === payment.dealId);
