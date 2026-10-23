@@ -67,7 +67,7 @@ export function employeeError(input: EmployeeInput, existing: Employee[], ownerE
   if (!EMAIL.test(email) || email.length > 160) return "Enter a valid email address.";
   if (ownerEmail && email === normalizeEmail(ownerEmail)) return "That email belongs to the Owner.";
   if (existing.some((e) => e.id !== selfId && e.accountStatus !== "archived" && normalizeEmail(e.email) === email)) return "An employee with this email already exists.";
-  if (!ROLES.some((r) => r.id === input.roleId && r.id !== "owner")) return "Choose a role.";
+  if (!ROLES.some((r) => r.id !== "owner" && r.id === (input.roleId as string))) return "Choose a role.";
   if (input.roleId === "custom" && !input.customRoleLabel?.trim()) return "Name the custom role.";
   for (const k of Object.keys(input)) if (FORBIDDEN_KEYS.test(k)) return "Credentials can't be stored in the demo.";
   return null;
