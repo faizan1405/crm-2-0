@@ -49,6 +49,7 @@ const KIND_ICON = { overdue: AlarmClock, today: CalendarClock, hot: Flame, money
 
 function Dashboard() {
   const { leads, deals, payments, followUps, owner, activities, completeFollowUp } = useCRM();
+  const { can, preview } = useAccess();
   const [add, setAdd] = useState(false), [tab, setTab] = useState<(typeof TABS)[number][0]>("all");
   const [resched, setResched] = useState<{ leadId: string; id: string } | null>(null);
   const now = Date.now(), today = dayKey(new Date());
