@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CalendarPlus, CheckCheck, Copy, Eye, Flag, GitCompare, Inbox, Pencil, PhoneCall, RotateCcw, Search, UserPlus, Users } from "lucide-react";
+import { CalendarPlus, CheckCheck, StickyNote, Eye, Flag, GitCompare, Inbox, Pencil, PhoneCall, RotateCcw, Search, UserPlus, Users } from "lucide-react";
 import { Shell, PriorityBadge, selectCls, Identity, Empty } from "@/components/crm/Shell";
 import { CallButton } from "@/components/crm/CallButton";
 import { openCallLog } from "@/components/crm/PostCallDialog";
@@ -136,7 +136,7 @@ function InboxPage() {
                     {can("clients.calls") && <Button size="sm" variant="ghost" aria-label="Log call" onClick={() => openCallLog(l.id, "Smart Inbox")}><PhoneCall className="size-3.5" /></Button>}
                     <WhatsAppButton leadId={l.id} name={l.name} source="Smart Inbox" />
                     {can("leads.edit") && <Button size="sm" variant="ghost" asChild aria-label="Edit lead"><Link to="/leads/$id" params={{ id: l.id }}><Pencil className="size-3.5" /></Link></Button>}
-                    {can("leads.view") && <Button size="sm" variant="ghost" aria-label="Add note" onClick={() => setNoteFor(l)}><Copy className="size-3.5" /></Button>}
+                    {can("leads.view") && <Button size="sm" variant="ghost" aria-label="Add note" onClick={() => setNoteFor(l)}><StickyNote className="size-3.5" /></Button>}
                     {can("leads.edit") && <select aria-label="Priority" className={`${selectCls} h-8 px-2 text-xs`} value={l.priority} onChange={(e) => s.updateLead(l.id, { priority: e.target.value as LeadPriority })}><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option></select>}
                     {can("leads.assign") && <Button size="sm" variant="ghost" aria-label="Assign" onClick={() => setAssignFor([l.id])}><UserPlus className="size-3.5" /></Button>}
                     {can("followups.create") && <Button size="sm" variant="ghost" aria-label="Schedule follow-up" onClick={() => setFuFor(l.id)}><CalendarPlus className="size-3.5" /></Button>}
