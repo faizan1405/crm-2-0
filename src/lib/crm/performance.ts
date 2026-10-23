@@ -15,7 +15,7 @@ import type { Employee } from "./team";
 import { dayKey } from "./format";
 import { shiftDay } from "./dates";
 import { isPending } from "./followups";
-import { isConnectedOutcome, type CallOutcome } from "./calllog";
+import { CALL_OUTCOMES, isConnectedOutcome, type CallOutcome } from "./calllog";
 
 // ---------------- Periods (Asia/Kolkata business days) ----------------
 export type PeriodKey = "today" | "yesterday" | "thisWeek" | "lastWeek" | "thisMonth" | "lastMonth" | "custom";
@@ -320,7 +320,7 @@ export function mergeAlerts(cur: GoalAlert[], next: GoalAlert[], cap = 300): Goa
 }
 
 // ---------------- Demo Mode (synthetic, in-memory only) ----------------
-const OUTCOMES: CallOutcome[] = ["Interested", "Not picked", "Busy", "Call back later", "Not interested"] as CallOutcome[];
+const OUTCOMES: readonly CallOutcome[] = CALL_OUTCOMES;
 export function demoPerformanceEvents(employees: Employee[], leads: Lead[], now: Date): ActivityEvent[] {
   const emps = employees.filter((e) => e.accountStatus === "active").slice(0, 6);
   if (!emps.length || !leads.length) return [];
