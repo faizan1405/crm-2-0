@@ -24,7 +24,7 @@ import { UserCheck, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { BulkAssignDialog } from "@/components/team/BulkAssignDialog";
 import { EMPTY_SELECTION, addPage, isSelected, selectMatching, selectedIds, selectionCount, toggle, type Selection } from "@/lib/crm/bulk";
 import { dayKey } from "@/lib/crm/format";
-import { parseLeadsSearch, matchesCreatedRange } from "@/lib/crm/leadsSearch";
+import { parseLeadsSearch, matchesCreatedRange, countByStage } from "@/lib/crm/leadsSearch";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -122,9 +122,9 @@ function Leads() {
       && (due === "all" || dueMatch(l.id)));
     return r;
   }, [leads, q, source, prio, quick, now, who, created, due, assignments, followUps, activeView, tagF, crm.leadTags, crm.fieldValues, crm.customFields, cFrom, cTo, cSrc]); // eslint-disable-line react-hooks/exhaustive-deps
-  const stageCounts = useMemo(() => { const m: Record<string, number> = { all: scoped.length }; for (const l of scoped) m[l.status] = (m[l.status] ?? 0) + 1; return m; }, [scoped]);
+  const stageCounts = useMemo(() => countByStage(scoped), [scoped]);
   const rows = useMemo(() => {
-    const r = scoped.filter((l) => status === "all" || l.status === status);
+    const r = scoped.filter((l) => status === "all" || l.status === status); // filter returns a copy, so sort below never mutates `scoped`
     const cmp = { recent: (a: typeof r[0], b: typeof r[0]) => b.createdAt.localeCompare(a.createdAt), score: (a: typeof r[0], b: typeof r[0]) => (b.aiScore ?? 0) - (a.aiScore ?? 0), value: (a: typeof r[0], b: typeof r[0]) => (b.quotedAmount ?? 0) - (a.quotedAmount ?? 0), name: (a: typeof r[0], b: typeof r[0]) => a.name.localeCompare(b.name) }[sort];
     return r.sort((a, b) => Number(b.pinned) - Number(a.pinned) || cmp(a, b));
   }, [scoped, status, sort]); // eslint-disable-line react-hooks/exhaustive-deps
