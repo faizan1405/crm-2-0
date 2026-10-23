@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState, type ReactNode } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 const SECTIONS = [
   { id: "overview", label: "Executive overview" }, { id: "acquisition", label: "Lead acquisition" }, { id: "funnel", label: "Sales funnel" },
   { id: "activity", label: "Sales activity" }, { id: "finance", label: "Financial intelligence" }, { id: "projects", label: "Project performance" },
-  { id: "forecast", label: "Revenue forecast" }, { id: "reports", label: "Custom reports" },
+  { id: "forecast", label: "Opportunity forecast" }, { id: "reports", label: "Custom reports" },
 ] as const;
 type Section = (typeof SECTIONS)[number]["id"];
 interface Search { section?: Section; period?: AnalyticsPeriod; from?: string; to?: string; source?: string; stage?: LeadStatus; priority?: string; assignee?: string; tag?: string; view?: string; compare?: boolean }
@@ -139,6 +139,7 @@ function Filters({ search, set, st }: { search: Search; set: (p: Patch) => void;
 type SecProps = { st: Studio; open: (d: Drill) => void };
 function Overview({ st, open }: SecProps) {
   const { s, w, prev, leads, idx, now, compare } = st;
+  const nav = useNavigate(); const srch = Route.useSearch();
   const cur = useMemo(() => {
     const cohort = leads.filter((l) => inW(l.createdAt, w));
     const pc = leads.filter((l) => inW(l.createdAt, prev));
@@ -161,7 +162,7 @@ function Overview({ st, open }: SecProps) {
         <Kpi primary label="Outstanding balance" value={formatINR(cur.fin.outstanding)} tone="warning" def={DEFINITIONS["outstanding"]!} hint="As of today, all active deals" onOpen={() => open({ title: "Deals with an outstanding balance", kind: "deal", ids: s.deals.filter((x) => x.status !== "cancelled" && financeSummary([x], s.payments).outstanding > 0).map((x) => x.id) })} />
       </div>
       <div className="as-kpi-grid">
-        <Kpi label="New leads" value={String(cur.cohort.length)} def={DEFINITIONS["newLeads"]!} delta={d(cur.cohort.length, cur.pc.length)} onOpen={() => open({ title: "New leads in range", kind: "lead", ids: cur.cohort.map((l) => l.id) })} />
+        <Kpi label="New leads" value={String(cur.cohort.length)} def={DEFINITIONS["newLeads"]!} delta={d(cur.cohort.length, cur.pc.length)} onOpen={() => (srch.stage || srch.priority || srch.assignee || srch.tag || srch.view ? open({ title: "New leads in range", kind: "lead", ids: cur.cohort.map((l) => l.id) }) : void nav({ to: "/leads", search: { from: w.start, to: w.end, ...(srch.source ? { src: srch.source } : {}) } }))} />
         <Kpi label="Awaiting first contact" value={String(cur.awaiting.length)} tone={cur.awaiting.length ? "warning" : "default"} def={DEFINITIONS["awaitingContact"]!} hint="Open leads, right now" onOpen={() => open({ title: "Open leads with no saved call outcome", kind: "lead", ids: cur.awaiting.map((l) => l.id) })} />
         <Kpi label="Qualified leads" value={String(cur.qualified.length)} def={DEFINITIONS["qualified"]!} delta={d(cur.qualified.length, cur.pqual)} onOpen={() => open({ title: "Qualified or later (created in range)", kind: "lead", ids: cur.qualified.map((l) => l.id) })} />
         <Kpi label="Deals won" value={String(cur.fin.wonCount)} def={DEFINITIONS["wonDeals"]!} delta={d(cur.fin.wonCount, cur.pfin.wonCount)} onOpen={() => open({ title: "Deals booked in range", kind: "deal", ids: cur.fin.wonIds })} />
@@ -435,6 +436,7 @@ function ForecastSection({ st, open }: SecProps) {
           <Kpi primary label="Conservative" value={formatINR(f.conservative)} def={`Each probability × ${s.forecastConfig.conservative} (your setting).`} />
           <Kpi primary label="Optimistic" value={formatINR(f.optimistic)} def={`Each probability × ${s.forecastConfig.optimistic} (your setting), capped at 100%.`} />
         </div>
+        <div role="note" className="-mt-1 rounded-md border bg-muted/40 p-3 text-xs"><b>Weighted Pipeline Opportunity Forecast.</b> Built from open qualified Leads with a quoted amount × your stage probability, grouped by expected close date (undated opportunities shown separately). It is <b>not</b> cash received, confirmed revenue, a guaranteed sale or an agreed payment schedule. No Deal records are created from it.</div>
         <p className="-mt-2 text-[11px] text-muted-foreground">Scenario estimates, not guaranteed revenue. Won and Lost leads are excluded. Probabilities version {s.forecastConfig.version} since {formatDate(s.forecastConfig.effectiveFrom, { day: "numeric", month: "short", year: "numeric" })}. <button className="font-medium underline" onClick={() => setEditing(true)}>Change probabilities</button></p>
         <div className="grid gap-5 lg:grid-cols-2">
           <Panel title="Forecast timeline" sub="Grouped by your expected close dates">
