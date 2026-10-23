@@ -19,12 +19,14 @@ import { Route as FollowUpsRouteImport } from './routes/follow-ups'
 import { Route as InboxRouteImport } from './routes/inbox'
 import { Route as LeadsRouteImport } from './routes/leads'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as MyPerformanceRouteImport } from './routes/my-performance'
 import { Route as NotesRouteImport } from './routes/notes'
 import { Route as PipelineRouteImport } from './routes/pipeline'
 import { Route as SalesStudioRouteImport } from './routes/sales-studio'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as TeamRouteImport } from './routes/team'
 import { Route as TeamActivityRouteImport } from './routes/team-activity'
+import { Route as TeamPerformanceRouteImport } from './routes/team-performance'
 import { Route as LeadsIdRouteImport } from './routes/leads_.$id'
 import { Route as LeadsBinRouteImport } from './routes/leads_.bin'
 import { Route as TeamPreviewIdRouteImport } from './routes/team_.preview.$id'
@@ -80,6 +82,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MyPerformanceRoute = MyPerformanceRouteImport.update({
+  id: '/my-performance',
+  path: '/my-performance',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NotesRoute = NotesRouteImport.update({
   id: '/notes',
   path: '/notes',
@@ -108,6 +115,11 @@ const TeamRoute = TeamRouteImport.update({
 const TeamActivityRoute = TeamActivityRouteImport.update({
   id: '/team-activity',
   path: '/team-activity',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeamPerformanceRoute = TeamPerformanceRouteImport.update({
+  id: '/team-performance',
+  path: '/team-performance',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LeadsIdRoute = LeadsIdRouteImport.update({
@@ -142,12 +154,14 @@ export interface FileRoutesByFullPath {
   '/inbox': typeof InboxRoute
   '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
+  '/my-performance': typeof MyPerformanceRoute
   '/notes': typeof NotesRoute
   '/pipeline': typeof PipelineRoute
   '/sales-studio': typeof SalesStudioRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
   '/team-activity': typeof TeamActivityRoute
+  '/team-performance': typeof TeamPerformanceRoute
   '/leads/$id': typeof LeadsIdRoute
   '/leads/bin': typeof LeadsBinRoute
   '/team/preview/$id': typeof TeamPreviewIdRoute
@@ -164,12 +178,14 @@ export interface FileRoutesByTo {
   '/inbox': typeof InboxRoute
   '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
+  '/my-performance': typeof MyPerformanceRoute
   '/notes': typeof NotesRoute
   '/pipeline': typeof PipelineRoute
   '/sales-studio': typeof SalesStudioRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
   '/team-activity': typeof TeamActivityRoute
+  '/team-performance': typeof TeamPerformanceRoute
   '/leads/$id': typeof LeadsIdRoute
   '/leads/bin': typeof LeadsBinRoute
   '/team/preview/$id': typeof TeamPreviewIdRoute
@@ -187,12 +203,14 @@ export interface FileRoutesById {
   '/inbox': typeof InboxRoute
   '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
+  '/my-performance': typeof MyPerformanceRoute
   '/notes': typeof NotesRoute
   '/pipeline': typeof PipelineRoute
   '/sales-studio': typeof SalesStudioRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
   '/team-activity': typeof TeamActivityRoute
+  '/team-performance': typeof TeamPerformanceRoute
   '/leads_/$id': typeof LeadsIdRoute
   '/leads_/bin': typeof LeadsBinRoute
   '/team_/preview/$id': typeof TeamPreviewIdRoute
@@ -211,12 +229,14 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/leads'
     | '/login'
+    | '/my-performance'
     | '/notes'
     | '/pipeline'
     | '/sales-studio'
     | '/settings'
     | '/team'
     | '/team-activity'
+    | '/team-performance'
     | '/leads/$id'
     | '/leads/bin'
     | '/team/preview/$id'
@@ -233,12 +253,14 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/leads'
     | '/login'
+    | '/my-performance'
     | '/notes'
     | '/pipeline'
     | '/sales-studio'
     | '/settings'
     | '/team'
     | '/team-activity'
+    | '/team-performance'
     | '/leads/$id'
     | '/leads/bin'
     | '/team/preview/$id'
@@ -255,12 +277,14 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/leads'
     | '/login'
+    | '/my-performance'
     | '/notes'
     | '/pipeline'
     | '/sales-studio'
     | '/settings'
     | '/team'
     | '/team-activity'
+    | '/team-performance'
     | '/leads_/$id'
     | '/leads_/bin'
     | '/team_/preview/$id'
@@ -278,12 +302,14 @@ export interface RootRouteChildren {
   InboxRoute: typeof InboxRoute
   LeadsRoute: typeof LeadsRoute
   LoginRoute: typeof LoginRoute
+  MyPerformanceRoute: typeof MyPerformanceRoute
   NotesRoute: typeof NotesRoute
   PipelineRoute: typeof PipelineRoute
   SalesStudioRoute: typeof SalesStudioRoute
   SettingsRoute: typeof SettingsRoute
   TeamRoute: typeof TeamRoute
   TeamActivityRoute: typeof TeamActivityRoute
+  TeamPerformanceRoute: typeof TeamPerformanceRoute
   LeadsIdRoute: typeof LeadsIdRoute
   LeadsBinRoute: typeof LeadsBinRoute
   TeamPreviewIdRoute: typeof TeamPreviewIdRoute
@@ -362,6 +388,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/my-performance': {
+      id: '/my-performance'
+      path: '/my-performance'
+      fullPath: '/my-performance'
+      preLoaderRoute: typeof MyPerformanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/notes': {
       id: '/notes'
       path: '/notes'
@@ -402,6 +435,13 @@ declare module '@tanstack/react-router' {
       path: '/team-activity'
       fullPath: '/team-activity'
       preLoaderRoute: typeof TeamActivityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/team-performance': {
+      id: '/team-performance'
+      path: '/team-performance'
+      fullPath: '/team-performance'
+      preLoaderRoute: typeof TeamPerformanceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/leads_/$id': {
@@ -446,12 +486,14 @@ const rootRouteChildren: RootRouteChildren = {
   InboxRoute: InboxRoute,
   LeadsRoute: LeadsRoute,
   LoginRoute: LoginRoute,
+  MyPerformanceRoute: MyPerformanceRoute,
   NotesRoute: NotesRoute,
   PipelineRoute: PipelineRoute,
   SalesStudioRoute: SalesStudioRoute,
   SettingsRoute: SettingsRoute,
   TeamRoute: TeamRoute,
   TeamActivityRoute: TeamActivityRoute,
+  TeamPerformanceRoute: TeamPerformanceRoute,
   LeadsIdRoute: LeadsIdRoute,
   LeadsBinRoute: LeadsBinRoute,
   TeamPreviewIdRoute: TeamPreviewIdRoute,

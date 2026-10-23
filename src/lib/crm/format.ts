@@ -25,8 +25,9 @@ void inrCompact;
 export const formatPct = (n: number | null) => (n == null ? "—" : `${Math.round(n * 100)}%`);
 
 /** yyyy-mm-dd in the business timezone */
+const DAY_FMT = new Intl.DateTimeFormat("en-CA", { timeZone: TIMEZONE });
 export function dayKey(d: Date | string) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: TIMEZONE }).format(new Date(d));
+  return DAY_FMT.format(new Date(d));
 }
 
 export function isToday(d: string) {
