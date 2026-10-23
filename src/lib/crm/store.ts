@@ -627,7 +627,7 @@ export const useCRM = create<CRMState>()(
         return n;
       },
       setEmployeeStatus: (id, status) => set((s) => ({ employees: s.employees.map((e) => (e.id === id ? withStatus(e, status, new Date().toISOString()) : e)) })),
-    });
+    }, get, set);
     },
     {
       name: "scale-flow-crm-2-demo",
