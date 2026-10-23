@@ -50,13 +50,13 @@ function RuleForm({ rule, onClose }: { rule: AssignmentRule | undefined; onClose
   const [r, setR] = useState<Omit<AssignmentRule, "createdAt" | "updatedAt" | "priority">>(() => rule ?? { id: uid("rule"), name: "", trigger: "lead_created", conditions: {}, targetEmployeeId: "", enabled: true });
   const [err, setErr] = useState<string | null>(null);
   const targets = employees.filter(assignable);
-  const cond = (k: "source" | "priority" | "stage", v: string) => { const c = { ...r.conditions } as Record<string, string>; if (v) c[k] = v; else delete c[k]; setR({ ...r, conditions: c }); setErr(null); };
+  const cond = (k: "source" | "priority" | "stage", v: string) => { setR((prev) => { const c = { ...prev.conditions } as Record<string, string>; if (v) c[k] = v; else delete c[k]; return { ...prev, conditions: c }; }); setErr(null); };
   return <Dialog open onOpenChange={(o) => !o && onClose()}><DialogContent className="sm:max-w-lg">
     <DialogHeader><DialogTitle>{rule ? "Edit rule" : "New assignment rule"}</DialogTitle><DialogDescription>Rules never assign to inactive employees and never create copies of leads.</DialogDescription></DialogHeader>
     <form className="grid gap-4" noValidate onSubmit={(e) => { e.preventDefault(); const x = saveRule(r); if (x) setErr(x); else { toast.success(rule ? "Rule updated" : "Rule created"); onClose(); } }}>
       <label className="q-field"><span>Rule name</span><Input autoFocus value={r.name} placeholder="Website leads to Rahul" onChange={(e) => { setR({ ...r, name: e.target.value }); setErr(null); }} /></label>
       <div className="grid gap-4 sm:grid-cols-2">
-        <label className="q-field"><span>When</span><select className={selectCls} value={r.trigger} onChange={(e) => setR({ ...r, trigger: e.target.value as RuleTrigger })}>{(Object.keys(TRIGGER) as RuleTrigger[]).map((t) => <option key={t} value={t}>{TRIGGER[t]}</option>)}</select></label>
+        <label className="q-field"><span>When</span><select className={selectCls} value={r.trigger} onChange={(e) => { const t = e.target.value as RuleTrigger; setR((prev) => ({ ...prev, trigger: t })); }}>{(Object.keys(TRIGGER) as RuleTrigger[]).map((t) => <option key={t} value={t}>{TRIGGER[t]}</option>)}</select></label>
         <label className="q-field"><span>Assign to</span><select className={selectCls} value={r.targetEmployeeId} onChange={(e) => { setR({ ...r, targetEmployeeId: e.target.value }); setErr(null); }}><option value="">Choose employee…</option>{targets.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></label>
       </div>
       <div className="grid gap-4 sm:grid-cols-3">
