@@ -26,9 +26,9 @@ export const Route = createFileRoute("/crm-config")({
   head: () => ({
     meta: [
       { title: "CRM Configuration · Scale Flow Sales OS" },
-      { name: "description", content: "Owner-only custom lead fields, tags and saved views for Scale Flow Sales OS." },
+      { name: "description", content: "Owner-only custom Lead and Project fields, tags and saved views for Scale Flow Sales OS." },
       { property: "og:title", content: "CRM Configuration · Scale Flow Sales OS" },
-      { property: "og:description", content: "Owner-only custom lead fields, tags and saved views for Scale Flow Sales OS." },
+      { property: "og:description", content: "Owner-only custom Lead and Project fields, tags and saved views for Scale Flow Sales OS." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
