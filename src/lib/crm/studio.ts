@@ -45,6 +45,8 @@ export function quotationTemplateError(t: Pick<QuotationTemplate, "name" | "pric
   if (!t.name.trim()) return "Add a package name.";
   if (t.priceType === "fixed" && !(typeof t.priceAmount === "number" && Number.isFinite(t.priceAmount) && t.priceAmount > 0)) return "Enter a price above zero, or choose Custom price.";
   if (!t.messageBody.trim()) return "Write the quotation message.";
+  const bad = placeholderIssues(t.messageBody, QUOTATION_PLACEHOLDERS);
+  if (bad.length) return `Unsupported placeholder ${bad.join(", ")}. Use the Insert buttons — e.g. {firstName}, {packageName}, {packagePrice}.`;
   return null;
 }
 
@@ -122,9 +124,11 @@ export function renderTemplate(body: string, vars: TemplateVars): string {
     .map((line) => {
       if (!line.match(TOKEN)) return line;
       const parts = line.split(/(?<=[.!?])\s+/);
-      const kept = parts.filter((p) => [...p.matchAll(TOKEN)].every((m) => val(m[1]!)));
+      // Only known placeholders with a missing value drop their sentence; unknown tokens stay as literal text.
+      const known = (k: string) => (PLACEHOLDERS as readonly string[]).includes(k);
+      const kept = parts.filter((p) => [...p.matchAll(TOKEN)].every((m) => !known(m[1]!) || val(m[1]!)));
       if (!kept.length) return null;
-      return kept.join(" ").replace(TOKEN, (_, k: string) => val(k)!);
+      return kept.join(" ").replace(TOKEN, (raw, k: string) => (known(k) ? val(k)! : raw));
     })
     .filter((l): l is string => l !== null)
     .join("\n")
@@ -141,6 +145,16 @@ export function templateVars(lead: Pick<Lead, "name" | "company" | "requirement"
   const links = demoLines(ctx.demos ?? []);
   if (links) v.demoLinks = links;
   return v;
+}
+/** Malformed ({{x}}, unmatched braces) or unsupported placeholders, as written by the user. Empty = valid. */
+export function placeholderIssues(body: string, allowed: readonly string[] = PLACEHOLDERS): string[] {
+  const out = new Set<string>();
+  for (const m of body.matchAll(/\{\{[^{}]*\}\}/g)) out.add(m[0]);
+  const stripped = body.replace(/\{\{[^{}]*\}\}/g, "");
+  for (const m of stripped.matchAll(/\{([^{}]*)\}/g)) if (!allowed.includes(m[1]!)) out.add(m[0]);
+  const rest = stripped.replace(/\{[^{}]*\}/g, "");
+  if (/[{}]/.test(rest)) out.add("an unmatched { or }");
+  return [...out];
 }
 export const unknownPlaceholders = (body: string) => [...body.matchAll(TOKEN)].map((m) => m[1]!).filter((k) => !(PLACEHOLDERS as readonly string[]).includes(k));
 export const pickTemplate = (templates: WaTemplate[], purpose: TemplatePurpose) => {
