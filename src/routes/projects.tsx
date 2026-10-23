@@ -6,7 +6,14 @@ import { Shell, Empty, selectCls } from "@/components/crm/Shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useCRM } from "@/lib/crm/store";
+import { useCRM, projectCtxOf } from "@/lib/crm/store";
+import { TagChips, ConditionBuilder } from "@/components/crm/Customize";
+import { useProjectFieldViewer } from "@/components/projects/ProjectCustom";
+import { runProjectFilter } from "@/lib/crm/projectCustomize";
+import { tagForProjects, type ViewFilter } from "@/lib/crm/customize";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { SlidersHorizontal, Tag } from "lucide-react";
 import { dayKey, formatDate } from "@/lib/crm/format";
 import {
   activeProjectForDeal, canSeeProject, isProjectOverdue, projectAttention, projectMetrics, projectProgress, reversalFlag, supportStatus,
@@ -20,7 +27,7 @@ type Tab = "overview" | "all" | "board" | "templates";
 const TABS: Tab[] = ["overview", "all", "board", "templates"];
 
 export const Route = createFileRoute("/projects")({
-  validateSearch: (s: Record<string, unknown>): { tab?: Tab } => (TABS.includes(s["tab"] as Tab) ? { tab: s["tab"] as Tab } : {}),
+  validateSearch: (s: Record<string, unknown>): { tab?: Tab; tag?: string } => ({ ...(TABS.includes(s["tab"] as Tab) ? { tab: s["tab"] as Tab } : {}), ...(typeof s["tag"] === "string" && s["tag"] ? { tag: s["tag"] } : {}) }),
   head: () => ({ meta: [
     { title: "Project Desk — Scale Flow Sales OS" },
     { name: "description", content: "Track won deals through booking, tasks, delivery, payment collection and technical support." },
@@ -35,6 +42,30 @@ function useVisibleProjects() {
   const projects = useCRM((s) => s.projects), deals = useCRM((s) => s.deals), leads = useCRM((s) => s.leads);
   const v = useProjectViewer();
   return useMemo(() => projects.filter((p) => canSeeProject(p, v)).map((p) => ({ ...p, reviewFlag: reversalFlag(p, deals, leads) })), [projects, deals, leads, v]);
+}
+
+/** Tag + advanced (custom field) filter shared by the list and the board. Runs only on projects already in the viewer's scope. */
+function useProjectFilter(rows: Project[]) {
+  const st = useCRM(); const viewer = useProjectFieldViewer();
+  const { tag = "" } = Route.useSearch();
+  const [adv, setAdv] = useState<ViewFilter>({ mode: "and", conditions: [] });
+  const tags = st.tagDefs.filter(tagForProjects);
+  const ctx = projectCtxOf(st, viewer);
+  const byTag = tag ? rows.filter((p) => (st.projectTags[p.id] ?? []).includes(tag)) : rows;
+  const out = adv.conditions.length ? runProjectFilter(adv, byTag, ctx) : byTag;
+  return { out, tag, tags, adv, setAdv };
+}
+function TagFilter({ tag, tags, tab }: { tag: string; tags: { id: string; name: string; status: string }[]; tab: Tab }) {
+  const nav = Route.useNavigate();
+  if (!tags.length) return null;
+  return <select aria-label="Tag" className={selectCls} value={tag} onChange={(e) => void nav({ search: { tab, ...(e.target.value ? { tag: e.target.value } : {}) } })}><option value="">Any tag</option>{tags.map((t) => <option key={t.id} value={t.id}>{t.name}{t.status === "archived" ? " (archived)" : ""}</option>)}</select>;
+}
+function MoreFilters({ adv, setAdv }: { adv: ViewFilter; setAdv: (f: ViewFilter) => void }) {
+  const [open, setOpen] = useState(false);
+  return <>
+    <Button variant="outline" size="sm" className="h-10 rounded-full" onClick={() => setOpen(!open)} aria-expanded={open}><SlidersHorizontal className="size-4" />More filters{adv.conditions.length ? ` · ${adv.conditions.length}` : ""}</Button>
+    {open && <div className="w-full rounded-xl border bg-card p-3"><ConditionBuilder entity="project" filter={adv} onChange={setAdv} />{adv.conditions.length > 0 && <Button size="sm" variant="ghost" className="mt-2" onClick={() => setAdv({ mode: "and", conditions: [] })}>Clear filters</Button>}</div>}
+  </>;
 }
 
 function ProjectDesk() {
@@ -88,7 +119,10 @@ function AllProjects() {
   const today = dayKey(new Date());
   const [q, setQ] = useState(""), [stage, setStage] = useState(""), [status, setStatus] = useState(""), [who, setWho] = useState(""), [prio, setPrio] = useState(""), [type, setType] = useState(""), [sup, setSup] = useState(""), [arch, setArch] = useState(false), [sort, setSort] = useState("due");
   const types = [...new Set([...projectTemplates.map((t) => t.type), ...projects.map((p) => p.type)])];
-  const rows = projects.filter((p) => (arch ? p.archived : !p.archived) && (!q || `${p.name} ${p.clientName} ${p.company ?? ""}`.toLowerCase().includes(q.toLowerCase())) && (!stage || p.stage === stage) && (!status || p.status === status) && (!who || p.ownerId === who || p.memberIds.includes(who)) && (!prio || p.priority === prio) && (!type || p.type === type) && (!sup || supportStatus(p.support, today) === sup))
+  const f = useProjectFilter(projects);
+  const crm = useCRM(); const vw = useProjectViewer();
+  const [picked, setPicked] = useState<string[]>([]); const [tagOp, setTagOp] = useState<{ tagId: string; mode: "add" | "remove" } | null>(null);
+  const rows = f.out.filter((p) => (arch ? p.archived : !p.archived) && (!q || `${p.name} ${p.clientName} ${p.company ?? ""}`.toLowerCase().includes(q.toLowerCase())) && (!stage || p.stage === stage) && (!status || p.status === status) && (!who || p.ownerId === who || p.memberIds.includes(who)) && (!prio || p.priority === prio) && (!type || p.type === type) && (!sup || supportStatus(p.support, today) === sup))
     .sort((a, b) => sort === "created" ? b.createdAt.localeCompare(a.createdAt) : sort === "start" ? (a.plannedStart ?? "9").localeCompare(b.plannedStart ?? "9") : (a.targetDelivery ?? "9").localeCompare(b.targetDelivery ?? "9"));
   return <div className="grid gap-4">
     <div className="pd-filters">
@@ -100,10 +134,22 @@ function AllProjects() {
       <select aria-label="Priority" className={selectCls} value={prio} onChange={(e) => setPrio(e.target.value)}><option value="">Any priority</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select>
       <select aria-label="Support" className={selectCls} value={sup} onChange={(e) => setSup(e.target.value)}><option value="">Any support</option>{Object.entries(SUPPORT_TEXT).map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select>
       <select aria-label="Sort" className={selectCls} value={sort} onChange={(e) => setSort(e.target.value)}><option value="due">Due date</option><option value="start">Start date</option><option value="created">Newest</option></select>
+      <TagFilter tag={f.tag} tags={f.tags} tab="all" />
       <label className="flex items-center gap-2 text-sm text-muted-foreground"><input type="checkbox" checked={arch} onChange={(e) => setArch(e.target.checked)} />Archived</label>
+      <MoreFilters adv={f.adv} setAdv={f.setAdv} />
     </div>
+    {vw.owner && rows.length > 0 && <div className="flex flex-wrap items-center gap-2 text-sm">
+      <label className="flex items-center gap-2"><Checkbox aria-label="Select all shown projects" checked={rows.every((p) => picked.includes(p.id))} onCheckedChange={(v) => setPicked(v ? rows.map((p) => p.id) : [])} />{picked.length ? `${picked.length} selected` : "Select"}</label>
+      {picked.length > 0 && f.tags.some((t) => t.status === "active") && <select aria-label="Bulk add project tag" className={cn(selectCls, "h-8 text-xs")} value="" onChange={(e) => e.target.value && setTagOp({ tagId: e.target.value, mode: "add" })}><option value="">Add tag…</option>{f.tags.filter((t) => t.status === "active").map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}
+      {picked.length > 0 && f.tags.length > 0 && <select aria-label="Bulk remove project tag" className={cn(selectCls, "h-8 text-xs")} value="" onChange={(e) => e.target.value && setTagOp({ tagId: e.target.value, mode: "remove" })}><option value="">Remove tag…</option>{f.tags.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}
+    </div>}
+    <Dialog open={!!tagOp} onOpenChange={(o) => !o && setTagOp(null)}><DialogContent className="sm:max-w-md">{tagOp && (() => { const t = crm.tagDefs.find((x) => x.id === tagOp.tagId); const has = picked.filter((id) => (crm.projectTags[id] ?? []).includes(tagOp.tagId)).length; const affected = tagOp.mode === "add" ? picked.length - has : has; return <>
+      <DialogHeader><DialogTitle><Tag className="mr-1.5 inline size-4" />{tagOp.mode === "add" ? "Add" : "Remove"} “{t?.name}”</DialogTitle><DialogDescription>{picked.length} project(s) selected. Leads and other tags are untouched.</DialogDescription></DialogHeader>
+      <p className="text-sm"><b className="num">{affected}</b> project(s) will change.</p>
+      <DialogFooter><Button variant="ghost" onClick={() => setTagOp(null)}>Cancel</Button><Button disabled={!affected} onClick={() => { const r = crm.bulkTagProjects(picked, tagOp.tagId, tagOp.mode); setTagOp(null); if (!r.changed) return; toast.success(`${tagOp.mode === "add" ? "Added" : "Removed"} “${t?.name}” · ${r.changed} project(s)`, { action: { label: "Undo", onClick: () => { const u = useCRM.getState().undoBulkProjectTags(r.before, r.applied); toast(u.kept ? `Undone on ${u.restored} · ${u.kept} kept (changed since)` : `Undone on ${u.restored} project(s)`); } } }); }}>{tagOp.mode === "add" ? "Add tag" : "Remove tag"} to {affected}</Button></DialogFooter>
+    </>; })()}</DialogContent></Dialog>
     {rows.length === 0 ? <div className="receipt"><Empty icon={<FolderKanban />} title={projects.length ? "No projects match" : "No projects yet"} hint={projects.length ? "Try clearing a filter." : "Create a project from a won deal on the Overview or in Deals & Payments."} /></div> :
-      <ul className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">{rows.map((p) => <li key={p.id}><ProjectCard p={p} tasks={projectTasks.filter((t) => t.projectId === p.id)} owner={people.name(p.ownerId)} today={today} /></li>)}</ul>}
+      <ul className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">{rows.map((p) => <li key={p.id} className="relative">{vw.owner && <span className="absolute top-3 right-3 z-10"><Checkbox aria-label={`Select ${p.name}`} checked={picked.includes(p.id)} onCheckedChange={(v) => setPicked(v ? [...picked, p.id] : picked.filter((x) => x !== p.id))} /></span>}<ProjectCard p={p} tasks={projectTasks.filter((t) => t.projectId === p.id)} owner={people.name(p.ownerId)} today={today} /></li>)}</ul>}
   </div>;
 }
 
@@ -111,13 +157,16 @@ function ProjectCard({ p, tasks, owner, today, draggable, onDragStart }: { p: Pr
   const prog = projectProgress(tasks as never);
   const late = isProjectOverdue(p, today);
   return <Link to="/projects/$id" params={{ id: p.id }} className="pd-card" draggable={draggable} onDragStart={onDragStart} data-overdue={late || undefined}>
-    <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="truncate font-medium">{p.name}</div><div className="truncate text-xs text-muted-foreground">{p.clientName} · {p.type}</div></div><span className="pd-prio" data-p={p.priority}>{p.priority}</span></div>
+    <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="truncate font-medium">{p.name}</div><div className="truncate text-xs text-muted-foreground">{p.clientName} · {p.type}</div></div><span className="pd-prio mr-6" data-p={p.priority}>{p.priority}</span></div>
     <div className="mt-3 flex flex-wrap gap-1.5"><StatusPill status={p.status} /><StagePill stage={p.stage} /></div>
+    <CardTags id={p.id} />
     <div className="mt-3"><ProgressBar pct={prog.pct} label={prog.text} /></div>
     <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground"><span className="truncate">{owner}</span><span className={cn(late && "font-medium text-destructive")}>{p.targetDelivery ? `${late ? "Overdue · " : "Due "}${formatDate(p.targetDelivery)}` : "No target date"}</span></div>
     {p.reviewFlag && <div className="mt-2 text-[11px] font-medium text-warning">{p.reviewFlag}</div>}
   </Link>;
 }
+
+function CardTags({ id }: { id: string }) { const ids = useCRM((s) => s.projectTags[id]); return ids?.length ? <div className="mt-2"><TagChips ids={ids} max={3} /></div> : null; }
 
 function Board() {
   const projects = useVisibleProjects().filter((p) => !p.archived);
@@ -126,7 +175,8 @@ function Board() {
   const canMove = useCanProject("projects.stage");
   const today = dayKey(new Date());
   const [q, setQ] = useState(""), [who, setWho] = useState(""), [over, setOver] = useState<string | null>(null);
-  const rows = projects.filter((p) => (!q || `${p.name} ${p.clientName}`.toLowerCase().includes(q.toLowerCase())) && (!who || p.ownerId === who || p.memberIds.includes(who)));
+  const f = useProjectFilter(projects);
+  const rows = f.out.filter((p) => (!q || `${p.name} ${p.clientName}`.toLowerCase().includes(q.toLowerCase())) && (!who || p.ownerId === who || p.memberIds.includes(who)));
   const move = (id: string, stage: ProjectStage) => {
     if (stage === "delivered") { toast.error("Record delivery from the project's Delivery tab — it checks the delivery checklist first."); return; }
     const r = moveProjectStage(id, stage);
@@ -134,7 +184,7 @@ function Board() {
     toast.success(`Moved to ${STAGE_TEXT[stage]}`, { action: { label: "Undo", onClick: () => { if (!undoProjectStage(id, r.from, r.version)) toast.error("Not undone — the project changed since."); } } });
   };
   return <div className="grid gap-3">
-    <div className="pd-filters"><label className="relative min-w-[200px] flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search board" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" /></label><select aria-label="Assigned" className={selectCls} value={who} onChange={(e) => setWho(e.target.value)}><option value="">Anyone</option>{people.list.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+    <div className="pd-filters"><label className="relative min-w-[200px] flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search board" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" /></label><select aria-label="Assigned" className={selectCls} value={who} onChange={(e) => setWho(e.target.value)}><option value="">Anyone</option>{people.list.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select><TagFilter tag={f.tag} tags={f.tags} tab="board" /><MoreFilters adv={f.adv} setAdv={f.setAdv} /></div>
     <div className="pd-board scrollbar-thin" role="list" aria-label="Project board">
       {PROJECT_STAGES.map((s) => { const col = rows.filter((p) => p.stage === s); return <section key={s} role="listitem" aria-label={`${STAGE_TEXT[s]}: ${col.length}`} className="pd-col" data-over={over === s || undefined}
         onDragOver={(e) => { if (canMove) { e.preventDefault(); setOver(s); } }} onDragLeave={() => setOver(null)} onDrop={(e) => { e.preventDefault(); setOver(null); const id = e.dataTransfer.getData("text/project"); if (id) move(id, s); }}>
