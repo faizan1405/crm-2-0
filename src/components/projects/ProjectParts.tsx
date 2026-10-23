@@ -50,7 +50,7 @@ function CreateBody({ deal, close }: { deal: Deal; close: () => void }) {
   const [tplId, setTplId] = useState(templates[0]?.id ?? "");
   const tpl = templates.find((t) => t.id === tplId);
   const share = lead ? quotationShares.filter((s) => s.leadId === lead.id).sort((a, b) => b.at.localeCompare(a.at))[0] : undefined;
-  const packageRef = share ? quotationTemplates.find((q) => q.id === share.templateId)?.name ?? share.templateName : undefined;
+  const packageRef = share ? quotationTemplates.find((q) => q.id === share.templateId)?.name ?? share.packageNameSnapshot : undefined;
   // Only team-visible custom values are carried; the Lead record and its schema are never changed.
   const fields = lead ? customFields.filter((f) => f.status === "active" && fieldVisible(f, { owner: false, employeeId: "", canEdit: false }) && fieldValues[lead.id]?.[f.id] != null).map((f) => ({ label: f.label, value: displayValue(f, fieldValues[lead.id]![f.id]) })).filter((x) => x.value) : [];
   const service = fields.find((f) => /service/i.test(f.label))?.value;
