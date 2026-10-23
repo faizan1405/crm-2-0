@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -46,7 +46,7 @@ function Team() {
 
   return (
     <Shell title="Team Management" subtitle="Create and manage employee profiles. Sign-in and permissions arrive with the secure backend." actions={<Button onClick={() => setForm({ open: true })}><Plus />Add employee</Button>}>
-      <div className="tm-notice"><Info className="size-4 shrink-0" /><span><b>Local demo.</b> Profiles are saved in this browser only. Production login isn't configured yet, so employees can't sign in and no passwords are created.</span></div>
+      <div className="tm-notice"><Info className="size-4 shrink-0" /><span><b>Local demo.</b> Profiles are saved in this browser only. Production login isn't configured yet, so employees can't sign in and no passwords are created. <Link to="/login" className="font-semibold underline underline-offset-2">Preview the login screen</Link></span></div>
       <div className="tm-summary">
         {([["Total employees", sum.total], ["Active", sum.active], ["Pending setup", sum.pending], ["Inactive", sum.inactive]] as const).map(([l, v]) => <div key={l} className="tm-sum"><span className="eyebrow">{l}</span><span className="num tm-sum-v">{v}</span></div>)}
       </div>
