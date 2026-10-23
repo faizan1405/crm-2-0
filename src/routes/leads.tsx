@@ -27,8 +27,15 @@ import { dayKey } from "@/lib/crm/format";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { AdditionalInfo, TagChips, TagPicker, useViewer } from "@/components/crm/Customize";
+import { ViewEditor, newView } from "@/components/crm/ViewEditor";
+import { viewCtxOf, viewerId } from "@/lib/crm/store";
+import { runView, viewAllowed, viewEditable, viewIssues, type SavedView, type ViewCondition } from "@/lib/crm/customize";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Bookmark, BookmarkPlus, Star, Tag, AlertTriangle, Pencil } from "lucide-react";
 
 export const Route = createFileRoute("/leads")({
+  validateSearch: (s: Record<string, unknown>): { view?: string } => (typeof s["view"] === "string" && s["view"] ? { view: s["view"] } : {}),
   head: () => ({
     meta: [
       { property: "og:type", content: "website" },
@@ -46,6 +53,15 @@ type Sort = "recent" | "score" | "value" | "name";
 
 function Leads() {
   const { leads, updateLead, deleteLead, wasteLead, restoreLead, setQuickStatus, bin, defaultLeadSort, assignments, employees, followUps } = useCRM();
+  const crm = useCRM();
+  const viewer = useViewer(); const me = viewerId(viewer);
+  const viewId = Route.useSearch().view;
+  const myViews = crm.savedViews.filter((v) => !v.archived && viewAllowed(v, viewer));
+  const activeView = myViews.find((v) => v.id === viewId);
+  const vprefs = crm.viewPrefs[me] ?? { pinned: [] };
+  const [tagF, setTagF] = useState<string>("all");
+  const [viewEdit, setViewEdit] = useState<SavedView | null>(null);
+  const [tagOp, setTagOp] = useState<{ tagId: string; mode: "add" | "remove" } | null>(null);
   const { can } = useAccess();
   const canDel = can("leads.delete");
   const [bulk, setBulk] = useState(false);
@@ -78,6 +94,12 @@ function Leads() {
   const [who, setWho] = useState<string>("all"), [created, setCreated] = useState<"all" | "7" | "30" | "90">("all"), [due, setDue] = useState<"all" | "overdue" | "today" | "week" | "none">("all");
   const [page, setPage] = useState(0); const PAGE = 50;
   useEffect(() => setSort(defaultLeadSort), [defaultLeadSort]);
+  // Open the viewer's default view once, if they haven't chosen one in the URL.
+  useEffect(() => { if (!viewId && vprefs.defaultId && myViews.some((v) => v.id === vprefs.defaultId)) void navigate({ to: "/leads", search: { view: vprefs.defaultId }, replace: true }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Changing the view changes the dataset — a broad selection from the old view is cleared, never re-applied.
+  const [lastView, setLastView] = useState(viewId);
+  useEffect(() => { if (viewId === lastView) return; setLastView(viewId); if (selectionCount(selection) > 0) { setSelection(EMPTY_SELECTION); toast.info("Selection cleared because the view changed"); } setStatus("all"); setSource("all"); setPrio("all"); setQuick("all"); setWho("all"); setCreated("all"); setDue("all"); setTagF("all"); if (activeView) setSort(activeView.sort as Sort); }, [viewId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const openView = (id?: string) => void navigate({ to: "/leads", search: id ? { view: id } : {} });
 
   function dueMatch(leadId: string) {
     const f = followUps.filter((x) => x.leadId === leadId && isPending(x));
@@ -88,18 +110,42 @@ function Leads() {
     return f.some((x) => { const d = new Date(x.dueAt).getTime(); return d >= t && d <= t + 7 * 864e5; });
   }
   const rows = useMemo(() => {
-    const r = leads.filter((l) => (status === "all" || l.status === status) && (source === "all" || l.source === source) && (prio === "all" || l.priority === prio) && (quick === "all" || (quick === "stale" ? staleDays(l, now) !== undefined : l.quickStatus === quick)) && `${l.name} ${l.company ?? ""} ${l.phone} ${l.email ?? ""}`.toLowerCase().includes(q.toLowerCase())
+    const base = activeView ? runView(activeView, leads, viewCtxOf(crm, viewer, now)) : leads;
+    const r = base.filter((l) => tagF === "all" || (crm.leadTags[l.id] ?? []).includes(tagF)).filter((l) => (status === "all" || l.status === status) && (source === "all" || l.source === source) && (prio === "all" || l.priority === prio) && (quick === "all" || (quick === "stale" ? staleDays(l, now) !== undefined : l.quickStatus === quick)) && `${l.name} ${l.company ?? ""} ${l.phone} ${l.email ?? ""}`.toLowerCase().includes(q.toLowerCase())
       && (who === "all" || (who === "__none" ? !assignments[l.id] : assignments[l.id]?.employeeId === who))
       && (created === "all" || now.getTime() - new Date(l.createdAt).getTime() <= Number(created) * 864e5)
       && (due === "all" || dueMatch(l.id)));
     const cmp = { recent: (a: typeof r[0], b: typeof r[0]) => b.createdAt.localeCompare(a.createdAt), score: (a: typeof r[0], b: typeof r[0]) => (b.aiScore ?? 0) - (a.aiScore ?? 0), value: (a: typeof r[0], b: typeof r[0]) => (b.quotedAmount ?? 0) - (a.quotedAmount ?? 0), name: (a: typeof r[0], b: typeof r[0]) => a.name.localeCompare(b.name) }[sort];
     return r.sort((a, b) => Number(b.pinned) - Number(a.pinned) || cmp(a, b));
-  }, [leads, q, status, source, prio, sort, quick, now, who, created, due, assignments, followUps]);
-  useEffect(() => setPage(0), [q, status, source, prio, sort, quick, who, created, due]);
+  }, [leads, q, status, source, prio, sort, quick, now, who, created, due, assignments, followUps, activeView, tagF, crm.leadTags, crm.fieldValues, crm.customFields]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setPage(0), [q, status, source, prio, sort, quick, who, created, due, viewId, tagF]);
   const pages = Math.max(1, Math.ceil(rows.length / PAGE)), pg = Math.min(page, pages - 1);
   const pageRows = rows.slice(pg * PAGE, pg * PAGE + PAGE);
-  const filterLabel = [status !== "all" && STATUS_LABEL[status], source !== "all" && source, prio !== "all" && prio, who === "__none" ? "Unassigned" : who !== "all" && employees.find((e) => e.id === who)?.name, created !== "all" && `created ≤${created}d`, due !== "all" && `follow-up ${due}`, q && `“${q}”`].filter(Boolean).join(" · ") || "all leads";
+  const filterLabel = [activeView && `view “${activeView.name}”`, tagF !== "all" && `tag ${crm.tagDefs.find((t) => t.id === tagF)?.name}`, status !== "all" && STATUS_LABEL[status], source !== "all" && source, prio !== "all" && prio, who === "__none" ? "Unassigned" : who !== "all" && employees.find((e) => e.id === who)?.name, created !== "all" && `created ≤${created}d`, due !== "all" && `follow-up ${due}`, q && `“${q}”`].filter(Boolean).join(" · ") || "all leads";
 
+  /** Turn the current quick filters into Saved View conditions (only filters that have an exact equivalent). */
+  const currentConditions = (): ViewCondition[] => {
+    const c: Omit<ViewCondition, "id">[] = [...(activeView?.filter.mode === "and" ? activeView.filter.conditions : [])];
+    if (q.trim()) c.push({ field: "search", op: "contains", value: q.trim() });
+    if (status !== "all") c.push({ field: "stage", op: "is", value: [status] });
+    if (source !== "all") c.push({ field: "source", op: "is", value: [source] });
+    if (prio !== "all") c.push({ field: "priority", op: "is", value: [prio] });
+    if (quick !== "all" && quick !== "stale") c.push({ field: "quick", op: "is", value: [quick] });
+    if (who !== "all") c.push({ field: "assignee", op: "is", value: [who] });
+    if (created !== "all") c.push({ field: "created", op: "within_days", value: Number(created) });
+    if (due === "overdue") c.push({ field: "followupDue", op: "overdue" }); else if (due === "today") c.push({ field: "followupDue", op: "today" }); else if (due === "none") c.push({ field: "followupDue", op: "empty" });
+    if (tagF !== "all") c.push({ field: "tags", op: "contains_any", value: [tagF] });
+    return c.map((x, i) => ({ ...x, id: `c${Date.now().toString(36)}${i}` }));
+  };
+  const runTagOp = () => {
+    if (!tagOp) return; const name = crm.tagDefs.find((t) => t.id === tagOp.tagId)?.name ?? "tag";
+    const r = crm.bulkTagLeads(picked, tagOp.tagId, tagOp.mode); setTagOp(null);
+    if (!r.changed) { toast.info(`No lead needed this change`); return; }
+    toast.success(`${tagOp.mode === "add" ? "Added" : "Removed"} “${name}” · ${r.changed} lead${r.changed === 1 ? "" : "s"}`, { action: { label: "Undo", onClick: () => { const u = useCRM.getState().undoBulkTags(r.before, r.applied); toast(u.kept ? `Undone on ${u.restored} · ${u.kept} kept (changed since)` : `Undone on ${u.restored} lead${u.restored === 1 ? "" : "s"}`); } } });
+  };
+  const activeTags = crm.tagDefs.filter((t) => t.status === "active");
+  const viewWarn = activeView ? viewIssues(activeView, viewCtxOf(crm, viewer)) : [];
+  const pinnedViews = myViews.filter((v) => vprefs.pinned.includes(v.id));
   /** Bulk edit with one Undo; each lead goes through the normal guarded updateLead. Lost is excluded (needs a reason per lead). */
   const bulkPatch = (patch: { priority?: LeadPriority; status?: LeadStatus }, label: string) => {
     const before = new Map(leads.filter((l) => picked.includes(l.id)).map((l) => [l.id, { priority: l.priority, status: l.status }]));
@@ -124,10 +170,26 @@ function Leads() {
       {employees.length > 0 && <select aria-label="Assignee filter" className={selectCls} value={who} onChange={(e) => setWho(e.target.value)}><option value="all">Any assignee</option><option value="__none">Unassigned</option>{employees.filter((e) => e.accountStatus !== "archived").map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select>}
       <select aria-label="Created filter" className={selectCls} value={created} onChange={(e) => setCreated(e.target.value as typeof created)}><option value="all">Any created date</option><option value="7">Created last 7 days</option><option value="30">Created last 30 days</option><option value="90">Created last 90 days</option></select>
       <select aria-label="Follow-up due filter" className={selectCls} value={due} onChange={(e) => setDue(e.target.value as typeof due)}><option value="all">Any follow-up</option><option value="overdue">Follow-up overdue</option><option value="today">Follow-up today</option><option value="week">Due next 7 days</option><option value="none">No follow-up</option></select>
+      {crm.tagDefs.length > 0 && <select aria-label="Tag filter" className={selectCls} value={tagF} onChange={(e) => setTagF(e.target.value)}><option value="all">Any tag</option>{crm.tagDefs.map((t) => <option key={t.id} value={t.id}>{t.name}{t.status === "archived" ? " (archived)" : ""}</option>)}</select>}
       <select aria-label="Sort" className={selectCls} value={sort} onChange={(e) => setSort(e.target.value as Sort)}><option value="recent">Newest</option><option value="score">Highest score</option><option value="value">Highest value</option><option value="name">Name A–Z</option></select>
     </div>
   );
-  const empty = <Empty icon={<Users />} title="No leads match" hint="Try clearing a filter or add a new lead." action={<Button variant="outline" onClick={() => { setQ(""); setStatus("all"); setSource("all"); setPrio("all"); setQuick("all"); setWho("all"); setCreated("all"); setDue("all"); }}>Clear filters</Button>} />;
+  const empty = <Empty icon={<Users />} title="No leads match" hint="Try clearing a filter or add a new lead." action={<Button variant="outline" onClick={() => { setQ(""); setStatus("all"); setSource("all"); setPrio("all"); setQuick("all"); setWho("all"); setCreated("all"); setDue("all"); setTagF("all"); }}>Clear filters</Button>} />;
+  const viewBar = (
+    <div className="sv-bar" role="toolbar" aria-label="Saved views">
+      <Bookmark className="size-4 text-muted-foreground" aria-hidden />
+      <button type="button" className="sv-pill" aria-pressed={!activeView} onClick={() => openView()}>All leads</button>
+      {pinnedViews.map((v) => <button key={v.id} type="button" className="sv-pill" aria-pressed={activeView?.id === v.id} onClick={() => openView(v.id)}>{v.name}</button>)}
+      <select aria-label="Open a saved view" className={cn(selectCls, "h-8 text-xs")} value={activeView && !vprefs.pinned.includes(activeView.id) ? activeView.id : ""} onChange={(e) => e.target.value && openView(e.target.value)}><option value="">{myViews.length ? `More views (${myViews.length})…` : "No saved views"}</option>{(["company", "shared", "personal"] as const).map((g) => { const list = myViews.filter((v) => v.visibility === g); return list.length ? <optgroup key={g} label={g === "company" ? "Company" : g === "shared" ? "Shared" : "Personal"}>{list.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}</optgroup> : null; })}</select>
+      {activeView && <>
+        <Button size="sm" variant="ghost" className="h-8 rounded-full" aria-label={vprefs.pinned.includes(activeView.id) ? "Unpin view" : "Pin view"} onClick={() => crm.setViewPref(me, { pinned: vprefs.pinned.includes(activeView.id) ? vprefs.pinned.filter((x) => x !== activeView.id) : [...vprefs.pinned, activeView.id] })}><Pin className={cn("size-3.5", !vprefs.pinned.includes(activeView.id) && "opacity-50")} />{vprefs.pinned.includes(activeView.id) ? "Pinned" : "Pin"}</Button>
+        <Button size="sm" variant="ghost" className="h-8 rounded-full" onClick={() => { crm.setViewPref(me, { defaultId: vprefs.defaultId === activeView.id ? undefined : activeView.id }); toast.success(vprefs.defaultId === activeView.id ? "Default view cleared" : `“${activeView.name}” opens by default`); }}><Star className={cn("size-3.5", vprefs.defaultId !== activeView.id && "opacity-50")} />{vprefs.defaultId === activeView.id ? "Default" : "Set default"}</Button>
+        {viewEditable(activeView, viewer) && <Button size="sm" variant="ghost" className="h-8 rounded-full" onClick={() => setViewEdit(structuredClone(activeView))}><Pencil className="size-3.5" />Edit view</Button>}
+      </>}
+      <Button size="sm" variant="outline" className="ml-auto h-8 rounded-full" onClick={() => setViewEdit(newView({ mode: "and", conditions: currentConditions() }, sort === "recent" || sort === "score" || sort === "value" || sort === "name" ? sort : "recent"))}><BookmarkPlus className="size-3.5" />Save as view</Button>
+      {viewWarn.length > 0 && <p className="flex w-full items-center gap-1.5 text-xs text-warning"><AlertTriangle className="size-3.5" />{viewWarn[0]!.text}</p>}
+    </div>
+  );
 
   return (
     <Shell title="Prospects" subtitle={`${rows.length} of ${leads.length} leads in view · select one to inspect it without leaving the list`} actions={<div className="flex flex-wrap gap-2">{canDel && <Button variant="outline" asChild className="rounded-full"><Link to="/leads/bin"><Archive className="size-4" />Waste & deleted{bin.length ? <span className="num ml-1 text-xs text-muted-foreground">{bin.length}</span> : null}</Link></Button>}{can("import.run") && <Button variant="outline" onClick={() => setBulk(true)} className="rounded-full"><Layers className="size-4" />Bulk add</Button>}{can("leads.create") && <Button onClick={() => setOpen(true)} className="rounded-full"><Plus className="size-4" />Add lead</Button>}</div>}>
@@ -135,6 +197,7 @@ function Leads() {
         <div className="flex max-w-full gap-4 overflow-x-auto scrollbar-thin">{(["all", ...LEAD_STATUSES] as const).map(s => <button key={s} type="button" aria-pressed={status === s} onClick={() => setStatus(s)} data-stage={s} className={cn("flex shrink-0 items-baseline gap-1.5 border-b-2 pb-1.5 text-sm transition-colors", status === s ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{s === "all" ? "Everyone" : STATUS_LABEL[s]}<span className="num text-[11px] opacity-70">{s === "all" ? leads.length : leads.filter(l => l.status === s).length}</span></button>)}</div>
         <div className="seg" role="group" aria-label="View">{([["workspace", Columns2, "Workspace"], ["table", List, "Ledger"], ["cards", LayoutGrid, "Tiles"]] as const).map(([v, I, label]) => <button key={v} type="button" aria-label={`${v} view`} aria-pressed={view === v} onClick={() => setView(v)}><I className="size-3.5" /><span className="hidden sm:inline">{label}</span></button>)}</div>
       </div>
+      {viewBar}
       <div className="mb-6">{filters}</div>
 
       {rows.length === 0 ? <div className="panel">{empty}</div> : view === "workspace" ? (
@@ -146,6 +209,7 @@ function Leads() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2"><span className="prio-dot shrink-0" /><span className="truncate text-sm font-semibold">{l.name}</span>{l.pinned && <Pin className="size-3 shrink-0" aria-label="Pinned" />}{st !== undefined && <span className="aging is-old shrink-0">stale {st}d</span>}</div>
                   <div className="mt-1 flex items-center gap-2 truncate pl-4 text-xs text-muted-foreground"><span className="stage-chip shrink-0" data-stage={l.status}>{STATUS_LABEL[l.status]}</span><span className="truncate">{l.company ?? l.source} · {l.lastContact ? `spoke ${relative(l.lastContact)}` : "not contacted"}</span><AssigneeTag leadId={l.id} /></div>
+                  {crm.leadTags[l.id]?.length ? <div className="mt-1.5 pl-4"><TagChips ids={crm.leadTags[l.id]} max={3} /></div> : null}
                 </div>
                 <div className="text-right"><div className="num text-sm">{formatINRCompact(l.quotedAmount ?? l.budget ?? 0)}</div><div className="eyebrow mt-0.5">{l.source}</div></div>
               </div>); })}
@@ -159,6 +223,7 @@ function Leads() {
               <span className="tile-score num" aria-hidden>{l.aiScore ?? ""}</span>
               <div className="flex items-start justify-between gap-2"><div className="relative flex items-center gap-2"><Checkbox aria-label={`Select ${l.name}`} checked={isPicked(l.id)} onCheckedChange={(v) => togglePick(l.id, !!v)} /><span className="prio-dot" /><span className="eyebrow">{l.priority} · {l.source}</span></div><Button size="icon" variant="ghost" aria-label={l.pinned ? "Unpin" : "Pin"} onClick={() => updateLead(l.id, { pinned: !l.pinned })} className="relative size-8 rounded-full"><Pin className={cn("size-4", !l.pinned && "opacity-40")} /></Button></div>
               <Link to="/leads/$id" params={{ id: l.id }} className="relative"><h3 className="editorial text-[30px]">{l.name}</h3><p className="mt-1 text-xs text-muted-foreground">{l.company ?? "Independent"} · {l.phone}</p></Link>
+              <div className="relative"><TagChips ids={crm.leadTags[l.id]} max={4} /></div>
               <div className="relative flex flex-wrap items-center gap-1.5"><span className="stage-chip" data-stage={l.status}>{STATUS_LABEL[l.status]}</span>{l.quickStatus && <span className="aging">{QUICK_LABEL[l.quickStatus]}</span>}{st !== undefined && <span className="aging is-old"><Clock className="mr-1 inline size-3" />stale {st}d</span>}</div>
               <dl className="relative grid grid-cols-3 gap-3 border-t pt-3 text-xs"><div><dt className="eyebrow">{l.quotedAmount ? "Quoted" : "Budget"}</dt><dd className="num mt-1 text-sm">{formatINRCompact(l.quotedAmount ?? l.budget ?? 0)}</dd></div><div><dt className="eyebrow">Next</dt><dd className="mt-1">{l.nextFollowUp ? formatDateTime(l.nextFollowUp) : "—"}</dd></div><div><dt className="eyebrow">Updated</dt><dd className="mt-1">{relative(l.updatedAt)}</dd></div></dl>
               <div className="relative">{quickSel(l.id, l.quickStatus)}</div>
@@ -174,7 +239,7 @@ function Leads() {
         </div>
       ) : <div className="overflow-x-auto">
           <table className="w-full min-w-[1180px] text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
-            <thead className="text-left text-muted-foreground"><tr>{["", "Lead", "Phone", "Source", "Priority", "Score", "Quoted", "Stage", "Quick status", "Updated", ""].map((h, i) => <th key={i} className="px-3">{h}</th>)}</tr></thead>
+            <thead className="text-left text-muted-foreground"><tr>{["", "Lead", "Phone", "Source", "Tags", "Priority", "Score", "Quoted", "Stage", "Quick status", "Updated", ""].map((h, i) => <th key={i} className="px-3">{h}</th>)}</tr></thead>
             <tbody>
               {pageRows.map((l) => (
                 <tr key={l.id} className="border-b hover:bg-card">
@@ -182,6 +247,7 @@ function Leads() {
                   <td className="min-w-52 px-3"><Link to="/leads/$id" params={{ id: l.id }} className="hover:underline"><Identity name={l.name} company={l.company} /></Link></td>
                   <td className="num px-3 text-muted-foreground"><a href={`tel:${l.phone.replace(/[^\d+]/g, "")}`} className="hover:text-foreground" onClick={() => startCall(l.id, "Leads")}>{l.phone}</a></td>
                   <td className="px-3">{l.source}<div className="mt-0.5"><AssigneeTag leadId={l.id} /></div></td>
+                  <td className="px-3"><TagPicker leadId={l.id} /></td>
                   <td className="px-3"><PriorityBadge p={l.priority} /></td>
                   <td className="num px-3">{l.aiScore ?? "—"}</td>
                   <td className="num px-3">{formatINR(l.quotedAmount)}</td>
@@ -203,9 +269,19 @@ function Leads() {
         {can("leads.assign") && <Button size="sm" onClick={() => setBulkAssign(true)}><UserCheck />Assign / distribute</Button>}
         {can("leads.edit") && <select aria-label="Bulk change priority" className={cn(selectCls, "h-8 text-xs")} value="" onChange={(e) => bulkPatch({ priority: e.target.value as LeadPriority }, `Priority set to ${e.target.value}`)}><option value="">Priority…</option><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option></select>}
         {(can("pipeline.edit") || can("leads.edit")) && <select aria-label="Bulk change stage" className={cn(selectCls, "h-8 text-xs")} value="" onChange={(e) => bulkPatch({ status: e.target.value as LeadStatus }, `Moved to ${STATUS_LABEL[e.target.value as LeadStatus]}`)}><option value="">Stage…</option>{LEAD_STATUSES.filter((s) => s !== "lost").map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select>}
+        {can("leads.edit") && activeTags.length > 0 && <select aria-label="Bulk add tag" className={cn(selectCls, "h-8 text-xs")} value="" onChange={(e) => e.target.value && setTagOp({ tagId: e.target.value, mode: "add" })}><option value="">Add tag…</option>{activeTags.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}
+        {can("leads.edit") && crm.tagDefs.length > 0 && <select aria-label="Bulk remove tag" className={cn(selectCls, "h-8 text-xs")} value="" onChange={(e) => e.target.value && setTagOp({ tagId: e.target.value, mode: "remove" })}><option value="">Remove tag…</option>{crm.tagDefs.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}
         <Button size="sm" variant="ghost" aria-label="Clear selection" onClick={() => setSelection(EMPTY_SELECTION)}><X />Clear</Button>
       </div>}
       <BulkAssignDialog open={bulkAssign} leadIds={picked} scope={selection.kind === "matching" ? `All leads matching ${selection.label}${selection.exclude.length ? `, minus ${selection.exclude.length} excluded` : ""}` : "Leads picked individually"} onClose={() => setBulkAssign(false)} onDone={() => setSelection(EMPTY_SELECTION)} />
+      {viewEdit && <ViewEditor initial={viewEdit} onClose={() => setViewEdit(null)} onSaved={(id) => openView(id)} />}
+      <Dialog open={!!tagOp} onOpenChange={(o) => !o && setTagOp(null)}>
+        <DialogContent className="sm:max-w-md">{tagOp && (() => { const t = crm.tagDefs.find((x) => x.id === tagOp.tagId); const live = picked.filter((id) => crm.leads.some((l) => l.id === id)); const has = live.filter((id) => (crm.leadTags[id] ?? []).includes(tagOp.tagId)).length; const affected = tagOp.mode === "add" ? live.length - has : has; return <>
+          <DialogHeader><DialogTitle><Tag className="mr-1.5 inline size-4" />{tagOp.mode === "add" ? "Add" : "Remove"} “{t?.name}”</DialogTitle><DialogDescription>{selection.kind === "matching" ? `All leads matching ${selection.label}` : "Leads picked individually"} · {live.length} selected.</DialogDescription></DialogHeader>
+          <p className="text-sm"><span className="num font-semibold">{affected}</span> lead{affected === 1 ? "" : "s"} will change{tagOp.mode === "add" ? ` · ${has} already have it` : ` · ${live.length - has} don't have it`}. Other tags, notes, assignments and follow-ups are untouched.</p>
+          <DialogFooter><Button variant="ghost" onClick={() => setTagOp(null)}>Cancel</Button><Button onClick={runTagOp} disabled={!affected}>{tagOp.mode === "add" ? "Add tag" : "Remove tag"} to {affected}</Button></DialogFooter>
+        </>; })()}</DialogContent>
+      </Dialog>
       <AssignDialog open={!!assignFor} leadIds={assignFor ?? []} source="Leads inspector" onClose={() => setAssignFor(null)} />
       <FollowUpDialog open={!!fu} onOpenChange={(o) => !o && setFu(null)} {...(fu ? { leadId: fu } : {})} />
       <AddLeadDialog open={open} onOpenChange={setOpen} />

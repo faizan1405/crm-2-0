@@ -74,7 +74,7 @@ export function AdditionalInfo({ leadId, compact }: { leadId: string; compact?: 
     const changed = Object.fromEntries(editable.filter((d) => JSON.stringify(draft[d.id]) !== JSON.stringify(toDraft(d, v[d.id]))).map((d) => [d.id, draft[d.id]]));
     if (!Object.keys(changed).length) { setEditing(false); return; }
     const r = save(leadId, changed);
-    if (!r.ok) { setErrors(r.errors); if (r.errors._) toast.error(r.errors._); return; }
+    if (!r.ok) { setErrors(r.errors); if (r.errors["_"]) toast.error(r.errors["_"]); return; }
     setEditing(false); toast.success("Additional information saved");
   };
   const row = (d: CustomFieldDef) => <div key={d.id} className="min-w-0"><dt className="eyebrow flex items-center gap-1.5">{d.label}{d.visibility === "owner" && <Lock className="size-2.5" aria-label="Owner only" />}</dt><dd className={cn("mt-1.5 text-sm break-words", v[d.id] === undefined && "text-muted-foreground")}>{v[d.id] === undefined ? (d.required ? <span className="cf-needs">Needs completion</span> : "—") : d.type === "url" ? <a className="underline" href={String(v[d.id])} target="_blank" rel="noreferrer noopener">{String(v[d.id]).replace(/^https?:\/\//, "")}</a> : displayValue(d, v[d.id])}</dd></div>;

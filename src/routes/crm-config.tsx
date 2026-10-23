@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 
 type TabKey = "fields" | "tags" | "views";
 export const Route = createFileRoute("/crm-config")({
-  validateSearch: (s: Record<string, unknown>): { tab?: TabKey } => (s.tab === "tags" || s.tab === "views" || s.tab === "fields" ? { tab: s.tab } : {}),
+  validateSearch: (s: Record<string, unknown>): { tab?: TabKey } => (s["tab"] === "tags" || s["tab"] === "views" || s["tab"] === "fields" ? { tab: s["tab"] } : {}),
   head: () => ({
     meta: [
       { title: "CRM Configuration · Scale Flow Sales OS" },
