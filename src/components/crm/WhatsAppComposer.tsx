@@ -15,7 +15,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { QuotationTemplateEditor } from "@/components/studio/QuotationTemplateEditor";
 import { cn } from "@/lib/utils";
 
-export interface ComposerPreset { purpose?: WaPurpose; packageId?: string }
+/** `text` = a fully-resolved draft prepared elsewhere (e.g. Project Desk). It opens as an edited Custom message, so it is never overwritten silently. */
+export interface ComposerPreset { purpose?: WaPurpose; packageId?: string; text?: string }
 /** UI-only state: which lead the composer is open for. Never persisted. */
 export const useWhatsApp = create<{ leadId: string | null; source: string; preset: ComposerPreset; nonce: number; open: (leadId: string, source: string, preset?: ComposerPreset) => void; close: () => void }>()((set) => ({
   leadId: null, source: "", preset: {}, nonce: 0,
@@ -52,7 +53,7 @@ function ComposerBody({ lead, source, preset, close }: { lead: Lead; source: str
   const deal = useMemo(() => deals.find((d) => d.leadId === lead.id && d.status !== "cancelled"), [deals, lead.id]);
   // Global packages — the same list for every client, always the latest saved version.
   const packages = useMemo(() => activeQuotationTemplates(quotationTemplates), [quotationTemplates]);
-  const [purpose, setPurpose] = useState<WaPurpose>(preset.purpose ?? "followup");
+  const [purpose, setPurpose] = useState<WaPurpose>(preset.purpose ?? (preset.text ? "custom" : "followup"));
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [packageId, setPackageId] = useState<string | null>(preset.packageId ?? null);
   const [override, setOverride] = useState<string[] | null>(null);
@@ -62,9 +63,9 @@ function ComposerBody({ lead, source, preset, close }: { lead: Lead; source: str
   const picked = selectedDemos(demos, override);
   const purposeTemplates = purpose === "quotation" ? [] : waTemplates.filter((t) => t.purpose === purpose && t.enabled);
   const fresh = composeDraft({ purpose, templateId, lead, owner, business, dealName: deal?.name, templates: waTemplates, pkg: purpose === "quotation" ? pkg : undefined, demos: purpose === "samples" ? picked : [] });
-  const [text, setText] = useState(fresh);
+  const [text, setText] = useState(preset.text ?? fresh);
   const [base, setBase] = useState(fresh);
-  const [edited, setEdited] = useState(false);
+  const [edited, setEdited] = useState(!!preset.text);
   const [opened, setOpened] = useState(false);
   const sync = syncDraft({ text, base, edited }, fresh);
   useEffect(() => { if (sync.text !== text) setText(sync.text); if (sync.base !== base) setBase(sync.base); }, [fresh]); // eslint-disable-line react-hooks/exhaustive-deps

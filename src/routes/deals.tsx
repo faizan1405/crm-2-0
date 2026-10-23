@@ -1,13 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Plus, Wallet, ArrowDownLeft } from "lucide-react";
+import { Plus, Wallet, ArrowDownLeft, FolderKanban } from "lucide-react";
 import { Shell, Empty, selectCls } from "@/components/crm/Shell";
 import { useCRM } from "@/lib/crm/store";
 import { financeSummary, dealCollected, dealOutstanding, dealPaymentStatus } from "@/lib/crm/finance";
 import { formatINR, formatINRCompact, formatPct, formatDate, dayKey } from "@/lib/crm/format";
 import { DEAL_STATUS_LABEL, type Deal, type PaymentMethod, type PaymentType, type DealStatus } from "@/lib/crm/types";
 import { Button } from "@/components/ui/button";
+import { CreateProjectDialog, useCanProject } from "@/components/projects/ProjectParts";
+import { activeProjectForDeal } from "@/lib/crm/projects";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -92,7 +94,7 @@ function DealInspector({ deal: d, onPay, onPick }: { deal: Deal; onPay: () => vo
         </dl>
         <div className="balance-track mt-6"><div style={{ width: `${pct * 100}%` }} /></div>
         <div className="num mt-2 flex justify-between text-[11px] text-muted-foreground"><span>{Math.round(pct * 100)}% collected</span>{d.quotedAmount !== d.finalAmount && <span>{d.finalAmount > d.quotedAmount ? "+" : "−"}{formatINR(Math.abs(d.finalAmount - d.quotedAmount))} vs quote</span>}</div>
-        {out > 0 && d.status !== "cancelled" && <Button onClick={onPay} className="mt-6 rounded-full"><Plus className="size-4" />Record payment</Button>}
+        <div className="mt-6 flex flex-wrap gap-2">{out > 0 && d.status !== "cancelled" && <Button onClick={onPay} className="rounded-full"><Plus className="size-4" />Record payment</Button>}<ProjectHandoff deal={d} /></div>
       </div>
       <div className="receipt-edge" aria-hidden />
       <div className="bg-secondary p-6 sm:p-8">
@@ -102,6 +104,17 @@ function DealInspector({ deal: d, onPay, onPick }: { deal: Deal; onPay: () => vo
       </div>
     </aside>
   );
+}
+
+/** Deal → Project handoff. Shows the existing active project first; never creates one automatically. */
+function ProjectHandoff({ deal }: { deal: Deal }) {
+  const projects = useCRM((s) => s.projects);
+  const [open, setOpen] = useState(false);
+  const can = useCanProject("projects.create");
+  const ex = activeProjectForDeal(projects, deal.id);
+  if (ex) return <Link to="/projects/$id" params={{ id: ex.id }} className="inline-flex h-9 items-center gap-2 rounded-full border px-4 text-sm hover:bg-muted"><FolderKanban className="size-4" />Open project</Link>;
+  if (deal.status === "cancelled" || !can) return null;
+  return <><Button variant="outline" className="rounded-full" onClick={() => setOpen(true)}><FolderKanban className="size-4" />Create project</Button><CreateProjectDialog deal={deal} open={open} onOpenChange={setOpen} /></>;
 }
 
 function PaymentRow({ id, proof }: { id: string; proof?: import("@/lib/crm/attachments").ProofMeta | undefined }) {

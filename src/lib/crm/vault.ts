@@ -6,10 +6,10 @@ import type { ProofMeta } from "./attachments";
 
 export const APP_NAME = "Scale Flow Sales OS";
 export const FORMAT_VERSION = 1;
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 export const BUSINESS_TZ = "Asia/Kolkata";
 
-export type CategoryId = "leads" | "activities" | "followups" | "deals" | "payments" | "proofs" | "notes" | "quotations" | "waTemplates" | "demos" | "employees" | "permissions" | "assignments" | "teamActivity" | "inbox" | "automation" | "performance" | "customization" | "settings";
+export type CategoryId = "leads" | "activities" | "followups" | "deals" | "payments" | "proofs" | "notes" | "quotations" | "waTemplates" | "demos" | "employees" | "permissions" | "assignments" | "teamActivity" | "inbox" | "automation" | "performance" | "customization" | "projects" | "settings";
 export interface Category { id: CategoryId; label: string; group: string; desc: string; keys: string[]; file: string; isPrivate?: boolean }
 
 export const CATEGORIES: Category[] = [
@@ -30,11 +30,12 @@ export const CATEGORIES: Category[] = [
   { id: "inbox", label: "Smart Inbox & duplicates", group: "Lead management", desc: "Inbox review status, duplicate flags, Keep Separate / Related decisions. Source and first-contact data are in Leads and Activity history.", keys: ["inboxMeta", "leadRelations"], file: "data/lead-inbox.json" },
   { id: "automation", label: "Automation Studio", group: "Team", desc: "Automation rules and status, settings, reminders and the full execution history (automation-origin markers included).", keys: ["automationRules", "automationSettings", "reminders", "automationRuns"], file: "data/automation.json" },
   { id: "performance", label: "Sales goals & scorecards", group: "Team", desc: "Goal definitions, individual and team goal assignments, full revision history, goal alerts and scorecard settings. Demo performance data is never included.", keys: ["goals", "goalRevisions", "goalAlerts", "perfPrefs"], file: "data/sales-goals.json" },
+  { id: "projects", label: "Project Desk", group: "Delivery", desc: "Projects with their Lead and Deal links, templates, tasks, milestones, assignments, requirements, dependencies, reference links, delivery records, support periods and support requests, plus full project history. Money stays in Deals and Payments — never duplicated. No project file uploads exist yet.", keys: ["projects", "projectTasks", "projectMilestones", "projectTemplates", "supportRequests"], file: "data/projects.json" },
   { id: "customization", label: "Custom fields, tags & views", group: "Lead management", desc: "Custom field definitions with options, visibility and history, every stored field value, tags, lead–tag links, saved views with their filters and visibility, and pin/default preferences.", keys: ["customFields", "fieldValues", "tagDefs", "leadTags", "savedViews", "viewPrefs"], file: "data/crm-customization.json" },
   { id: "settings", label: "Settings", group: "System", desc: "Workspace preferences, business profile and Daily Briefing state.", keys: ["owner", "email", "business", "theme", "accent", "density", "timeFormat", "dateStyle", "defaultLeadSort", "notifyFollowUps", "notifyPayments", "notifyDigest", "businessProfile", "briefingDone", "briefingDate"], file: "data/settings.json" },
 ];
 export const ALL_CATEGORY_IDS = CATEGORIES.map((c) => c.id);
-export const EMPLOYEE_CATEGORY_IDS: CategoryId[] = ["customization", "leads", "activities", "followups", "deals", "payments", "proofs", "assignments", "employees", "permissions"];
+export const EMPLOYEE_CATEGORY_IDS: CategoryId[] = ["projects", "customization", "leads", "activities", "followups", "deals", "payments", "proofs", "assignments", "employees", "permissions"];
 
 export type BackupType = "full" | "custom" | "employee";
 export interface BackupPlan { type: BackupType; categories: CategoryId[]; employeeId?: string }
@@ -78,6 +79,12 @@ export function employeeScope(s: Snapshot, employeeId: string): Snapshot {
     tagDefs: s["tagDefs"] ?? [],
     leadTags: Object.fromEntries(Object.entries((s["leadTags"] ?? {}) as Record<string, unknown>).filter(([id]) => leadIds.has(id))),
     savedViews: (arr(s, "savedViews") as unknown as { ownerId: string; visibility: string }[]).filter((v) => v.ownerId === employeeId || v.visibility !== "personal"), viewPrefs: {},
+    ...(() => {
+      const projects = (arr(s, "projects") as unknown as { id: string; ownerId: string | null; memberIds: string[] }[]).filter((p) => p.ownerId === employeeId || p.memberIds?.includes(employeeId)).map((p) => ({ ...p, notes: undefined }));
+      const pids = new Set(projects.map((p) => p.id));
+      const byP = (k: string) => (arr(s, k) as unknown as { projectId: string }[]).filter((x) => pids.has(x.projectId));
+      return { projects, projectTasks: byP("projectTasks"), projectMilestones: byP("projectMilestones"), supportRequests: byP("supportRequests"), projectTemplates: s["projectTemplates"] ?? [] };
+    })(),
   };
 }
 
