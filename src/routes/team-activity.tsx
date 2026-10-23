@@ -40,7 +40,7 @@ function TeamActivity() {
   const [limit, setLimit] = useState(PAGE);
   const [demo, setDemo] = useState<ActivityEvent[]>([]);
   const [settings, setSettings] = useState(false);
-  const set = (p: Partial<S>) => { setLimit(PAGE); void navigate({ search: (s: S) => Object.fromEntries(Object.entries({ ...s, ...p }).filter(([, v]) => v)) as S, replace: true }); };
+  const set = (p: { [K in keyof S]?: string | undefined }) => { setLimit(PAGE); void navigate({ search: (s: S) => Object.fromEntries(Object.entries({ ...s, ...p }).filter(([, v]) => v)) as S, replace: true }); };
   const now = new Date();
   const range = (search.range as RangeKey | undefined) ?? "30d";
   const filter: ActivityFilter = { ...(search.employee ? { employee: search.employee } : {}), type: (search.type as EventType) ?? "", module: (search.module as CrmModule) ?? "", importance: (search.importance as Importance) ?? "", ...(search.lead ? { lead: search.lead } : {}), range, ...(search.from ? { from: search.from } : {}), ...(search.to ? { to: search.to } : {}), ...(search.q ? { q: search.q } : {}) };
