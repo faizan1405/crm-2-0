@@ -6,8 +6,8 @@ import { emptyField, runView, type CustomFieldDef } from "./customize";
 import { selectMatching, selectedIds } from "./bulk";
 import { deriveNotifications, DEFAULT_NOTIFY_PREFS } from "./activity";
 import { buildBackup, ALL_CATEGORY_IDS } from "./vault";
-import { ruleFromTemplate } from "./automation";
-import { viewCtxOf } from "./store";
+import { planRule, ruleFromTemplate, RULE_TEMPLATES } from "./automation";
+import { automationCtxOf, viewCtxOf } from "./store";
 
 const s = () => useCRM.getState();
 const def = (p: Partial<CustomFieldDef>): CustomFieldDef => ({ ...emptyField(0), ...p } as CustomFieldDef);
@@ -122,9 +122,12 @@ describe("automation with custom fields", () => {
     s().saveCustomField(SERVICE);
     const id = s().leads[0]!.id;
     s().setLeadFieldValues(id, { cf_service: "opt_3d" });
-    const base = ruleFromTemplate(Object.keys({}).length ? "" : "tpl_new_lead_unattended", "r1", new Date().toISOString()) ?? ruleFromTemplate("tpl_first_contact", "r1", new Date().toISOString());
-    expect(base).toBeDefined();
-    const rule = { ...base!, status: "enabled" as const, conditions: { custom: [{ id: "c", field: "cf:cf_service", op: "is", value: ["opt_3d"] }] } };
+    const base = ruleFromTemplate(RULE_TEMPLATES[0]!.id, "r1", new Date().toISOString())!;
+    const rule = { ...base, trigger: "lead_created" as const, status: "enabled" as const, conditions: { custom: [{ id: "c", field: "cf:cf_service", op: "is", value: ["opt_3d"] }] } };
+    // Dry run: only the lead with 3D Website matches, and nothing is written.
+    const before = s().reminders.length;
+    expect(planRule(rule, automationCtxOf(s()), s().reminders).matched).toBe(1);
+    expect(s().reminders.length).toBe(before);
     useCRM.setState({ automationRules: [rule] });
     s().setCustomFieldStatus("cf_service", "archived");
     const r = s().runAutomations({ manual: true });
