@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { projectFieldViewer } from "@/lib/crm/projectCustomStore";
+import { FieldForm, toDraft, type Draft } from "@/components/crm/Customize";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -42,7 +44,13 @@ export function CreateProjectDialog({ deal, open, onOpenChange }: { deal: Deal |
 
 function CreateBody({ deal, close }: { deal: Deal; close: () => void }) {
   const nav = useNavigate();
-  const { leads, projects, projectTemplates, customFields, fieldValues, quotationShares, quotationTemplates, createProject } = useCRM();
+  const { leads, projects, projectTemplates, customFields, fieldValues, quotationShares, quotationTemplates, createProject, projectFields, tagDefs, setProjectFieldValues, setProjectTags } = useCRM();
+  const pfViewer = projectFieldViewer();
+  const pDefs = activeFields(projectFields).filter((d) => fieldEditable(d, pfViewer));
+  const [cf, setCf] = useState<Record<string, Draft>>(() => Object.fromEntries(pDefs.map((d) => [d.id, toDraft(d, d.defaultValue)])));
+  const [cfErr, setCfErr] = useState<Record<string, string>>({});
+  const pTags = tagDefs.filter((t) => t.status === "active" && tagForProjects(t));
+  const [tagIds, setTagIds] = useState<string[]>([]);
   const lead = deal.leadId ? leads.find((l) => l.id === deal.leadId) : undefined;
   const existing = activeProjectForDeal(projects, deal.id);
   const [allowAnother, setAllowAnother] = useState(false);
@@ -59,11 +67,15 @@ function CreateBody({ deal, close }: { deal: Deal; close: () => void }) {
   const [busy, setBusy] = useState(false);
   const planTasks = tpl ? tpl.tasks : [];
   const save = () => {
-    if (busy) return; setBusy(true); // repeated clicks never create copies
+    if (busy) return;
+    if (pDefs.length) { const v = validateLeadValues(pDefs, cf, { isNew: true }); setCfErr(v.errors); if (Object.keys(v.errors).length) { toast.error("Complete the required project details."); return; } }
+    setBusy(true); // repeated clicks never create copies
     const draft = { ...draftFromDeal({ deal, lead, template: tpl, fields, packageRef, service }), name: f.name, status: f.status, scope: f.scope || undefined, plannedStart: f.plannedStart || undefined, targetDelivery: f.targetDelivery || undefined };
     const extra = tasks.split("\n").map((t) => t.trim()).filter(Boolean).map((title) => ({ title }));
     const r = createProject(draft, { milestones: tpl?.milestones ?? [], tasks: [...planTasks, ...extra], allowAnother });
     if (!r.ok) { setBusy(false); toast.error(r.error); return; }
+    if (pDefs.length) setProjectFieldValues(r.id, cf, { isNew: true });
+    if (tagIds.length) setProjectTags(r.id, tagIds);
     toast.success("Project created", { description: "Payments stay in Deals & Payments — nothing was marked paid." });
     close(); void nav({ to: "/projects/$id", params: { id: r.id } });
   };
@@ -91,6 +103,8 @@ function CreateBody({ deal, close }: { deal: Deal; close: () => void }) {
       </div>
       <div className="grid gap-1.5"><Label htmlFor="pj-scope">Agreed scope</Label><Textarea id="pj-scope" rows={2} value={f.scope} onChange={(e) => setF({ ...f, scope: e.target.value })} /></div>
       {tpl && <div className="text-xs text-muted-foreground">Template adds {tpl.milestones.length} milestone(s), {tpl.tasks.length} task(s), {tpl.requirements.length} requirement(s) and {tpl.qa.length + tpl.handover.length} delivery checks. You can edit or add to all of them afterwards.</div>}
+      {pDefs.length > 0 && <div className="grid gap-3 border-t pt-4"><p className="text-sm font-semibold">Additional information</p><FieldForm defs={pDefs} draft={cf} onChange={(id, x) => setCf((p) => ({ ...p, [id]: x }))} errors={cfErr} /></div>}
+      {pTags.length > 0 && <div className="grid gap-1.5"><span className="text-sm font-medium">Project tags</span><div className="flex flex-wrap gap-1.5">{pTags.map((t) => { const on = tagIds.includes(t.id); return <button key={t.id} type="button" aria-pressed={on} onClick={() => setTagIds(on ? tagIds.filter((x) => x !== t.id) : [...tagIds, t.id])} className={cn("tag-chip", on && "ring-2 ring-ring")} data-color={t.color}>{t.name}</button>; })}</div></div>}
       <div className="grid gap-1.5"><Label htmlFor="pj-extra">Extra tasks for this project (one per line, optional)</Label><Textarea id="pj-extra" rows={2} value={tasks} onChange={(e) => setTasks(e.target.value)} /></div>
     </div>}
     <DialogFooter><Button variant="ghost" onClick={close}>Cancel</Button>{(!existing || allowAnother) && <Button disabled={busy} onClick={save}>{busy ? "Creating…" : "Create project"}</Button>}</DialogFooter>
