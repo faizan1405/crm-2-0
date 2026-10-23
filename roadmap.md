@@ -32,7 +32,7 @@ Frontend-only demo. No backend; production CRM untouched.
 ## Sales OS 3.0 Phase 2A — done
 - [x] WhatsApp composer at every WhatsApp button
 - [x] Follow-ups agenda + client inspector
-- [ ] Phase 2B Pipeline inspector / 2C payment proof / 2D notes (waiting for approval)
+- [ ] Phase 2D notes (waiting for approval)
 
 ## Sales OS 3.0 Phase 2A.5 — done
 - [x] Sales Studio: quotations (builder, preview, PDF, revisions), WhatsApp templates, demo library
