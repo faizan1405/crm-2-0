@@ -63,7 +63,6 @@ describe("Employee Workspace Preview", () => {
     s().deleteLead(mine[0]!);
     expect(s().leads.length).toBe(before);
     expect(s().assignLeads([mine[0]!], null, "x").ok).toBe(false);
-    expect(s().saveTemplate.length).toBeGreaterThanOrEqual(0);
     const p = useSession.getState().preview;
     expect(routeAllowed(p, "/team")).toBe(false);
     expect(routeAllowed(p, "/data-vault")).toBe(false);
