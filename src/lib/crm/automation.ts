@@ -375,3 +375,14 @@ export const runnable = (rules: AutomationRule[]) => rules.filter((r) => r.statu
 /* ---------- future backend contract ---------- */
 /** Shape a server scheduler will POST back. Reminder keys are the idempotency keys. */
 export interface AutomationJobResult { ruleId: string; evaluatedAt: string; created: string[]; skipped: string[]; failed: { key: string; error: string }[] }
+
+/** Pause enabled rules (of one subject) whose custom conditions use something being archived. Never changes the conditions themselves. */
+export function pauseRulesUsing(rules: AutomationRule[], subject: RuleSubject | "any", uses: (c: NonNullable<RuleConditions["custom"]>[number]) => boolean, why: string, at: string): { rules: AutomationRule[]; paused: string[] } {
+  const paused: string[] = [];
+  const next = rules.map((r) => {
+    if (r.status !== "enabled" || (subject !== "any" && (r.subject ?? "lead") !== subject) || !r.conditions.custom?.some(uses)) return r;
+    paused.push(r.name);
+    return { ...r, status: "paused" as const, pausedReason: `${why} — paused so its meaning doesn't change. Edit the rule, then enable it again.`, updatedAt: at, version: r.version + 1 };
+  });
+  return paused.length ? { rules: next, paused } : { rules, paused };
+}
