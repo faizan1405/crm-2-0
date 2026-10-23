@@ -183,5 +183,5 @@ export const selectCls="h-10 max-w-full rounded-md border border-input bg-card p
 
 function PreviewBar({ p, onExit }: { p: PreviewSession; onExit: () => void }) {
   const n = useSession((s) => s.events.length);
-  return <div className="pv-banner pv-banner-top" role="status"><Eye className="size-4 shrink-0" /><span className="min-w-0"><b>Demo preview — {p.name}&apos;s workspace.</b> <span className="hidden sm:inline">Real CRM actions on a temporary copy of their records{n ? ` · ${n} change${n === 1 ? "" : "s"} so far` : ""}. Nothing is saved; your data comes back unchanged when you exit. Not a login.</span></span><button type="button" onClick={onExit} className="pv-exit">Exit preview</button></div>;
+  return <div className="pv-banner pv-banner-top" role="status"><Eye className="size-4 shrink-0" /><span className="min-w-0"><b>Employee Workspace Preview — {p.name}. Demo changes are not saved to the shared CRM.</b> <span className="hidden sm:inline">Real CRM actions on a temporary copy of their records{n ? ` · ${n} change${n === 1 ? "" : "s"} so far` : ""}. Nothing is saved; your data comes back unchanged when you exit. Not a login.</span></span><button type="button" onClick={onExit} className="pv-exit">Exit preview</button></div>;
 }

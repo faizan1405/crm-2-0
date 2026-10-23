@@ -25,6 +25,7 @@ import { BulkAssignDialog } from "@/components/team/BulkAssignDialog";
 import { EMPTY_SELECTION, addPage, isSelected, selectMatching, selectedIds, selectionCount, toggle, type Selection } from "@/lib/crm/bulk";
 import { dayKey } from "@/lib/crm/format";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/leads")({
@@ -215,8 +216,10 @@ function Leads() {
 }
 
 function Inspector({ id, onFollowUp, onStage, onRemove, onAssign, quickSel }: { id: string; onFollowUp: () => void; onAssign: () => void; onStage: (s: LeadStatus) => void; onRemove: (k: "waste" | "deleted") => void; quickSel: React.ReactNode }) {
-  const { leads, deals, payments, activities, followUps, updateLead } = useCRM();
-  const canDel = useAccess().can("leads.delete");
+  const { leads, deals, payments, activities, followUps, updateLead, addActivity } = useCRM();
+  const { can } = useAccess(); const canDel = can("leads.delete");
+  const [note, setNote] = useState("");
+  const saveNote = () => { if (!note.trim()) return; addActivity(id, note.trim(), "note"); setNote(""); toast.success("Note added to history"); };
   const l = leads.find((x) => x.id === id);
   if (!l) return null;
   const myDeals = deals.filter((d) => d.leadId === l.id);
@@ -235,18 +238,19 @@ function Inspector({ id, onFollowUp, onStage, onRemove, onAssign, quickSel }: { 
         <Button variant="outline" size="sm" className="rounded-full" onClick={onFollowUp}><CalendarPlus className="size-3.5" />Follow-up</Button>
         <Button variant="ghost" size="sm" asChild className="ml-auto rounded-full"><Link to="/leads/$id" params={{ id: l.id }}>Full record<ArrowUpRight className="size-3.5" /></Link></Button>
       </div>
-      <dl className="mt-7 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-foreground pt-5 sm:grid-cols-4">
+      <dl className="mt-7 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-foreground pt-5 sm:grid-cols-3 xl:grid-cols-5">
         <div><dt className="eyebrow">Stage</dt><dd className="mt-1.5"><select aria-label="Stage" className={cn(selectCls, "h-8 w-full text-xs")} value={l.status} onChange={(e) => onStage(e.target.value as LeadStatus)}>{LEAD_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select></dd></div>
+        <div><dt className="eyebrow">Priority</dt><dd className="mt-1.5"><select aria-label="Priority" disabled={!can("leads.edit")} className={cn(selectCls, "h-8 w-full text-xs")} value={l.priority} onChange={(e) => { if (updateLead(l.id, { priority: e.target.value as LeadPriority })) toast.success(`Priority set to ${e.target.value}`); }}><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option></select></dd></div>
         <div><dt className="eyebrow">Quick status</dt><dd className="mt-1.5">{quickSel}</dd></div>
         <div><dt className="eyebrow">{l.quotedAmount ? "Quoted" : "Budget"}</dt><dd className="num mt-1.5 text-lg">{formatINR(l.quotedAmount ?? l.budget)}</dd></div>
         <div><dt className="eyebrow">Next follow-up</dt><dd className="mt-1.5 text-sm">{fu ? formatDateTime(fu.dueAt) : "None booked"}</dd></div>
       </dl>
-      <div className="as-insp"><span className="eyebrow">Responsible</span><AssigneeTag leadId={l.id} /><Button size="sm" variant="outline" className="ml-auto rounded-full" onClick={onAssign}><UserCheck className="size-3.5" />Assign to employee</Button></div>
+      <div className="as-insp"><span className="eyebrow">Responsible</span><AssigneeTag leadId={l.id} />{can("leads.assign") && <Button size="sm" variant="outline" className="ml-auto rounded-full" onClick={onAssign}><UserCheck className="size-3.5" />Assign to employee</Button>}</div>
       {l.requirement && <p className="mt-6 border-l-2 border-clay pl-4 text-sm leading-relaxed">{l.requirement}</p>}
       {l.status === "lost" && l.lostReason && <p className="mt-4 text-sm text-destructive">Lost · {l.lostReason}</p>}
       <div className="mt-8 grid gap-8 md:grid-cols-2">
         <div><div className="eyebrow mb-3">Deals</div>{myDeals.length ? <ul className="grid gap-3">{myDeals.map((d) => { const got = dealCollected(d.id, payments); return <li key={d.id}><Link to="/deals" className="block rounded-xl border p-3 hover:bg-secondary"><div className="flex justify-between gap-2 text-sm"><span className="truncate font-medium">{d.name}</span><span className="num">{formatINRCompact(d.finalAmount)}</span></div><div className="balance-track mt-2 h-1.5"><div style={{ width: `${d.finalAmount ? Math.min(got / d.finalAmount, 1) * 100 : 0}%` }} /></div><div className="num mt-1 text-[11px] text-muted-foreground">{formatINRCompact(got)} received · {formatINRCompact(dealOutstanding(d, payments))} due</div></Link></li>; })}</ul> : <p className="text-xs text-muted-foreground">No deal yet.</p>}</div>
-        <div><div className="eyebrow mb-3">Conversation history</div><ol className="timeline grid gap-4">{hist.map((a) => <li key={a.id} data-kind={a.type}><p className="text-xs leading-relaxed">{a.text}</p><span className="eyebrow">{relative(a.at)}</span></li>)}{!hist.length && <li className="text-xs text-muted-foreground">No activity yet.</li>}</ol></div>
+        <div><div className="eyebrow mb-3">Conversation history</div>{can("leads.view") && <div className="mb-4 grid gap-2"><Textarea aria-label="Client note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note to this client's history…" /><Button size="sm" variant="outline" className="justify-self-end rounded-full" disabled={!note.trim()} onClick={saveNote}>Save note</Button></div>}<ol className="timeline grid gap-4">{hist.map((a) => <li key={a.id} data-kind={a.type}><p className="text-xs leading-relaxed">{a.text}</p><span className="eyebrow">{relative(a.at)}</span></li>)}{!hist.length && <li className="text-xs text-muted-foreground">No activity yet.</li>}</ol></div>
       </div>
       {canDel && <div className="mt-8 flex gap-2 border-t pt-4"><Button variant="ghost" size="sm" className="rounded-full text-muted-foreground" onClick={() => onRemove("waste")}><Ban className="size-3.5" />Move to Waste</Button><Button variant="ghost" size="sm" className="rounded-full text-muted-foreground hover:text-destructive" onClick={() => onRemove("deleted")}><Trash2 className="size-3.5" />Delete</Button></div>}
     </aside>

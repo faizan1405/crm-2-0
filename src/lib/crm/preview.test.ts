@@ -89,3 +89,27 @@ describe("Employee Workspace Preview", () => {
     expect(useSession.getState().preview).toBeNull();
   });
 });
+
+describe("permission matrix in preview", () => {
+  const withAccess = (overrides: Record<string, boolean>) => { s().saveEmployeeAccess(empId, { overrides }); startPreview(emp()); };
+  it("view-only employee cannot edit, move stage, log calls or create follow-ups", () => {
+    withAccess({ "leads.edit": false, "pipeline.edit": false, "clients.calls": false, "followups.create": false });
+    const id = mine[0]!;
+    expect(s().updateLead(id, { priority: "cold" })).toBe(false);
+    expect(s().updateLead(id, { status: "qualified" })).toBe(false);
+    expect(s().addFollowUp({ leadId: id, type: "call", dueAt: businessDateTime("2026-12-01T10:00"), note: "" }).ok).toBe(false);
+    expect(s().leads.find((l) => l.id === id)?.status).not.toBe("qualified");
+  });
+  it("create permission lets the employee add a lead, which is assigned to them", () => {
+    withAccess({ "leads.create": true });
+    const newId = s().addLead({ name: "Preview New", phone: "9876501234", source: "Website", status: "new", priority: "warm", pinned: false });
+    expect(newId).toBeTruthy();
+    expect(s().assignments[newId]?.employeeId).toBe(empId);
+  });
+  it("owner-only pages stay closed even if granted", () => {
+    withAccess({ "team.manage": true, "vault.backup": true });
+    const pv = useSession.getState().preview;
+    expect(routeAllowed(pv, "/team")).toBe(false);
+    expect(routeAllowed(pv, "/data-vault")).toBe(false);
+  });
+});
