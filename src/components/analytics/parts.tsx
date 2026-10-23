@@ -43,7 +43,7 @@ export function Kpi({ label, value, hint, def, delta, tone = "default", onOpen, 
   );
 }
 
-export function Panel({ title, sub, def, action, className, children }: { title: string; sub?: string | undefined; def?: string; action?: ReactNode; className?: string; children: ReactNode }) {
+export function Panel({ title, sub, def, action, className, children }: { title: string; sub?: string | undefined; def?: string | undefined; action?: ReactNode; className?: string; children: ReactNode }) {
   return (
     <section className={cn("card-surface min-w-0 p-4 sm:p-5", className)} aria-label={title}>
       <header className="mb-3 flex flex-wrap items-start justify-between gap-2">
