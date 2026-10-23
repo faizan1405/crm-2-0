@@ -5,8 +5,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Button } from "@/components/ui/button";
 import { useCRM } from "@/lib/crm/store";
 import { deriveNotifications, isRead, notificationLink, unreadCount, type Notification } from "@/lib/crm/activity";
-import { dayKey } from "@/lib/crm/dates";
-import { formatDateTime } from "@/lib/crm/format";
+import { dayKey, formatDateTime } from "@/lib/crm/format";
 import { NotificationSettingsDialog } from "./NotificationSettings";
 import { cn } from "@/lib/utils";
 
