@@ -49,6 +49,7 @@ import { DEFAULT_AUTOMATION_SETTINGS, planRule, reconcileReminders, ruleError as
 import { pairKey, pairSignature, type InboxMeta, type LeadRelation, type RelationKind } from "./inbox";
 import { buildGoal, goalError, reviseGoal, mergeAlerts, DEFAULT_PERF_PREFS, type GoalAlert, type GoalDef, type GoalInput, type GoalRevision, type GoalStatus, type PerfPrefs } from "./performance";
 import { activeFields, bulkTag, fieldDefError, matchCondition, filterFields, removedUsedOptions, starterViews, tagError, typeChangeImpact, convertValue, undoTags, validateLeadValues, viewEditable, viewError, viewIssues, CUSTOMIZE_SCHEMA, type CustomFieldDef, type FieldValues, type FieldValue, type LeadTags, type SavedView, type TagDef, type ViewCtx, type ViewPrefs, type Viewer, type ViewCondition } from "./customize";
+import { createProjectSlice, migrateProjects, type ProjectSlice } from "./projectStore";
 import { deriveEvents, mergeEvents, markRead, markAllRead, DEFAULT_NOTIFY_PREFS, EMPTY_READS, OWNER_ACTOR_ID, type ActivityEvent, type EventSnap, type NotifyPrefs, type ReadState } from "./activity";
 
 // ---- Preview guards: every action is checked against the previewed employee's permissions (Owner: always allowed). ----
@@ -77,11 +78,15 @@ const GUARDS: Record<string, Guard> = {
   setLeadFieldValues: ["leads.edit", { ok: false, errors: { _: DENIED } }], setLeadTags: ["leads.edit", false], bulkTagLeads: ["leads.edit", { changed: 0, before: {}, applied: {} }], undoBulkTags: ["leads.edit", { restored: 0, kept: 0 }],
   saveView: ["leads.view", { ok: false, error: DENIED }], deleteView: ["leads.view", undefined], duplicateView: ["leads.view", undefined], setViewPref: ["leads.view", undefined],
   saveGoal: ["__owner", DENIED], setGoalStatus: ["__owner", undefined], duplicateGoal: ["__owner", undefined], setPerfPrefs: ["__owner", undefined], recordGoalAlerts: ["__owner", undefined],
+  createProject: ["projects.create", { ok: false, error: DENIED }], updateProject: ["projects.edit", DENIED], setProjectStatus: ["projects.stage", undefined], moveProjectStage: ["projects.stage", null], undoProjectStage: ["projects.stage", false], archiveProject: ["__owner", undefined],
+  addProjectNote: ["projects.notes", DENIED], addTask: ["projects.tasks_add", { ok: false, error: DENIED }], updateTask: ["projects.view", DENIED], setTaskDone: ["projects.view", false], moveTask: ["projects.tasks_edit", undefined], addMilestone: ["projects.tasks_add", DENIED],
+  toggleCheck: ["projects.edit", undefined], addCheck: ["projects.edit", DENIED], addDependency: ["projects.edit", DENIED], toggleDependency: ["projects.edit", undefined], addProjectLink: ["projects.edit", DENIED], deliverProject: ["projects.edit", DENIED],
+  saveSupport: ["__owner", DENIED], addSupportRequest: ["projects.support", { ok: false, error: DENIED }], updateSupportRequest: ["projects.support", DENIED], saveProjectTemplate: ["__owner", DENIED],
   saveRule: ["__owner", DENIED], deleteRule: ["__owner", undefined], moveRule: ["__owner", undefined], setRuleSettings: ["__owner", undefined], applyRulesToExisting: ["__owner", 0],
 };
 /** Actions never recorded as Team Activity (bulk reset would be noise; settings/templates are not team activity). */
 const UNRECORDED = new Set(["reset", "logBackup", "recordGoalAlerts", "setPerfPrefs", "setViewPref"]);
-const snapOf = (s: CRMState): EventSnap => ({ leads: s.leads, followUps: s.followUps, deals: s.deals, payments: s.payments, activities: s.activities, assignments: s.assignments, employees: s.employees, employeeAccess: s.employeeAccess, inboxMeta: s.inboxMeta, leadRelations: s.leadRelations, reminders: s.reminders, leadTags: s.leadTags, fieldValues: s.fieldValues, customFields: s.customFields, tagDefs: s.tagDefs, savedViews: s.savedViews });
+const snapOf = (s: CRMState): EventSnap => ({ leads: s.leads, followUps: s.followUps, deals: s.deals, payments: s.payments, activities: s.activities, assignments: s.assignments, employees: s.employees, employeeAccess: s.employeeAccess, inboxMeta: s.inboxMeta, leadRelations: s.leadRelations, reminders: s.reminders, leadTags: s.leadTags, fieldValues: s.fieldValues, customFields: s.customFields, tagDefs: s.tagDefs, savedViews: s.savedViews, projects: s.projects, projectTasks: s.projectTasks, supportRequests: s.supportRequests });
 let depth = 0;
 function guarded<T extends object>(state: T, get: () => CRMState, set: (p: Partial<CRMState>) => void): T {
   const out = { ...state } as Record<string, unknown>;
@@ -138,7 +143,7 @@ export interface Prefs {
   notifyDigest: boolean;
 }
 
-interface CRMState extends Prefs {
+interface CRMState extends Prefs, ProjectSlice {
   leads: Lead[];
   deals: Deal[];
   payments: Payment[];
@@ -587,6 +592,7 @@ export const useCRM = create<CRMState>()(
         return r.ok ? r.id : undefined;
       },
       setViewPref: (userId, patch) => set((s) => ({ viewPrefs: { ...s.viewPrefs, [userId]: { pinned: [], ...s.viewPrefs[userId], ...patch } } })),
+      ...createProjectSlice(set as never, get as never),
       ...defaultPrefs,
       addLead: (lead) => {
         const id = uid("lead");
@@ -922,12 +928,12 @@ export const useCRM = create<CRMState>()(
     },
     {
       name: "scale-flow-crm-2-demo",
-      version: 7,
+      version: 8,
       storage: createJSONStorage(() => guardedStorage),
       skipHydration: true,
       // v3: billing quotations are moved, unchanged, into a read-only backup. Nothing is converted automatically.
       // v4: adds Smart Inbox maps (empty) — existing leads are untouched and start as "Needs review".
-      migrate: (persisted, version) => migrateCustomization(migratePerformance(migrateAutomation(migrateInbox(migrateQuotations(persisted as Record<string, unknown>, version), version), version), version), version) as unknown as CRMState,
+      migrate: (persisted, version) => migrateProjects(migrateCustomization(migratePerformance(migrateAutomation(migrateInbox(migrateQuotations(persisted as Record<string, unknown>, version), version), version), version), version), version) as unknown as CRMState,
     },
   ),
 );
