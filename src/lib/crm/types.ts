@@ -96,6 +96,8 @@ export interface Deal {
   milestones: Milestone[];
   notes?: string;
   createdAt: string;
+  /** When the Deal was won (booked). Set once at creation; older records fall back to createdAt. */
+  wonAt?: string;
 }
 
 export type PaymentMethod = "UPI" | "Bank Transfer" | "Cash" | "Card" | "Cheque";
