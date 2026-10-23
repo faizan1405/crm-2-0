@@ -118,7 +118,9 @@ export async function buildBackup(plan: BackupPlan, state: Snapshot, proofInputs
   if (!cats.length) throw new Error("Choose at least one category to back up.");
   const emp = plan.type === "employee" ? arr(state, "employees").find((e) => e.id === plan.employeeId) as (Rec & { name: string }) | undefined : undefined;
   if (plan.type === "employee" && !emp) throw new Error("That employee no longer exists.");
-  const src = scrub(emp ? employeeScope(state, emp.id) : state);
+  const raw = emp ? employeeScope(state, emp.id) : state;
+  // Custom field values are keyed by Owner-chosen field ids (e.g. "cf_session_date"); they are business data, not credentials, so they bypass the key scrubber.
+  const src = { ...scrub(raw), ...(raw["fieldValues"] !== undefined ? { fieldValues: raw["fieldValues"] } : {}) };
   const files: Record<string, Uint8Array> = {};
   const counts: Manifest["counts"] = {};
   const warnings: string[] = [], relationships: string[] = [];
