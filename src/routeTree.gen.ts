@@ -23,6 +23,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as TeamRouteImport } from './routes/team'
 import { Route as LeadsIdRouteImport } from './routes/leads_.$id'
 import { Route as LeadsBinRouteImport } from './routes/leads_.bin'
+import { Route as TeamPreviewIdRouteImport } from './routes/team_.preview.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -94,6 +95,11 @@ const LeadsBinRoute = LeadsBinRouteImport.update({
   path: '/leads/bin',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TeamPreviewIdRoute = TeamPreviewIdRouteImport.update({
+  id: '/team_/preview/$id',
+  path: '/team/preview/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -110,6 +116,7 @@ export interface FileRoutesByFullPath {
   '/team': typeof TeamRoute
   '/leads/$id': typeof LeadsIdRoute
   '/leads/bin': typeof LeadsBinRoute
+  '/team/preview/$id': typeof TeamPreviewIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -126,6 +133,7 @@ export interface FileRoutesByTo {
   '/team': typeof TeamRoute
   '/leads/$id': typeof LeadsIdRoute
   '/leads/bin': typeof LeadsBinRoute
+  '/team/preview/$id': typeof TeamPreviewIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -143,6 +151,7 @@ export interface FileRoutesById {
   '/team': typeof TeamRoute
   '/leads_/$id': typeof LeadsIdRoute
   '/leads_/bin': typeof LeadsBinRoute
+  '/team_/preview/$id': typeof TeamPreviewIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -161,6 +170,7 @@ export interface FileRouteTypes {
     | '/team'
     | '/leads/$id'
     | '/leads/bin'
+    | '/team/preview/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -177,6 +187,7 @@ export interface FileRouteTypes {
     | '/team'
     | '/leads/$id'
     | '/leads/bin'
+    | '/team/preview/$id'
   id:
     | '__root__'
     | '/'
@@ -193,6 +204,7 @@ export interface FileRouteTypes {
     | '/team'
     | '/leads_/$id'
     | '/leads_/bin'
+    | '/team_/preview/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -210,6 +222,7 @@ export interface RootRouteChildren {
   TeamRoute: typeof TeamRoute
   LeadsIdRoute: typeof LeadsIdRoute
   LeadsBinRoute: typeof LeadsBinRoute
+  TeamPreviewIdRoute: typeof TeamPreviewIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -312,6 +325,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LeadsBinRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/team_/preview/$id': {
+      id: '/team_/preview/$id'
+      path: '/team/preview/$id'
+      fullPath: '/team/preview/$id'
+      preLoaderRoute: typeof TeamPreviewIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -330,6 +350,7 @@ const rootRouteChildren: RootRouteChildren = {
   TeamRoute: TeamRoute,
   LeadsIdRoute: LeadsIdRoute,
   LeadsBinRoute: LeadsBinRoute,
+  TeamPreviewIdRoute: TeamPreviewIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
