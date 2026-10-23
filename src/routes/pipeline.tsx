@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { AlertTriangle, ArrowUpRight, CalendarPlus, ChevronLeft, ChevronRight, Clock, Flame, Gem, NotebookPen, PhoneCall, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,12 @@ function Pipeline() {
   const now = useMemo(() => new Date(), [leads, followUps, activities]); // eslint-disable-line react-hooks/exhaustive-deps
   const select = (id: string | undefined) => navigate({ search: id ? { lead: id } : {}, replace: true, resetScroll: false });
   const sel = leads.find((l) => l.id === selected);
+  // Wide screens dock the inspector beside the board; smaller screens float it above everything (portal escapes the page's stacking context).
+  const wide = useSyncExternalStore((cb) => { const m = window.matchMedia("(min-width: 1280px)"); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); }, () => window.matchMedia("(min-width: 1280px)").matches, () => true);
+  const inspector = sel ? <>
+    <button type="button" aria-label="Close inspector" className="pipe-scrim" onClick={() => select(undefined)} />
+    <PipeInspector key={sel.id} lead={sel} onClose={() => select(undefined)} onStage={(s) => move(sel.id, s)} onFollowUp={() => setFuFor(sel.id)} />
+  </> : null;
 
   useEffect(() => { if (!sel) return; const k = (e: KeyboardEvent) => { if (e.key === "Escape" && !document.querySelector("[role=dialog]")) select(undefined); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -141,10 +148,7 @@ function Pipeline() {
             );
           })}
         </div>
-        {sel && <>
-          <button type="button" aria-label="Close inspector" className="pipe-scrim" onClick={() => select(undefined)} />
-          <PipeInspector key={sel.id} lead={sel} onClose={() => select(undefined)} onStage={(s) => move(sel.id, s)} onFollowUp={() => setFuFor(sel.id)} />
-        </>}
+        {sel && (wide ? inspector : createPortal(<div className="pipe-layer">{inspector}</div>, document.body))}
       </div>
       <LostReasonDialog open={!!pendingLost} {...(lostLead ? { leadName: lostLead.name } : {})} onCancel={() => setPendingLost(null)} onConfirm={(r) => { if (!lostLead) return; commit(lostLead, { status: "lost", lostReason: r }); setPendingLost(null); }} />
       <FollowUpDialog open={!!fuFor} onOpenChange={(o) => !o && setFuFor(null)} {...(fuFor ? { leadId: fuFor } : {})} />
