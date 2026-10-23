@@ -12,7 +12,7 @@ import { unzipSync, strFromU8 } from "fflate";
 import type { Deal } from "./types";
 
 const s = () => useCRM.getState();
-const DEAL: Deal = { id: "deal_web", clientType: "crm", leadId: undefined, clientName: "Asha Mehta", company: "Mehta Interiors", phone: "9876500000", name: "Business website", quotedAmount: 40000, finalAmount: 40000, status: "active", milestones: [], createdAt: "2026-10-01T00:00:00Z" };
+const DEAL: Deal = { id: "deal_web", clientType: "crm", clientName: "Asha Mehta", company: "Mehta Interiors", phone: "9876500000", name: "Business website", quotedAmount: 40000, finalAmount: 40000, status: "active", milestones: [], createdAt: "2026-10-01T00:00:00Z" };
 const tpl = starterTemplates("2026-10-01T00:00:00Z")[0]!;
 const make = (extra: Partial<Project> = {}) => {
   const r = s().createProject({ ...draftFromDeal({ deal: DEAL, template: tpl }), ...extra }, { milestones: tpl.milestones, tasks: tpl.tasks });
@@ -266,7 +266,7 @@ describe("data vault and migration", () => {
     const id = make();
     s().addPayment({ dealId: DEAL.id, amount: 4000, date: "2026-10-20", method: "UPI", type: "advance" });
     s().addSupportRequest({ projectId: id, kind: "general", title: "Help", priority: "normal", assigneeId: null });
-    expect(CATEGORIES.find((c) => c.id === "projects")!.keys).toEqual(["projects", "projectTasks", "projectMilestones", "projectTemplates", "supportRequests"]);
+    expect(CATEGORIES.find((c) => c.id === "projects")!.keys).toEqual(["projects", "projectTasks", "projectMilestones", "projectTemplates", "supportRequests", "projectFields", "projectFieldValues", "projectTags"]);
     const st = Object.fromEntries(Object.entries(s()).filter(([, v]) => typeof v !== "function"));
     const r = await buildBackup({ type: "full", categories: ALL_CATEGORY_IDS }, st, []);
     const files = unzipSync(r.bytes);

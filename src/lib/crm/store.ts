@@ -48,8 +48,12 @@ import { activePreview, allows, previewSink, type CrmEventType } from "./session
 import { DEFAULT_AUTOMATION_SETTINGS, planRule, reconcileReminders, ruleError as automationRuleError, ruleFromTemplate, type AutomationRule, type AutomationRun, type AutomationSettings, type Reminder, type RuleStatus } from "./automation";
 import { pairKey, pairSignature, type InboxMeta, type LeadRelation, type RelationKind } from "./inbox";
 import { buildGoal, goalError, reviseGoal, mergeAlerts, DEFAULT_PERF_PREFS, type GoalAlert, type GoalDef, type GoalInput, type GoalRevision, type GoalStatus, type PerfPrefs } from "./performance";
-import { activeFields, bulkTag, fieldDefError, matchCondition, filterFields, removedUsedOptions, starterViews, tagError, typeChangeImpact, convertValue, undoTags, validateLeadValues, viewEditable, viewError, viewIssues, CUSTOMIZE_SCHEMA, type CustomFieldDef, type FieldValues, type FieldValue, type LeadTags, type SavedView, type TagDef, type ViewCtx, type ViewPrefs, type Viewer, type ViewCondition } from "./customize";
+import { applyFieldSave, applyFieldValues, tagForLeads, activeFields, bulkTag, fieldDefError, matchCondition, filterFields, removedUsedOptions, starterViews, tagError, typeChangeImpact, convertValue, undoTags, validateLeadValues, viewEditable, viewError, viewIssues, CUSTOMIZE_SCHEMA, type CustomFieldDef, type FieldValues, type FieldValue, type LeadTags, type SavedView, type TagDef, type ViewCtx, type ViewPrefs, type Viewer, type ViewCondition } from "./customize";
 import { createProjectSlice, migrateProjects, type ProjectSlice } from "./projectStore";
+import { createProjectCustomSlice, migrateProjectCustom, type ProjectCustomSlice } from "./projectCustomStore";
+import { matchProjectFilter, projectFilterFields, projectFilterIssues, type ProjectCtx } from "./projectCustomize";
+import { pauseRulesUsing } from "./automation";
+import type { Project } from "./projects";
 import { deriveEvents, mergeEvents, markRead, markAllRead, DEFAULT_NOTIFY_PREFS, EMPTY_READS, OWNER_ACTOR_ID, type ActivityEvent, type EventSnap, type NotifyPrefs, type ReadState } from "./activity";
 
 // ---- Preview guards: every action is checked against the previewed employee's permissions (Owner: always allowed). ----
@@ -82,11 +86,12 @@ const GUARDS: Record<string, Guard> = {
   addProjectNote: ["projects.notes", DENIED], addTask: ["projects.tasks_add", { ok: false, error: DENIED }], updateTask: ["projects.view", DENIED], setTaskDone: ["projects.view", false], moveTask: ["projects.tasks_edit", undefined], addMilestone: ["projects.tasks_add", DENIED],
   toggleCheck: ["projects.edit", undefined], addCheck: ["projects.edit", DENIED], addDependency: ["projects.edit", DENIED], toggleDependency: ["projects.edit", undefined], addProjectLink: ["projects.edit", DENIED], deliverProject: ["projects.edit", DENIED],
   saveSupport: ["__owner", DENIED], addSupportRequest: ["projects.support", { ok: false, error: DENIED }], updateSupportRequest: ["projects.support", DENIED], saveProjectTemplate: ["__owner", DENIED],
+  saveProjectField: ["__owner", DENIED], setProjectFieldStatus: ["__owner", { paused: [] }], moveProjectField: ["__owner", undefined], setProjectFieldValues: ["projects.edit", { ok: false, errors: { _: DENIED } }], setProjectTags: ["projects.edit", false], bulkTagProjects: ["__owner", { changed: 0, before: {}, applied: {} }], undoBulkProjectTags: ["__owner", { restored: 0, kept: 0 }],
   saveRule: ["__owner", DENIED], deleteRule: ["__owner", undefined], moveRule: ["__owner", undefined], setRuleSettings: ["__owner", undefined], applyRulesToExisting: ["__owner", 0],
 };
 /** Actions never recorded as Team Activity (bulk reset would be noise; settings/templates are not team activity). */
 const UNRECORDED = new Set(["reset", "logBackup", "recordGoalAlerts", "setPerfPrefs", "setViewPref"]);
-const snapOf = (s: CRMState): EventSnap => ({ leads: s.leads, followUps: s.followUps, deals: s.deals, payments: s.payments, activities: s.activities, assignments: s.assignments, employees: s.employees, employeeAccess: s.employeeAccess, inboxMeta: s.inboxMeta, leadRelations: s.leadRelations, reminders: s.reminders, leadTags: s.leadTags, fieldValues: s.fieldValues, customFields: s.customFields, tagDefs: s.tagDefs, savedViews: s.savedViews, projects: s.projects, projectTasks: s.projectTasks, supportRequests: s.supportRequests });
+const snapOf = (s: CRMState): EventSnap => ({ leads: s.leads, followUps: s.followUps, deals: s.deals, payments: s.payments, activities: s.activities, assignments: s.assignments, employees: s.employees, employeeAccess: s.employeeAccess, inboxMeta: s.inboxMeta, leadRelations: s.leadRelations, reminders: s.reminders, leadTags: s.leadTags, fieldValues: s.fieldValues, customFields: s.customFields, tagDefs: s.tagDefs, savedViews: s.savedViews, projects: s.projects, projectTasks: s.projectTasks, supportRequests: s.supportRequests, projectTags: s.projectTags, projectFieldValues: s.projectFieldValues, projectFields: s.projectFields });
 let depth = 0;
 function guarded<T extends object>(state: T, get: () => CRMState, set: (p: Partial<CRMState>) => void): T {
   const out = { ...state } as Record<string, unknown>;
@@ -143,7 +148,7 @@ export interface Prefs {
   notifyDigest: boolean;
 }
 
-interface CRMState extends Prefs, ProjectSlice {
+interface CRMState extends Prefs, ProjectSlice, ProjectCustomSlice {
   leads: Lead[];
   deals: Deal[];
   payments: Payment[];
@@ -311,14 +316,29 @@ export function currentViewer(): Viewer {
   const pv = activePreview();
   return pv ? { owner: false, employeeId: pv.employeeId, canEdit: allows(pv, "leads.edit") } : { owner: true };
 }
+type AutoSrc = Pick<CRMState, "leads" | "activities" | "followUps" | "assignments" | "inboxMeta" | "fieldValues" | "leadTags" | "customFields" | "tagDefs" | "employees"> & Partial<Pick<CRMState, "projects" | "projectTasks" | "projectMilestones" | "supportRequests" | "projectFields" | "projectFieldValues" | "projectTags">>;
+/** Project filter context (Owner view unless a viewer is given). Shared by Project Desk filters and Project automation. */
+export function projectCtxOf(st: AutoSrc, viewer: Viewer = { owner: true }, now = new Date()): ProjectCtx {
+  const projects = st.projects ?? [];
+  return { projectFields: st.projectFields ?? [], projectFieldValues: st.projectFieldValues ?? {}, projectTags: st.projectTags ?? {}, tags: st.tagDefs, employees: st.employees.filter((e) => e.accountStatus !== "archived"), types: [...new Set(projects.map((p) => p.type))].sort(), tasks: st.projectTasks ?? [], milestones: st.projectMilestones ?? [], supportRequests: st.supportRequests ?? [], now, viewer };
+}
 /** Automation evaluation context — one place, shared by real runs and Automation Studio dry runs. */
-export function automationCtxOf(st: Pick<CRMState, "leads" | "activities" | "followUps" | "assignments" | "inboxMeta" | "fieldValues" | "leadTags" | "customFields" | "tagDefs" | "employees">, now = new Date()) {
+export function automationCtxOf(st: AutoSrc, now = new Date()) {
   const vctx = viewCtxOf(st, { owner: true }, now); const vfields = new Map(filterFields(vctx).map((f) => [f.key, f]));
-  return { leads: st.leads, activities: st.activities, followUps: st.followUps, assignments: st.assignments, inboxMeta: st.inboxMeta, now, customMatch: (l: Lead, cs: NonNullable<AutomationRule["conditions"]["custom"]>) => cs.every((c) => matchCondition(l, c as ViewCondition, vctx, vfields)) };
+  const pctx = projectCtxOf(st, { owner: true }, now); const pfields = new Map(projectFilterFields(pctx).map((f) => [f.key, f]));
+  type Cs = NonNullable<AutomationRule["conditions"]["custom"]>;
+  return {
+    leads: st.leads, activities: st.activities, followUps: st.followUps, assignments: st.assignments, inboxMeta: st.inboxMeta, now,
+    customMatch: (l: Lead, cs: Cs, mode?: "and" | "or") => (mode === "or" ? cs.some((c) => matchCondition(l, c as ViewCondition, vctx, vfields)) : cs.every((c) => matchCondition(l, c as ViewCondition, vctx, vfields))),
+    projects: st.projects ?? [], projectTasks: st.projectTasks ?? [], projectMilestones: st.projectMilestones ?? [], supportRequests: st.supportRequests ?? [],
+    projectMatch: (p: Project, cs: Cs, mode?: "and" | "or") => matchProjectFilter(p, { mode: mode ?? "and", conditions: cs as ViewCondition[] }, pctx, pfields),
+  };
 }
 /** Custom-field/tag problems that stop a rule from running (archived/removed fields or options). */
-export function automationIssues(st: Pick<CRMState, "assignments" | "followUps" | "activities" | "inboxMeta" | "fieldValues" | "leadTags" | "customFields" | "tagDefs" | "employees">, r: AutomationRule) {
-  return r.conditions.custom?.length ? viewIssues({ filter: { mode: "and", conditions: r.conditions.custom as ViewCondition[] } }, viewCtxOf(st, { owner: true })) : [];
+export function automationIssues(st: AutoSrc, r: AutomationRule) {
+  if (!r.conditions.custom?.length) return [];
+  const cs = r.conditions.custom as ViewCondition[];
+  return (r.subject ?? "lead") === "project" ? projectFilterIssues(cs, projectCtxOf(st)) : viewIssues({ filter: { mode: "and", conditions: cs } }, viewCtxOf(st, { owner: true }));
 }
 export const viewerId = (v: Viewer) => (v.owner ? OWNER_ACTOR_ID : v.employeeId);
 export function viewCtxOf(s: Pick<CRMState, "assignments" | "followUps" | "activities" | "inboxMeta" | "fieldValues" | "leadTags" | "customFields" | "tagDefs" | "employees">, viewer: Viewer, now = new Date()): ViewCtx {
@@ -425,7 +445,8 @@ export const useCRM = create<CRMState>()(
       setAutomationStatus: (id, status) => {
         const r = get().automationRules.find((x) => x.id === id); if (!r) return "Rule not found";
         if (status === "enabled") { const err = automationRuleError(r); if (err) return err; }
-        set((s) => ({ automationRules: s.automationRules.map((x) => (x.id === id ? { ...x, status, updatedAt: new Date().toISOString() } : x)) }));
+        if (status === "enabled" && automationIssues(get(), r).length) return `Can't enable: ${automationIssues(get(), r)[0]!.text}`;
+        set((s) => ({ automationRules: s.automationRules.map((x) => (x.id === id ? { ...(({ pausedReason: _p, ...rest }) => rest)(x), status, updatedAt: new Date().toISOString() } : x)) }));
         return null;
       },
       duplicateAutomationRule: (id) => {
@@ -442,14 +463,13 @@ export const useCRM = create<CRMState>()(
       setAutomationSettings: (p) => set((s) => ({ automationSettings: { ...s.automationSettings, ...p } })),
       runAutomations: (opts) => {
         const st = get(); const now = opts?.now ? new Date(opts.now) : new Date(); const at = now.toISOString(); const manual = !!opts?.manual;
-        const vctx = viewCtxOf(st, { owner: true }, now);
         const ctx = automationCtxOf(st, now);
         const rec = reconcileReminders(st.reminders, ctx);
         let reminders = rec.next; let budget = st.automationSettings.maxActionsPerRun; let created = 0;
-        const runs: AutomationRun[] = []; const fuJobs: { reminderId: string; leadId: string; key: string; dueAt: string; rule: string }[] = [];
+        const runs: AutomationRun[] = []; const prjJobs: { row: Reminder; rule: AutomationRule }[] = []; const fuJobs: { reminderId: string; leadId: string; key: string; dueAt: string; rule: string }[] = [];
         const rules = st.automationRules.map((r) => {
           if (r.status !== "enabled") { if (manual && r.status !== "archived") runs.push({ id: uid("run"), ruleId: r.id, ruleName: r.name, at, outcome: "disabled", actions: [], skippedDuplicates: 0, matched: 0, manual }); return r; }
-          const broken = r.conditions.custom?.length ? viewIssues({ filter: { mode: "and", conditions: r.conditions.custom as ViewCondition[] } }, vctx) : [];
+          const broken = automationIssues(st, r);
           if (broken.length) { runs.push({ id: uid("run"), ruleId: r.id, ruleName: r.name, at, outcome: "failed", actions: [], skippedDuplicates: 0, matched: 0, error: `Not run: ${broken[0]!.text}`, manual }); return { ...r, lastEvaluatedAt: at }; }
           const plan = planRule(r, ctx, reminders);
           const make = plan.create.slice(0, Math.max(0, budget)); budget -= make.length;
@@ -457,12 +477,30 @@ export const useCRM = create<CRMState>()(
           const rows: Reminder[] = make.map(({ followUpDueAt, ...p }) => { const id = uid("rem"); if (followUpDueAt) fuJobs.push({ reminderId: id, leadId: p.leadId, key: p.key, dueAt: followUpDueAt, rule: r.name }); return { ...p, id }; });
           reminders = [...rows, ...reminders]; created += rows.length;
           const actions = rows.length ? [`${rows.length} reminder${rows.length > 1 ? "s" : ""}`, ...(rows.some((x) => x.flag) ? ["flagged"] : []), ...(plan.escalations.length ? [`${plan.escalations.length} escalated to Owner`] : [])] : [];
-          if (rows.length) runs.push({ id: uid("run"), ruleId: r.id, ruleName: r.name, at, outcome: "triggered", ...(rows.length === 1 ? { leadId: rows[0]!.leadId } : {}), actions, skippedDuplicates: plan.skippedDuplicates + plan.cooldown, matched: plan.matched, manual });
+          for (const row of rows) if (row.projectId) prjJobs.push({ row, rule: r });
+          if (rows.length) runs.push({ id: uid("run"), ruleId: r.id, ruleName: r.name, at, outcome: "triggered", ...(rows.length === 1 ? (rows[0]!.projectId ? { projectId: rows[0]!.projectId } : { leadId: rows[0]!.leadId }) : {}), actions, skippedDuplicates: plan.skippedDuplicates + plan.cooldown, matched: plan.matched, manual });
           if (failed) runs.push({ id: uid("run"), ruleId: r.id, ruleName: r.name, at, outcome: "failed", actions: [], skippedDuplicates: 0, matched: plan.matched, error: `Run limit of ${st.automationSettings.maxActionsPerRun} actions reached — ${failed} not created. They will be retried on the next evaluation.`, manual });
           if (manual && !rows.length && !failed) runs.push({ id: uid("run"), ruleId: r.id, ruleName: r.name, at, outcome: plan.matched ? "skipped" : "evaluated", actions: [], skippedDuplicates: plan.skippedDuplicates + plan.cooldown, matched: plan.matched, manual });
           return { ...r, lastEvaluatedAt: at, ...(rows.length ? { lastTriggeredAt: at } : {}) };
         });
         set({ reminders: reminders.slice(0, 3000), automationRules: rules, automationRuns: [...runs, ...st.automationRuns].slice(0, 2000) });
+        // Project actions: history entries, attention flags and explicitly configured tasks — written by Automation, never money or delivery.
+        if (prjJobs.length) set((s) => {
+          let projects = s.projects; let tasks = s.projectTasks;
+          for (const { row, rule } of prjJobs) {
+            projects = projects.map((p) => (p.id !== row.projectId ? p : {
+              ...p,
+              ...(rule.actions.includes("flag") ? { attention: { reason: row.reason, at, ruleId: rule.id } } : {}),
+              history: rule.actions.includes("activity") || rule.actions.includes("flag") ? [...p.history, { at, by: "automation", change: `Automation · ${rule.name}: ${row.reason}` }].slice(-200) : p.history,
+            }));
+            if (rule.actions.includes("task") && rule.settings.taskTitle?.trim()) {
+              const order = tasks.filter((t) => t.projectId === row.projectId).length;
+              const due = rule.settings.taskDueInDays !== undefined ? new Date(now.getTime() + rule.settings.taskDueInDays * 86_400_000).toISOString().slice(0, 10) : undefined;
+              tasks = [...tasks, { id: uid("tsk"), projectId: row.projectId!, title: rule.settings.taskTitle.trim(), assigneeId: row.employeeId, ...(due ? { dueDate: due } : {}), priority: "normal", status: "open", order, history: [{ at, by: "automation", change: `Created by automation “${rule.name}”` }], createdAt: at, updatedAt: at, version: 1 }];
+            }
+          }
+          return { projects, projectTasks: tasks };
+        });
         // Explicitly configured follow-ups go through the normal follow-up rules (one active per lead, opId idempotency).
         for (const j of fuJobs) {
           const res = get().addFollowUp({ leadId: j.leadId, type: "call", dueAt: j.dueAt, note: `Automation: ${j.rule}`, opId: `auto:${j.key}` });
@@ -513,39 +551,17 @@ export const useCRM = create<CRMState>()(
       savedViews: starterViews(OWNER_ACTOR_ID, "2026-01-01T00:00:00.000Z"),
       viewPrefs: {},
       saveCustomField: (input) => {
-        const st = get(); const at = new Date().toISOString();
-        const cur = input.id ? st.customFields.find((f) => f.id === input.id) : undefined;
-        const def: CustomFieldDef = { ...input, label: input.label.trim(), ...(input.description?.trim() ? { description: input.description.trim() } : { description: undefined }), id: input.id, order: cur?.order ?? (st.customFields.length ? Math.max(...st.customFields.map((f) => f.order)) + 1 : 0) };
-        if (!def.id) return "Missing internal id.";
-        const err = fieldDefError(def, st.customFields); if (err) return err;
-        if (!cur) { set((s) => ({ customFields: [...s.customFields, { ...def, createdAt: at, updatedAt: at, version: 1, history: [{ at, change: "Created" }] }] })); return null; }
-        const lost = removedUsedOptions(cur, def, st.fieldValues);
-        if (lost.length) return `Option ${lost.map((o) => `“${o.label}” (${o.count} lead${o.count > 1 ? "s" : ""})`).join(", ")} is in use — archive it instead of deleting it.`;
-        let values = st.fieldValues;
-        if (cur.type !== def.type) {
-          const imp = typeChangeImpact(cur, def, st.fieldValues);
-          if (imp.incompatible.length) return `${imp.incompatible.length} lead${imp.incompatible.length > 1 ? "s have values" : " has a value"} that can't become ${def.type}. Nothing was changed.`;
-          values = Object.fromEntries(Object.entries(st.fieldValues).map(([id, row]) => { const v = row[cur.id]; return [id, v === undefined ? row : { ...row, [cur.id]: convertValue(v, cur, def)! }]; }));
-        }
-        const changes = [cur.label !== def.label && `Renamed from “${cur.label}”`, cur.type !== def.type && `Type ${cur.type} → ${def.type}`, cur.required !== def.required && (def.required ? "Now required" : "Now optional"), (cur.visibility !== def.visibility || cur.editable !== def.editable) && "Visibility changed", JSON.stringify(cur.options) !== JSON.stringify(def.options) && "Options changed"].filter(Boolean) as string[];
-        set((s) => ({ fieldValues: values, customFields: s.customFields.map((f) => (f.id === cur.id ? { ...def, createdAt: cur.createdAt, updatedAt: at, version: cur.version + 1, history: [...cur.history, { at, change: changes.join(" · ") || "Edited" }].slice(-50) } : f)) }));
-        return null;
+        const st = get(); const r = applyFieldSave({ ...input, entity: "lead" }, st.customFields, st.fieldValues, new Date().toISOString());
+        if ("error" in r) return r.error;
+        set({ customFields: r.defs, fieldValues: r.values }); return null;
       },
-      setCustomFieldStatus: (id, status) => set((s) => ({ customFields: s.customFields.map((f) => (f.id === id && f.status !== status ? { ...f, status, updatedAt: new Date().toISOString(), version: f.version + 1, history: [...f.history, { at: new Date().toISOString(), change: status === "archived" ? "Archived (values kept)" : "Restored" }] } : f)) })),
+      setCustomFieldStatus: (id, status) => set((s) => ({ ...(status === "archived" ? { automationRules: pauseRulesUsing(s.automationRules, "lead", (c) => c.field === `cf:${id}`, `“${s.customFields.find((f) => f.id === id)?.label ?? "A field"}” was archived`, new Date().toISOString()).rules } : {}), customFields: s.customFields.map((f) => (f.id === id && f.status !== status ? { ...f, status, updatedAt: new Date().toISOString(), version: f.version + 1, history: [...f.history, { at: new Date().toISOString(), change: status === "archived" ? "Archived (values kept)" : "Restored" }] } : f)) })),
       moveCustomField: (id, dir) => set((s) => { const l = [...s.customFields].sort((a, b) => a.order - b.order); const i = l.findIndex((f) => f.id === id), j = i + dir; if (i < 0 || j < 0 || j >= l.length) return {}; [l[i], l[j]] = [l[j]!, l[i]!]; return { customFields: l.map((f, k) => ({ ...f, order: k })) }; }),
       setLeadFieldValues: (leadId, input, opts) => {
         const st = get(); if (!st.leads.some((l) => l.id === leadId)) return { ok: false, errors: { _: "Lead not found." } };
-        const viewer = currentViewer();
-        const allowed = activeFields(st.customFields).filter((d) => viewer.owner || (d.visibility === "team" && d.editable === "team"));
-        const ok = new Set(allowed.map((d) => d.id));
-        const blocked = Object.keys(input).filter((k) => !ok.has(k));
-        if (blocked.length) return { ok: false, errors: Object.fromEntries(blocked.map((k) => [k, "You can't edit this field."])) };
-        const prev = st.fieldValues[leadId] ?? {};
-        const r = validateLeadValues(allowed, input, { isNew: !!opts?.isNew, previous: prev });
-        if (Object.keys(r.errors).length) return { ok: false, errors: r.errors };
-        const row: Record<string, FieldValue> = { ...prev };
-        for (const k of Object.keys(input)) { const v = r.values[k]; if (v === undefined) delete row[k]; else row[k] = v; }
-        set((s) => ({ fieldValues: { ...s.fieldValues, [leadId]: row } }));
+        const r = applyFieldValues(st.customFields, st.fieldValues[leadId] ?? {}, input, currentViewer(), !!opts?.isNew);
+        if (!r.ok) return r;
+        set((s) => ({ fieldValues: { ...s.fieldValues, [leadId]: r.row } }));
         return { ok: true, needs: r.needs };
       },
       saveTag: (t) => {
@@ -554,18 +570,18 @@ export const useCRM = create<CRMState>()(
         set((s) => ({ tagDefs: cur ? s.tagDefs.map((x) => (x.id === t.id ? { ...x, ...t, name: t.name.trim(), updatedAt: at } : x)) : [...s.tagDefs, { ...t, name: t.name.trim(), createdAt: at, updatedAt: at }] }));
         return null;
       },
-      setTagStatus: (id, status) => set((s) => ({ tagDefs: s.tagDefs.map((t) => (t.id === id ? { ...t, status, updatedAt: new Date().toISOString() } : t)) })),
+      setTagStatus: (id, status) => set((s) => ({ ...(status === "archived" ? { automationRules: pauseRulesUsing(s.automationRules, "any", (c) => c.field === "tags" && Array.isArray(c.value) && (c.value as string[]).includes(id), `Tag “${s.tagDefs.find((t) => t.id === id)?.name ?? "a tag"}” was archived`, new Date().toISOString()).rules } : {}), tagDefs: s.tagDefs.map((t) => (t.id === id ? { ...t, status, updatedAt: new Date().toISOString() } : t)) })),
       setLeadTags: (leadId, tagIds) => {
         const st = get(); if (!st.leads.some((l) => l.id === leadId)) return false;
         const known = new Map(st.tagDefs.map((t) => [t.id, t])); const cur = st.leadTags[leadId] ?? [];
         // Archived tags already on the lead may stay; new ones must be active.
-        const next = [...new Set(tagIds)].filter((id) => known.has(id) && (known.get(id)!.status === "active" || cur.includes(id)));
+        const next = [...new Set(tagIds)].filter((id) => known.has(id) && (cur.includes(id) || (known.get(id)!.status === "active" && tagForLeads(known.get(id)!))));
         set((s) => ({ leadTags: { ...s.leadTags, [leadId]: next } }));
         return true;
       },
       bulkTagLeads: (ids, tagId, mode) => {
         const st = get(); const tag = st.tagDefs.find((t) => t.id === tagId);
-        if (!tag || (mode === "add" && tag.status !== "active")) return { changed: 0, before: {}, applied: {} };
+        if (!tag || (mode === "add" && (tag.status !== "active" || !tagForLeads(tag)))) return { changed: 0, before: {}, applied: {} };
         const live = new Set(st.leads.map((l) => l.id));
         const r = bulkTag(st.leadTags, ids.filter((id) => live.has(id)), tagId, mode);
         if (r.changed) set({ leadTags: r.next });
@@ -593,6 +609,7 @@ export const useCRM = create<CRMState>()(
       },
       setViewPref: (userId, patch) => set((s) => ({ viewPrefs: { ...s.viewPrefs, [userId]: { pinned: [], ...s.viewPrefs[userId], ...patch } } })),
       ...createProjectSlice(set as never, get as never),
+      ...createProjectCustomSlice(set as never, get as never),
       ...defaultPrefs,
       addLead: (lead) => {
         const id = uid("lead");
@@ -928,12 +945,12 @@ export const useCRM = create<CRMState>()(
     },
     {
       name: "scale-flow-crm-2-demo",
-      version: 8,
+      version: 9,
       storage: createJSONStorage(() => guardedStorage),
       skipHydration: true,
       // v3: billing quotations are moved, unchanged, into a read-only backup. Nothing is converted automatically.
       // v4: adds Smart Inbox maps (empty) — existing leads are untouched and start as "Needs review".
-      migrate: (persisted, version) => migrateProjects(migrateCustomization(migratePerformance(migrateAutomation(migrateInbox(migrateQuotations(persisted as Record<string, unknown>, version), version), version), version), version), version) as unknown as CRMState,
+      migrate: (persisted, version) => migrateProjectCustom(migrateProjects(migrateCustomization(migratePerformance(migrateAutomation(migrateInbox(migrateQuotations(persisted as Record<string, unknown>, version), version), version), version), version), version), version) as unknown as CRMState,
     },
   ),
 );

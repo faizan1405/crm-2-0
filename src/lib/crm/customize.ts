@@ -34,14 +34,17 @@ export type FieldValue = string | number | boolean | string[] | Money;
 export type FieldAccess = "team" | "owner";
 export interface FieldHistory { at: string; change: string }
 export interface CustomFieldDef {
-  id: string; entity: "lead"; label: string; type: FieldType; description?: string | undefined;
+  id: string; entity: FieldEntity; label: string; type: FieldType; description?: string | undefined;
   required: boolean; defaultValue?: FieldValue | undefined; options: FieldOption[]; order: number;
   status: "active" | "archived"; highlight: boolean;
   /** Who may see / edit values. "owner" = sensitive, never sent to employees. */
   visibility: FieldAccess; editable: FieldAccess;
   currency?: string | undefined; createdAt: string; updatedAt: string; version: number; history: FieldHistory[];
 }
-export type FieldValues = Record<string, Record<string, FieldValue>>; // leadId → fieldId → value
+export type FieldValues = Record<string, Record<string, FieldValue>>; // recordId (lead or project) → fieldId → value
+/** Which record a field definition belongs to. Lead and Project fields live in separate lists and value maps, built by the same rules. */
+export type FieldEntity = "lead" | "project";
+export const ENTITY_NOUN: Record<FieldEntity, [string, string]> = { lead: ["lead", "leads"], project: ["project", "projects"] };
 
 /** Built-in lead fields and filter keys can never be used as custom field ids. */
 export const RESERVED_IDS = ["id", "name", "phone", "email", "company", "requirement", "source", "status", "stage", "priority", "assignee", "assigned", "created", "createdAt", "updatedAt", "lastContact", "nextFollowUp", "quickStatus", "tags", "notes", "pinned", "budget", "quotedAmount", "search", "inbox", "contact", "followupDue"];
@@ -55,8 +58,8 @@ export function fieldIdFor(label: string, taken: string[]): string {
 }
 export const optionIdFor = (label: string, taken: string[]) => { const base = `opt_${slug(label) || "option"}`; let id = base, n = 2; while (taken.includes(id)) id = `${base}_${n++}`; return id; };
 
-export function emptyField(order: number): CustomFieldDef {
-  return { id: "", entity: "lead", label: "", type: "text", required: false, options: [], order, status: "active", highlight: false, visibility: "team", editable: "team", createdAt: "", updatedAt: "", version: 0, history: [] };
+export function emptyField(order: number, entity: FieldEntity = "lead"): CustomFieldDef {
+  return { id: "", entity, label: "", type: "text", required: false, options: [], order, status: "active", highlight: false, visibility: "team", editable: "team", createdAt: "", updatedAt: "", version: 0, history: [] };
 }
 const isChoice = (t: FieldType) => t === "select" || t === "multiselect";
 
@@ -197,7 +200,12 @@ export function scopeCustomization(defs: CustomFieldDef[], values: FieldValues, 
 /* ================================== tags ================================== */
 export const TAG_COLORS = ["graphite", "green", "amber", "rose", "sky", "violet"] as const;
 export type TagColor = (typeof TAG_COLORS)[number];
-export interface TagDef { id: string; name: string; description?: string | undefined; color: TagColor; status: "active" | "archived"; createdAt: string; updatedAt: string }
+/** Where a tag may be used. Missing = "lead" (every tag created before Project tags existed). */
+export type TagScope = "lead" | "project" | "both";
+export const TAG_SCOPE_LABEL: Record<TagScope, string> = { lead: "Leads", project: "Projects", both: "Leads & Projects" };
+export interface TagDef { id: string; name: string; description?: string | undefined; color: TagColor; status: "active" | "archived"; scope?: TagScope | undefined; createdAt: string; updatedAt: string }
+export const tagForLeads = (t: Pick<TagDef, "scope">) => (t.scope ?? "lead") !== "project";
+export const tagForProjects = (t: Pick<TagDef, "scope">) => t.scope === "project" || t.scope === "both";
 export type LeadTags = Record<string, string[]>; // leadId → tag ids
 export function tagError(t: Pick<TagDef, "id" | "name">, all: TagDef[]): string | null {
   if (!t.name.trim()) return "Give the tag a name.";
@@ -271,31 +279,45 @@ export function filterFields(ctx: Pick<ViewCtx, "customFields" | "tags" | "emplo
     { key: "followupDue", label: "Follow-up due", kind: "date" },
     { key: "inbox", label: "Inbox review status", kind: "select", options: [{ id: "needs_review", label: "Needs review" }, { id: "reviewed", label: "Reviewed" }] },
     { key: "contact", label: "Contact attempt status", kind: "select", options: (Object.keys(CONTACT_LABEL) as ContactState[]).map((k) => ({ id: k, label: CONTACT_LABEL[k] })) },
-    { key: "tags", label: "Tags", kind: "multi", options: ctx.tags.map((t) => ({ id: t.id, label: t.status === "archived" ? `${t.name} (archived)` : t.name })) },
+    { key: "tags", label: "Tags", kind: "multi", options: ctx.tags.filter(tagForLeads).map((t) => ({ id: t.id, label: t.status === "archived" ? `${t.name} (archived)` : t.name })) },
   ];
-  const kindOf = (t: FieldType): FieldKind => (t === "select" ? "select" : t === "multiselect" ? "multi" : t === "date" ? "date" : t === "number" || t === "currency" ? "number" : t === "checkbox" ? "bool" : "text");
-  const cf = ctx.customFields.filter((d) => fieldVisible(d, ctx.viewer)).sort((a, b) => a.order - b.order).map((d): FilterField => ({ key: `cf:${d.id}`, label: d.label, kind: kindOf(d.type), ...(isChoice(d.type) ? { options: d.options.map((o) => ({ id: o.id, label: o.archived ? `${o.label} (archived)` : o.label })) } : {}), ...(d.status === "archived" ? { archived: true } : {}), ...(d.visibility === "owner" ? { ownerOnly: true } : {}) }));
-  return [...sys, ...cf];
+  return [...sys, ...customFilterFields(ctx.customFields, ctx.viewer)];
+}
+export const kindOf = (t: FieldType): FieldKind => (t === "select" ? "select" : t === "multiselect" ? "multi" : t === "date" ? "date" : t === "number" || t === "currency" ? "number" : t === "checkbox" ? "bool" : "text");
+/** `cf:<id>` filter fields for the definitions this viewer may see (shared by Lead and Project filters). */
+export function customFilterFields(defs: CustomFieldDef[], viewer: Viewer): FilterField[] {
+  return defs.filter((d) => fieldVisible(d, viewer)).sort((a, b) => a.order - b.order).map((d): FilterField => ({ key: `cf:${d.id}`, label: d.label, kind: kindOf(d.type), ...(isChoice(d.type) ? { options: d.options.map((o) => ({ id: o.id, label: o.archived ? `${o.label} (archived)` : o.label })) } : {}), ...(d.status === "archived" ? { archived: true } : {}), ...(d.visibility === "owner" ? { ownerOnly: true } : {}) }));
 }
 
 /** Problems that change a view's meaning. Invalid conditions match nothing (never silently broaden a view). */
 export function viewIssues(view: Pick<SavedView, "filter">, ctx: Pick<ViewCtx, "customFields" | "tags" | "employees" | "viewer">): { conditionId: string; text: string }[] {
-  const fields = new Map(filterFields(ctx).map((f) => [f.key, f]));
+  return conditionIssues(view.filter.conditions, new Map(filterFields(ctx).map((f) => [f.key, f])), "leads");
+}
+/** Shared by Lead views/rules and Project filters/rules. */
+export function conditionIssues(conditions: ViewCondition[], fields: Map<string, FilterField>, noun: string): { conditionId: string; text: string }[] {
   const out: { conditionId: string; text: string }[] = [];
-  for (const c of view.filter.conditions) {
+  for (const c of conditions) {
     const f = fields.get(c.field);
-    if (!f) { out.push({ conditionId: c.id, text: c.field.startsWith("cf:") ? "Uses a field that doesn't exist or isn't visible to you — this condition matches no leads." : "Uses an unknown filter." }); continue; }
+    if (!f) { out.push({ conditionId: c.id, text: c.field.startsWith("cf:") ? `Uses a field that doesn't exist or isn't visible to you — this condition matches no ${noun}.` : "Uses an unknown filter." }); continue; }
     if (f.archived) out.push({ conditionId: c.id, text: `“${f.label}” is archived — the condition still uses its saved values.` });
-    if (!OPS_FOR[f.kind].includes(c.op)) out.push({ conditionId: c.id, text: `“${f.label}” can't use “${OP_LABEL[c.op]}” any more — it matches no leads until edited.` });
+    if (!OPS_FOR[f.kind].includes(c.op)) out.push({ conditionId: c.id, text: `“${f.label}” can't use “${OP_LABEL[c.op]}” any more — it matches no ${noun} until edited.` });
     if (f.options && Array.isArray(c.value)) for (const v of c.value as string[]) { const o = f.options.find((x) => x.id === v); if (!o) out.push({ conditionId: c.id, text: `“${f.label}” refers to a removed option.` }); else if (o.label.endsWith("(archived)")) out.push({ conditionId: c.id, text: `“${f.label}” uses an archived option (${o.label.replace(" (archived)", "")}).` }); }
     else if (f.options && typeof c.value === "string" && !f.options.some((x) => x.id === c.value)) out.push({ conditionId: c.id, text: `“${f.label}” refers to a removed option.` });
   }
   return out;
 }
+/** Plain-language reading of one condition, e.g. “Hosting Provider is Hostinger”. Used to explain why a record matched. */
+export function describeCondition(c: ViewCondition, fields: Map<string, FilterField>): string {
+  const f = fields.get(c.field); if (!f) return "Unavailable condition";
+  const label = (id: string) => f.options?.find((o) => o.id === id)?.label.replace(" (archived)", "") ?? id;
+  const vals = Array.isArray(c.value) ? (c.value as unknown[]).map(String) : c.value === undefined || c.value === "" ? [] : [String(c.value)];
+  const shown = f.options ? vals.map(label).join(", ") : c.op === "between" ? vals.join(" – ") : c.op === "within_days" ? `${vals[0] ?? "?"} days` : vals.join(", ");
+  return `${f.label} ${OP_LABEL[c.op]}${shown ? ` ${shown}` : ""}`;
+}
 
 const arr = (v: unknown) => (Array.isArray(v) ? (v as string[]) : typeof v === "string" && v ? [v] : []);
 const num = (v: unknown) => (typeof v === "number" ? v : typeof v === "string" && v.trim() ? Number(v) : NaN);
-function cmpDate(day: string | undefined, c: ViewCondition, now: Date): boolean {
+export function cmpDate(day: string | undefined, c: ViewCondition, now: Date): boolean {
   if (c.op === "empty") return !day; if (c.op === "not_empty") return !!day; if (!day) return false;
   const [a, b] = Array.isArray(c.value) ? (c.value as string[]) : [String(c.value ?? ""), ""];
   if (c.op === "before") return !!a && day < a; if (c.op === "after") return !!a && day > a; if (c.op === "on") return day === a;
@@ -304,7 +326,7 @@ function cmpDate(day: string | undefined, c: ViewCondition, now: Date): boolean 
   if (c.op === "today") return day === dayKey(now);
   return false;
 }
-function cmpScalar(v: unknown, c: ViewCondition, kind: FieldKind): boolean {
+export function cmpScalar(v: unknown, c: ViewCondition, kind: FieldKind): boolean {
   const has = !(v === undefined || v === "" || (Array.isArray(v) && !v.length));
   if (c.op === "empty") return !has; if (c.op === "not_empty") return has;
   if (kind === "bool") return c.op === "yes" ? v === true : c.op === "no" ? v !== true : false;
@@ -391,3 +413,37 @@ export function starterViews(ownerId: string, at: string): SavedView[] {
 /** Lead ids whose stored values reference the field — so archiving never loses data. */
 export const viewsUsingField = (views: SavedView[], fieldId: string) => views.filter((v) => !v.archived && v.filter.conditions.some((c) => c.field === `cf:${fieldId}`));
 export const viewsUsingTag = (views: SavedView[], tagId: string) => views.filter((v) => !v.archived && v.filter.conditions.some((c) => c.field === "tags" && arr(c.value).includes(tagId)));
+
+/* ============================ shared write rules ============================ */
+/** Pure: create or edit a field definition in one entity's list. Same rules for Lead and Project fields. */
+export function applyFieldSave(input: CustomFieldDef, defs: CustomFieldDef[], values: FieldValues, at: string): { error: string } | { defs: CustomFieldDef[]; values: FieldValues } {
+  const [one, many] = ENTITY_NOUN[input.entity];
+  const cur = input.id ? defs.find((f) => f.id === input.id) : undefined;
+  const def: CustomFieldDef = { ...input, label: input.label.trim(), ...(input.description?.trim() ? { description: input.description.trim() } : { description: undefined }), id: input.id, order: cur?.order ?? (defs.length ? Math.max(...defs.map((f) => f.order)) + 1 : 0) };
+  if (!def.id) return { error: "Missing internal id." };
+  const err = fieldDefError(def, defs); if (err) return { error: err };
+  if (/pass(word|wd)|api[ _-]?key|secret|token|credential/i.test(def.label)) return { error: "Don't keep passwords, API keys or credentials in custom fields — note where they are stored instead." };
+  if (!cur) return { defs: [...defs, { ...def, createdAt: at, updatedAt: at, version: 1, history: [{ at, change: "Created" }] }], values };
+  const lost = removedUsedOptions(cur, def, values);
+  if (lost.length) return { error: `Option ${lost.map((o) => `“${o.label}” (${o.count} ${o.count > 1 ? many : one})`).join(", ")} is in use — archive it instead of deleting it.` };
+  let next = values;
+  if (cur.type !== def.type) {
+    const imp = typeChangeImpact(cur, def, values);
+    if (imp.incompatible.length) return { error: `${imp.incompatible.length} ${imp.incompatible.length > 1 ? `${many} have values` : `${one} has a value`} that can't become ${def.type}. Nothing was changed.` };
+    next = Object.fromEntries(Object.entries(values).map(([id, row]) => { const v = row[cur.id]; return [id, v === undefined ? row : { ...row, [cur.id]: convertValue(v, cur, def)! }]; }));
+  }
+  const changes = [cur.label !== def.label && `Renamed from “${cur.label}”`, cur.type !== def.type && `Type ${cur.type} → ${def.type}`, cur.required !== def.required && (def.required ? "Now required" : "Now optional"), (cur.visibility !== def.visibility || cur.editable !== def.editable) && "Visibility changed", JSON.stringify(cur.options) !== JSON.stringify(def.options) && "Options changed"].filter(Boolean) as string[];
+  return { values: next, defs: defs.map((f) => (f.id === cur.id ? { ...def, createdAt: cur.createdAt, updatedAt: at, version: cur.version + 1, history: [...cur.history, { at, change: changes.join(" · ") || "Edited" }].slice(-50) } : f)) };
+}
+/** Pure: validate and merge one record's custom values for this viewer. Blocks fields the viewer may not edit. */
+export function applyFieldValues(defs: CustomFieldDef[], prev: Record<string, FieldValue>, input: Record<string, unknown>, viewer: Viewer, isNew: boolean): { ok: true; row: Record<string, FieldValue>; needs: string[] } | { ok: false; errors: Record<string, string> } {
+  const allowed = activeFields(defs).filter((d) => viewer.owner || (d.visibility === "team" && d.editable === "team"));
+  const ok = new Set(allowed.map((d) => d.id));
+  const blocked = Object.keys(input).filter((k) => !ok.has(k));
+  if (blocked.length) return { ok: false, errors: Object.fromEntries(blocked.map((k) => [k, "You can't edit this field."])) };
+  const r = validateLeadValues(allowed, input, { isNew, previous: prev });
+  if (Object.keys(r.errors).length) return { ok: false, errors: r.errors };
+  const row: Record<string, FieldValue> = { ...prev };
+  for (const k of Object.keys(input)) { const v = r.values[k]; if (v === undefined) delete row[k]; else row[k] = v; }
+  return { ok: true, row, needs: r.needs };
+}

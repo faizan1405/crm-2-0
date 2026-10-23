@@ -53,3 +53,5 @@ Frontend-only demo. No backend; production CRM untouched.
 - [x] Phase 3G: custom fields, tags, saved views, CRM Configuration page, automation custom conditions, Data Vault coverage
 - [x] Phase 3G.1 Project Desk: deal→project handoff, board, tasks/milestones, requirements, finance view, delivery, support, permissions, backup
 - [ ] Phase 3G.1 follow-ups: project custom fields/tags and project automation rules; project file uploads (wait on backend storage)
+
+- [x] Phase 3G.1.1 Project fields, tags, project automation, QA A/B/C

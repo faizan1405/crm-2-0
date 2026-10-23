@@ -6,12 +6,14 @@ import { useAccess } from "@/lib/crm/session";
 import { formatDateTime } from "@/lib/crm/format";
 import { Button } from "@/components/ui/button";
 
-/** Automation reminders for leads in the current workspace (employees only ever hold their scoped leads). */
-export function RemindersPanel({ limit = 8 }: { limit?: number }) {
-  const { reminders, leads, employees, completeReminder, dismissReminder } = useCRM();
+/** Automation reminders for leads and projects in the current workspace (employees only ever hold their scoped leads). */
+export function RemindersPanel({ limit = 8, only }: { limit?: number; only?: "project" }) {
+  const { reminders, leads, projects, employees, completeReminder, dismissReminder } = useCRM();
   const { can } = useAccess();
   const ids = new Map(leads.map((l) => [l.id, l]));
-  const open = reminders.filter((r) => r.status === "open" && ids.has(r.leadId)).sort((a, b) => (a.importance === b.importance ? b.createdAt.localeCompare(a.createdAt) : a.importance === "high" ? -1 : 1));
+  const pids = new Map(projects.map((p) => [p.id, p]));
+  // Project reminders show only for projects in this workspace (employees hold only their assigned projects).
+  const open = reminders.filter((r) => r.status === "open" && (!only || !!r.projectId) && (r.projectId ? pids.has(r.projectId) : ids.has(r.leadId))).sort((a, b) => (a.importance === b.importance ? b.createdAt.localeCompare(a.createdAt) : a.importance === "high" ? -1 : 1));
   if (!open.length) return null;
   const emp = (id: string | null) => (id ? employees.find((e) => e.id === id)?.name ?? "Employee" : "Unassigned");
   return (
@@ -29,7 +31,7 @@ export function RemindersPanel({ limit = 8 }: { limit?: number }) {
               <div className="text-xs text-muted-foreground">{r.ruleName} · {emp(r.employeeId)} · {formatDateTime(r.dueAt)}{r.flag ? " · flagged" : ""}{r.escalated ? " · escalated to Owner" : ""}</div>
             </div>
             {r.flag && <Flag className="size-3.5 text-warning" aria-hidden />}
-            <Button size="sm" variant="ghost" asChild><Link to="/pipeline" search={{ lead: r.leadId }}>Open lead</Link></Button>
+            {r.projectId ? <Button size="sm" variant="ghost" asChild><Link to="/projects/$id" params={{ id: r.projectId }}>Open project</Link></Button> : <Button size="sm" variant="ghost" asChild><Link to="/pipeline" search={{ lead: r.leadId }}>Open lead</Link></Button>}
             {can("followups.view") && <>
               <Button size="sm" variant="outline" onClick={() => { completeReminder(r.id); toast.success("Reminder done"); }}><Check className="size-3.5" />Done</Button>
               <Button size="sm" variant="ghost" aria-label="Dismiss reminder" onClick={() => { dismissReminder(r.id); toast("Reminder dismissed"); }}><X className="size-3.5" /></Button>

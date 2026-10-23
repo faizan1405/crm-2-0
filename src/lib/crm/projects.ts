@@ -66,6 +66,8 @@ export interface Project {
   carried: { source?: string; service?: string; packageRef?: string; dealValue?: number; fields?: { label: string; value: string }[] };
   /** Set when the linked Deal was cancelled or the Lead marked lost after handoff. The Project is never deleted. */
   reviewFlag?: string | undefined;
+  /** Set by an automation "Flag for attention" action. Cleared by the Owner; never changes money, stage or delivery. */
+  attention?: { reason: string; at: string; ruleId: string } | undefined;
   archived: boolean;
   history: ProjectHistory[];
   createdAt: string;
@@ -275,6 +277,7 @@ export function projectAttention(projects: Project[], tasks: ProjectTask[], requ
   for (const p of projects) {
     if (p.archived) continue;
     if (p.reviewFlag) out.push({ id: `${p.id}:review`, projectId: p.id, kind: "review", text: p.reviewFlag });
+    if (p.attention) out.push({ id: `${p.id}:auto:${p.attention.at}`, projectId: p.id, kind: "review", text: `Automation: ${p.attention.reason}` });
     if (isProjectOverdue(p, today)) out.push({ id: `${p.id}:overdue:${p.targetDelivery}`, projectId: p.id, kind: "overdue", text: `Target delivery ${p.targetDelivery} has passed.` });
     else if (isActive(p) && p.targetDelivery && daysBetween(today, p.targetDelivery) <= 7) out.push({ id: `${p.id}:due:${p.targetDelivery}`, projectId: p.id, kind: "due_soon", text: `Delivery due in ${daysBetween(today, p.targetDelivery)} day(s).` });
     if (p.status === "ready") out.push({ id: `${p.id}:ready`, projectId: p.id, kind: "ready", text: "Client is ready — work can begin." });

@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
 import { AdditionalInfo, TagChips, TagPicker, useViewer } from "@/components/crm/Customize";
 import { ViewEditor, newView } from "@/components/crm/ViewEditor";
 import { viewCtxOf, viewerId } from "@/lib/crm/store";
-import { runView, viewAllowed, viewEditable, viewIssues, type SavedView, type ViewCondition } from "@/lib/crm/customize";
+import { tagForLeads, runView, viewAllowed, viewEditable, viewIssues, type SavedView, type ViewCondition } from "@/lib/crm/customize";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Bookmark, BookmarkPlus, Star, Tag, AlertTriangle, Pencil } from "lucide-react";
 
@@ -143,7 +143,7 @@ function Leads() {
     if (!r.changed) { toast.info(`No lead needed this change`); return; }
     toast.success(`${tagOp.mode === "add" ? "Added" : "Removed"} “${name}” · ${r.changed} lead${r.changed === 1 ? "" : "s"}`, { action: { label: "Undo", onClick: () => { const u = useCRM.getState().undoBulkTags(r.before, r.applied); toast(u.kept ? `Undone on ${u.restored} · ${u.kept} kept (changed since)` : `Undone on ${u.restored} lead${u.restored === 1 ? "" : "s"}`); } } });
   };
-  const activeTags = crm.tagDefs.filter((t) => t.status === "active");
+  const activeTags = crm.tagDefs.filter((t) => t.status === "active" && tagForLeads(t));
   const viewWarn = activeView ? viewIssues(activeView, viewCtxOf(crm, viewer)) : [];
   const pinnedViews = myViews.filter((v) => vprefs.pinned.includes(v.id));
   /** Bulk edit with one Undo; each lead goes through the normal guarded updateLead. Lost is excluded (needs a reason per lead). */
@@ -270,7 +270,7 @@ function Leads() {
         {can("leads.edit") && <select aria-label="Bulk change priority" className={cn(selectCls, "h-8 text-xs")} value="" onChange={(e) => bulkPatch({ priority: e.target.value as LeadPriority }, `Priority set to ${e.target.value}`)}><option value="">Priority…</option><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option></select>}
         {(can("pipeline.edit") || can("leads.edit")) && <select aria-label="Bulk change stage" className={cn(selectCls, "h-8 text-xs")} value="" onChange={(e) => bulkPatch({ status: e.target.value as LeadStatus }, `Moved to ${STATUS_LABEL[e.target.value as LeadStatus]}`)}><option value="">Stage…</option>{LEAD_STATUSES.filter((s) => s !== "lost").map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select>}
         {can("leads.edit") && activeTags.length > 0 && <select aria-label="Bulk add tag" className={cn(selectCls, "h-8 text-xs")} value="" onChange={(e) => e.target.value && setTagOp({ tagId: e.target.value, mode: "add" })}><option value="">Add tag…</option>{activeTags.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}
-        {can("leads.edit") && crm.tagDefs.length > 0 && <select aria-label="Bulk remove tag" className={cn(selectCls, "h-8 text-xs")} value="" onChange={(e) => e.target.value && setTagOp({ tagId: e.target.value, mode: "remove" })}><option value="">Remove tag…</option>{crm.tagDefs.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}
+        {can("leads.edit") && crm.tagDefs.length > 0 && <select aria-label="Bulk remove tag" className={cn(selectCls, "h-8 text-xs")} value="" onChange={(e) => e.target.value && setTagOp({ tagId: e.target.value, mode: "remove" })}><option value="">Remove tag…</option>{crm.tagDefs.filter((t) => tagForLeads(t) || Object.values(crm.leadTags).some((ids) => ids.includes(t.id))).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}
         <Button size="sm" variant="ghost" aria-label="Clear selection" onClick={() => setSelection(EMPTY_SELECTION)}><X />Clear</Button>
       </div>}
       <BulkAssignDialog open={bulkAssign} leadIds={picked} scope={selection.kind === "matching" ? `All leads matching ${selection.label}${selection.exclude.length ? `, minus ${selection.exclude.length} excluded` : ""}` : "Leads picked individually"} onClose={() => setBulkAssign(false)} onDone={() => setSelection(EMPTY_SELECTION)} />

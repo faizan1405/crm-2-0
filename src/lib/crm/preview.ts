@@ -5,10 +5,11 @@ import { resolve, leadsInScope, type Assignment, type Effective } from "./access
 import { roleLabel, type Employee } from "./team";
 import type { Deal, FollowUp, Lead, LeadActivity, Payment } from "./types";
 import type { QuotationShare } from "./studio";
+import { scopeProjectCustomization } from "./projectCustomize";
 import { scopeProjects, type Project, type ProjectMilestone, type ProjectTask, type SupportRequest } from "./projects";
 import { scopeCustomization, viewAllowed, type CustomFieldDef, type FieldValues, type LeadTags, type SavedView } from "./customize";
 
-interface ScopeInput { leads: Lead[]; followUps: FollowUp[]; activities: LeadActivity[]; deals: Deal[]; payments: Payment[]; quotationShares: QuotationShare[]; assignments: Record<string, Assignment>; customFields?: CustomFieldDef[]; fieldValues?: FieldValues; leadTags?: LeadTags; savedViews?: SavedView[]; projects?: Project[]; projectTasks?: ProjectTask[]; projectMilestones?: ProjectMilestone[]; supportRequests?: SupportRequest[] }
+interface ScopeInput { leads: Lead[]; followUps: FollowUp[]; activities: LeadActivity[]; deals: Deal[]; payments: Payment[]; quotationShares: QuotationShare[]; assignments: Record<string, Assignment>; customFields?: CustomFieldDef[]; fieldValues?: FieldValues; leadTags?: LeadTags; savedViews?: SavedView[]; projects?: Project[]; projectTasks?: ProjectTask[]; projectMilestones?: ProjectMilestone[]; supportRequests?: SupportRequest[]; projectFields?: CustomFieldDef[]; projectFieldValues?: FieldValues; projectTags?: LeadTags }
 
 /** Pure: the working copy an employee would receive from the backend. Owner notes are never included. */
 export function scopeWorkspace(d: ScopeInput, employeeId: string, eff: Effective) {
@@ -27,7 +28,12 @@ export function scopeWorkspace(d: ScopeInput, employeeId: string, eff: Effective
     // Sensitive (Owner-only) field definitions and values never reach the employee copy; views never widen record scope.
     ...(() => { const viewer = { owner: false as const, employeeId, canEdit: eff.can("leads.edit") }; const c = scopeCustomization(d.customFields ?? [], d.fieldValues ?? {}, ids, viewer); return { ...c, leadTags: Object.fromEntries(Object.entries(d.leadTags ?? {}).filter(([id]) => ids.has(id))), savedViews: (d.savedViews ?? []).filter((v) => !v.archived && viewAllowed(v, viewer)) }; })(),
     // Projects: only those the employee is assigned to, and only with the projects.view permission.
-    ...scopeProjects({ projects: d.projects ?? [], projectTasks: d.projectTasks ?? [], projectMilestones: d.projectMilestones ?? [], supportRequests: d.supportRequests ?? [] }, { owner: false, employeeId, can: (k) => eff.can(k), financeAmounts: money }),
+    ...(() => {
+      const sp = scopeProjects({ projects: d.projects ?? [], projectTasks: d.projectTasks ?? [], projectMilestones: d.projectMilestones ?? [], supportRequests: d.supportRequests ?? [] }, { owner: false, employeeId, can: (k) => eff.can(k), financeAmounts: money });
+      // Owner-only Project fields and their values never reach the employee copy.
+      const pc = scopeProjectCustomization(d.projectFields ?? [], d.projectFieldValues ?? {}, d.projectTags ?? {}, new Set(sp.projects.map((p) => p.id)), { owner: false, employeeId, canEdit: eff.can("projects.edit") });
+      return { ...sp, ...pc };
+    })(),
     automationRules: [], automationRuns: [],
     notes: [], bin: [], callOps: [], briefingDone: [], legacyQuotations: [], backupHistory: [], assignmentRules: [], firedRules: [],
   };
