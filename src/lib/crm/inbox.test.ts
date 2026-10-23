@@ -62,13 +62,15 @@ describe("inbox rows, filters and counts", () => {
     const o = overview(rows(), now);
     expect(o.awaitingReview).toBe(2); // 1,2 (3 reviewed, 4 won)
     expect(o.unassigned).toBe(2); // 2,3
-    expect(o.needFirstContact).toBe(2); // 3 has a logged call
+    expect(o.needFirstContact).toBe(2); // 3 has a logged call attempt
     expect(o.recent).toBe(3);
   });
   it("clicking Call is not a contact — only saved records count", () => {
     expect(firstContact("x", [], [])).toBe("not_contacted");
-    expect(firstContact("x", [{ id: "1", leadId: "x", type: "whatsapp", text: "", at: "" }], [])).toBe("attempt");
-    expect(firstContact("x", [], [{ id: "f", leadId: "x", type: "call", dueAt: "" }])).toBe("followup");
+    expect(firstContact("x", [{ id: "1", leadId: "x", type: "whatsapp", text: "", at: "" }], [])).toBe("outbound");
+    expect(firstContact("x", [], [{ id: "f", leadId: "x", type: "call", dueAt: "" }])).toBe("followup_only");
+    expect(firstContact("x", [{ id: "1", leadId: "x", type: "call", outcome: "Not picked", text: "", at: "" }], [])).toBe("attempted");
+    expect(firstContact("x", [{ id: "1", leadId: "x", type: "call", outcome: "Connected", text: "", at: "" }], [])).toBe("established");
   });
 });
 
