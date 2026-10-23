@@ -13,7 +13,7 @@ import { useCRM } from "@/lib/crm/store";
 import { useSession, allows } from "@/lib/crm/session";
 import { projectViewer } from "@/lib/crm/projectStore";
 import { activeProjectForDeal, draftFromDeal, PROJECT_STATUSES, STATUS_TEXT, STAGE_TEXT, type Project, type ProjectStage, type ProjectStatus, type ProjectViewer } from "@/lib/crm/projects";
-import { displayValue, fieldVisible } from "@/lib/crm/customize";
+import { activeFields, displayValue, fieldEditable, fieldVisible, tagForProjects, validateLeadValues } from "@/lib/crm/customize";
 import { cn } from "@/lib/utils";
 import type { Deal } from "@/lib/crm/types";
 
