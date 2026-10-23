@@ -23,7 +23,7 @@ export function AssignDialog({ open, leadIds, source, onClose, onDone }: { open:
     if (!r.ok) { toast.error(r.error); return; }
     const who = pick ? employees.find((e) => e.id === pick)?.name : "the Owner";
     const one = leadIds.length === 1 ? leads.find((l) => l.id === leadIds[0])?.name : null;
-    toast.success(r.changed ? `${one ?? `${r.changed} lead${r.changed === 1 ? "" : "s"}`} ${pick ? "assigned to" : "returned to"} ${who}` : "Nothing changed — already set", r.changed ? { action: { label: "Undo", onClick: () => restoreAssignments(snap) } } : undefined);
+    toast.success(r.changed ? `${one ?? `${r.changed} lead${r.changed === 1 ? "" : "s"}`} ${pick ? "assigned to" : "returned to"} ${who}` : "Nothing changed — already set", r.changed ? { action: { label: "Undo", onClick: () => { const u = restoreAssignments(snap, Object.fromEntries(leadIds.map((id) => [id, pick]))); if (u.kept) toast.info(`Undo restored ${u.restored}; ${u.kept} kept because they changed again since.`); } } } : undefined);
     setPick(undefined); onDone?.(); onClose();
   };
   return <Dialog open={open} onOpenChange={(o) => { if (!o) { setPick(undefined); onClose(); } }}><DialogContent className="sm:max-w-md">

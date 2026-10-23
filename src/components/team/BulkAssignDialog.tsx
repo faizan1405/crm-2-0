@@ -44,12 +44,12 @@ export function BulkAssignDialog({ open, leadIds, scope, onClose, onDone }: { op
     if (allocErr || (needsAck && !ack)) return;
     const r = applyAssignmentPlan(plan, mode === "one" ? "Leads bulk assign" : `Leads distribute (${method})`);
     if (!r.ok) { toast.error(r.error); return; }
-    const snap = r.snapshot;
+    const snap = r.snapshot; const exp: Record<string, string | null> = Object.fromEntries(plan.filter((x) => x.leadId in snap).map((x) => [x.leadId, x.employeeId]));
     const msg = r.changed ? `${r.changed} lead${r.changed === 1 ? "" : "s"} ${mode === "one" ? "assigned" : "distributed"}` : "Nothing changed — already set";
     if (r.skipped.length) {
       const why = [...new Set(r.skipped.map((s) => SKIP_LABEL[s.reason]))].join("; ");
-      toast.warning(`${msg}. ${r.skipped.length} skipped: ${why}.`, r.changed ? { action: { label: "Undo", onClick: () => restoreAssignments(snap) }, duration: 10000 } : undefined);
-    } else toast.success(msg, r.changed ? { action: { label: "Undo", onClick: () => restoreAssignments(snap) }, duration: 8000 } : undefined);
+      toast.warning(`${msg}. ${r.skipped.length} skipped: ${why}.`, r.changed ? { action: { label: "Undo", onClick: () => { const u = restoreAssignments(snap, exp); if (u.kept) toast.info(`Undo restored ${u.restored}; ${u.kept} kept because they changed again since.`); } }, duration: 10000 } : undefined);
+    } else toast.success(msg, r.changed ? { action: { label: "Undo", onClick: () => { const u = restoreAssignments(snap, exp); if (u.kept) toast.info(`Undo restored ${u.restored}; ${u.kept} kept because they changed again since.`); } }, duration: 8000 } : undefined);
     reset(); onDone?.(); onClose();
   };
 

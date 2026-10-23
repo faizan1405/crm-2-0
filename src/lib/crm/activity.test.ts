@@ -164,3 +164,36 @@ describe("Data Vault coverage", () => {
     for (const k of ["teamEvents", "notifyPrefs", "notifyReads"]) expect(keys).toContain(k);
   });
 });
+
+describe("bulk Undo safety", () => {
+  it("undo never overwrites a newer reassignment of the same lead", () => {
+    const leads = s().leads.slice(0, 6).map((l) => l.id);
+    const plan = leads.map((id) => ({ leadId: id, previous: null, employeeId: empA }));
+    const r = s().applyAssignmentPlan(plan, "bulk");
+    if (!r.ok) throw new Error("plan failed");
+    s().assignLeads([leads[0]!], empB, "manual"); // newer, unrelated edit
+    const u = s().restoreAssignments(r.snapshot, Object.fromEntries(plan.map((p) => [p.leadId, p.employeeId])));
+    expect(u).toEqual({ restored: 5, kept: 1 });
+    expect(s().assignments[leads[0]!]?.employeeId).toBe(empB);
+    expect(s().assignments[leads[1]!]).toBeUndefined();
+  });
+  it("assignment never duplicates or edits the lead, notes and follow-ups stay linked", () => {
+    const id = s().leads[0]!.id;
+    const before = JSON.stringify(s().leads.find((l) => l.id === id));
+    const fus = s().followUps.filter((f) => f.leadId === id).length;
+    s().applyAssignmentPlan([{ leadId: id, previous: null, employeeId: empA }, { leadId: id, previous: null, employeeId: empB }], "bulk");
+    expect(s().leads.filter((l) => l.id === id)).toHaveLength(1);
+    expect(JSON.stringify(s().leads.find((l) => l.id === id))).toBe(before);
+    expect(s().followUps.filter((f) => f.leadId === id)).toHaveLength(fus);
+    expect(s().assignments[id]?.employeeId).toBe(empA);
+  });
+  it("deleted and inactive targets are skipped with reasons", () => {
+    const [a, b] = s().leads.slice(0, 2).map((l) => l.id) as [string, string];
+    s().setEmployeeStatus(empC, "inactive");
+    s().deleteLead(a);
+    const r = s().applyAssignmentPlan([{ leadId: a, previous: null, employeeId: empA }, { leadId: b, previous: null, employeeId: empC }], "bulk");
+    if (!r.ok) throw new Error("plan failed");
+    expect(r.skipped.map((x) => x.reason).sort()).toEqual(["inactive", "missing"]);
+    expect(r.changed).toBe(0);
+  });
+});
