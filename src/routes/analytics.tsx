@@ -5,7 +5,8 @@ import { toast } from "sonner";
 import { Archive, BarChart3, Copy, Pencil, Pin, Plus, RotateCcw, Star, X, ShieldCheck, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Shell } from "@/components/crm/Shell";
 import { useCRM, viewCtxOf } from "@/lib/crm/store";
-import { formatDate, formatINR, formatINRCompact, formatPct } from "@/lib/crm/format";
+import { dayKey as formatDayKey, formatDate, formatINR, formatINRCompact, formatPct } from "@/lib/crm/format";
+import { cardSignals as cardSignalsS } from "@/lib/crm/pipeline";
 import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, type LeadStatus } from "@/lib/crm/types";
 import { financeSummary } from "@/lib/crm/finance";
 import { runView } from "@/lib/crm/customize";
@@ -13,7 +14,7 @@ import { indexEvents, hasAttribution, metricValue, workloadFor } from "@/lib/crm
 import { OWNER_ACTOR_ID } from "@/lib/crm/activity";
 import { isActive } from "@/lib/crm/projects";
 import {
-  ANALYTICS_PERIODS, DEFINITIONS, OPEN_STAGES, REPORT_DIMS, REPORT_METRICS, REPORT_PRESETS, SOURCE_LABEL,
+  bucketOf as bucketOfS, ANALYTICS_PERIODS, DEFINITIONS, OPEN_STAGES, REPORT_DIMS, REPORT_METRICS, REPORT_PRESETS, SOURCE_LABEL,
   activityStats, analyticsWindow, delta, filterLeads, financeBreakdown, financeKpis, forecast, forecastConfigError, funnel, granularityFor, indexActivity,
   isFiltered, leadTrend, previousWindow, projectFinanceLinks, projectStats, reportError, runReport, sourcePerformance,
   type AnalyticsData, type AnalyticsPeriod, type LeadFilter, type ReportDef, type ReportSource, type ReportChart,
@@ -138,7 +139,7 @@ type SecProps = { st: Studio; open: (d: Drill) => void };
 function Overview({ st, open }: SecProps) {
   const { s, w, prev, leads, idx, now, compare } = st;
   const cur = useMemo(() => {
-    const cohort = leads.filter((l) => l.createdAt.slice(0, 10) >= shiftDayS(w.start, -1) && inW(l.createdAt, w));
+    const cohort = leads.filter((l) => inW(l.createdAt, w));
     const pc = leads.filter((l) => inW(l.createdAt, prev));
     const awaiting = leads.filter((l) => OPEN_STAGES.includes(l.status) && !idx.firstCall.has(l.id));
     const qualified = cohort.filter((l) => ["qualified", "proposal", "won"].includes(l.status));
@@ -180,9 +181,6 @@ function Overview({ st, open }: SecProps) {
   );
 }
 const inW = (iso: string, w: { start: string; end: string }) => { const k = formatDayKey(iso); return k >= w.start && k <= w.end; };
-import { dayKey as formatDayKey } from "@/lib/crm/format";
-import { shiftDay } from "@/lib/crm/dates";
-const shiftDayS = shiftDay;
 function LinkKpi({ to, children }: { to: "/follow-ups"; children: ReactNode }) { return <Link to={to} className="as-kpi-link" aria-label="Open Follow-ups agenda">{children}</Link>; }
 
 function Trend({ data }: { data: { bucket: string; received: number; qualified: number; won: number }[] }) {
@@ -272,7 +270,6 @@ function Acquisition({ st, open }: SecProps) {
     </div>
   );
 }
-import { bucketOf as bucketOfS } from "@/lib/crm/analytics";
 
 // ---------------------------------------------------------------- Funnel
 function FunnelSection({ st, open }: SecProps) {
@@ -315,7 +312,6 @@ function FunnelSection({ st, open }: SecProps) {
     </div>
   );
 }
-import { cardSignals as cardSignalsS } from "@/lib/crm/pipeline";
 
 // ---------------------------------------------------------------- Activity
 function ActivitySection({ st }: SecProps) {
