@@ -12,6 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { ProofField, PaymentProofPreview, saveProof, useProofPicker, type StagedProof } from "@/components/crm/PaymentProof";
+import { useProofIndex } from "@/lib/crm/proofRepo";
+import { Paperclip } from "lucide-react";
 
 export const Route = createFileRoute("/deals")({
   head: () => ({
@@ -73,6 +76,7 @@ function Deals() {
 function DealInspector({ deal: d, onPay, onPick }: { deal: Deal; onPay: () => void; onPick: (id: string) => void }) {
   const { deals, payments } = useCRM();
   const st = dealPaymentStatus(d, payments), got = dealCollected(d.id, payments), out = dealOutstanding(d, payments);
+  const proofs = useProofIndex();
   const hist = payments.filter((p) => p.dealId === d.id).sort((a, b) => b.date.localeCompare(a.date));
   const others = deals.filter((x) => x.id !== d.id && (d.leadId ? x.leadId === d.leadId : x.clientName === d.clientName));
   const pct = d.finalAmount ? Math.min(got / d.finalAmount, 1) : 0;
@@ -93,20 +97,29 @@ function DealInspector({ deal: d, onPay, onPick }: { deal: Deal; onPay: () => vo
       <div className="receipt-edge" aria-hidden />
       <div className="bg-secondary p-6 sm:p-8">
         <div className="eyebrow mb-4">Payment history · {hist.length}</div>
-        <ul className="pay-timeline grid gap-4">{hist.length === 0 && <li className="text-sm text-muted-foreground">No payments yet.</li>}{hist.map((p) => <PaymentRow key={p.id} id={p.id} />)}</ul>
+        <ul className="pay-timeline grid gap-4">{hist.length === 0 && <li className="text-sm text-muted-foreground">No payments yet.</li>}{hist.map((p) => <PaymentRow key={p.id} id={p.id} proof={proofs.map[p.id]} />)}</ul>
         {others.length > 0 && <div className="mt-8 border-t pt-5"><div className="eyebrow mb-3">Other deals for {d.clientName}</div><div className="grid gap-2">{others.map((o) => <button key={o.id} type="button" onClick={() => onPick(o.id)} className="flex items-center justify-between rounded-xl border bg-card px-3 py-2.5 text-left text-sm hover:border-input"><span className="truncate">{o.name}</span><span className="num">{formatINRCompact(o.finalAmount)}</span></button>)}</div></div>}
       </div>
     </aside>
   );
 }
 
-function PaymentRow({ id }: { id: string }) {
+function PaymentRow({ id, proof }: { id: string; proof?: import("@/lib/crm/attachments").ProofMeta | undefined }) {
   const { payments, voidPayment } = useCRM();
   const p = payments.find((x) => x.id === id);
+  const [view, setView] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const picker = useProofPicker(async (s) => { setBusy(true); if (await saveProof(id, s)) toast.success("Proof attached"); setBusy(false); });
   if (!p) return null;
   return (
     <li className={cn("flex items-start justify-between gap-2 text-sm", p.voided && "is-void text-muted-foreground line-through")}>
-      <span><span className="block font-medium">{formatDate(p.date, { day: "numeric", month: "short", year: "numeric" })}</span><span className="text-xs text-muted-foreground">{p.method} · <span className="capitalize">{p.type}</span>{p.reference ? ` · ${p.reference}` : ""}</span></span>
+      <span><span className="block font-medium">{formatDate(p.date, { day: "numeric", month: "short", year: "numeric" })}</span><span className="text-xs text-muted-foreground">{p.method} · <span className="capitalize">{p.type}</span>{p.reference ? ` · ${p.reference}` : ""}</span>
+        {picker.input}
+        <span className="mt-1 block no-underline" style={{ textDecoration: "none" }}>{proof
+          ? <button type="button" onClick={() => setView(true)} className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-medium text-success hover:underline"><Paperclip className="size-3" />View proof</button>
+          : <button type="button" disabled={busy} onClick={picker.open} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"><Paperclip className="size-3" />{busy ? "Saving…" : "Add proof"}</button>}</span>
+        {view && proof && <PaymentProofPreview paymentId={id} meta={proof} title={`${formatINR(p.amount)} · ${p.method}`} onClose={() => setView(false)} />}
+      </span>
       <span className="flex items-center gap-2"><span className="num">{formatINR(p.amount)}</span>{!p.voided && <Button size="sm" variant="ghost" className="text-xs text-muted-foreground hover:text-destructive" onClick={() => { if (window.confirm("Void this payment?")) { voidPayment(p.id); toast.success("Payment voided"); } }}>Void</Button>}</span>
     </li>
   );
@@ -120,13 +133,26 @@ function PaymentDialog({ deal, onClose }: { deal: Deal; onClose: () => void }) {
   const [type, setType] = useState<PaymentType>("milestone");
   const [date, setDate] = useState(dayKey(new Date()));
   const [ref, setRef] = useState("");
-  const save = () => {
+  const [proof, setProof] = useState<StagedProof | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    if (saving) return;
+    if (savedId) { // payment already recorded; only retry the proof
+      if (proof) { setSaving(true); const ok = await saveProof(savedId, proof); setSaving(false); if (!ok) return; toast.success("Proof attached"); }
+      onClose(); return;
+    }
     const n = Number(amount);
     if (!Number.isFinite(n) || !(n > 0)) { toast.error("Enter a valid amount"); return; }
     if (n > out) { toast.error(`Amount exceeds the ${formatINR(out)} outstanding`); return; }
-    const saved = addPayment({ dealId: deal.id, amount: n, date, method, type: n === out ? "final" : type, ...(ref ? { reference: ref } : {}) });
+    const pid = `payment_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+    const saved = addPayment({ dealId: deal.id, amount: n, date, method, type: n === out ? "final" : type, ...(ref ? { reference: ref } : {}) }, pid);
     if (!saved) { toast.error("Payment could not be recorded; check the balance and date"); return; }
     toast.success(`${formatINR(n)} recorded for ${deal.clientName}`);
+    if (proof) {
+      setSaving(true); const ok = await saveProof(pid, proof); setSaving(false);
+      if (!ok) { setSavedId(pid); toast.error("The payment was recorded, but the proof wasn't saved. Tap Retry proof, or attach it later from payment history."); return; }
+    }
     onClose();
   };
   return (
@@ -140,8 +166,9 @@ function PaymentDialog({ deal, onClose }: { deal: Deal; onClose: () => void }) {
           <div className="grid gap-1.5"><Label htmlFor="pay-method">Method</Label><select id="pay-method" className={selectCls} value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)}>{METHODS.map((m) => <option key={m}>{m}</option>)}</select></div>
           <div className="grid gap-1.5"><Label htmlFor="pay-type">Type</Label><select id="pay-type" className={selectCls} value={type} onChange={(e) => setType(e.target.value as PaymentType)}>{["advance", "milestone", "final", "other"].map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}</select></div>
           <div className="grid gap-1.5 sm:col-span-2"><Label htmlFor="pay-ref">Reference</Label><Input id="pay-ref" placeholder="UTR / cheque no. (optional)" value={ref} onChange={(e) => setRef(e.target.value)} /></div>
+          <ProofField value={proof} onChange={setProof} />
         </div>
-        <DialogFooter><Button variant="ghost" onClick={onClose}>Cancel</Button><Button onClick={save}>Save payment</Button></DialogFooter>
+        <DialogFooter><Button variant="ghost" onClick={onClose}>{savedId ? "Close" : "Cancel"}</Button><Button disabled={saving} onClick={save}>{saving ? "Saving…" : savedId ? "Retry proof" : "Save payment"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
