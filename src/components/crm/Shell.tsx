@@ -1,4 +1,4 @@
-import { Inbox, WhatsAppComposer } from "@/components/crm/WhatsAppComposer";
+import { WhatsAppComposer } from "@/components/crm/WhatsAppComposer";
 import { isPending } from "@/lib/crm/followups";
 import { PostCallDialog, openCallLog } from "@/components/crm/PostCallDialog";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
