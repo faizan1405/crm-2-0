@@ -306,6 +306,15 @@ export function currentViewer(): Viewer {
   const pv = activePreview();
   return pv ? { owner: false, employeeId: pv.employeeId, canEdit: allows(pv, "leads.edit") } : { owner: true };
 }
+/** Automation evaluation context — one place, shared by real runs and Automation Studio dry runs. */
+export function automationCtxOf(st: Pick<CRMState, "leads" | "activities" | "followUps" | "assignments" | "inboxMeta" | "fieldValues" | "leadTags" | "customFields" | "tagDefs" | "employees">, now = new Date()) {
+  const vctx = viewCtxOf(st, { owner: true }, now); const vfields = new Map(filterFields(vctx).map((f) => [f.key, f]));
+  return { leads: st.leads, activities: st.activities, followUps: st.followUps, assignments: st.assignments, inboxMeta: st.inboxMeta, now, customMatch: (l: Lead, cs: NonNullable<AutomationRule["conditions"]["custom"]>) => cs.every((c) => matchCondition(l, c as ViewCondition, vctx, vfields)) };
+}
+/** Custom-field/tag problems that stop a rule from running (archived/removed fields or options). */
+export function automationIssues(st: Pick<CRMState, "assignments" | "followUps" | "activities" | "inboxMeta" | "fieldValues" | "leadTags" | "customFields" | "tagDefs" | "employees">, r: AutomationRule) {
+  return r.conditions.custom?.length ? viewIssues({ filter: { mode: "and", conditions: r.conditions.custom as ViewCondition[] } }, viewCtxOf(st, { owner: true })) : [];
+}
 export const viewerId = (v: Viewer) => (v.owner ? OWNER_ACTOR_ID : v.employeeId);
 export function viewCtxOf(s: Pick<CRMState, "assignments" | "followUps" | "activities" | "inboxMeta" | "fieldValues" | "leadTags" | "customFields" | "tagDefs" | "employees">, viewer: Viewer, now = new Date()): ViewCtx {
   return { assignments: s.assignments, followUps: s.followUps, activities: s.activities, inboxMeta: s.inboxMeta, fieldValues: s.fieldValues, leadTags: s.leadTags, customFields: s.customFields, tags: s.tagDefs, employees: s.employees.filter((e) => e.accountStatus !== "archived"), now, viewer };
@@ -428,8 +437,8 @@ export const useCRM = create<CRMState>()(
       setAutomationSettings: (p) => set((s) => ({ automationSettings: { ...s.automationSettings, ...p } })),
       runAutomations: (opts) => {
         const st = get(); const now = opts?.now ? new Date(opts.now) : new Date(); const at = now.toISOString(); const manual = !!opts?.manual;
-        const vctx = viewCtxOf(st, { owner: true }, now); const vfields = new Map(filterFields(vctx).map((f) => [f.key, f]));
-        const ctx = { leads: st.leads, activities: st.activities, followUps: st.followUps, assignments: st.assignments, inboxMeta: st.inboxMeta, now, customMatch: (l: Lead, cs: NonNullable<AutomationRule["conditions"]["custom"]>) => cs.every((c) => matchCondition(l, c as ViewCondition, vctx, vfields)) };
+        const vctx = viewCtxOf(st, { owner: true }, now);
+        const ctx = automationCtxOf(st, now);
         const rec = reconcileReminders(st.reminders, ctx);
         let reminders = rec.next; let budget = st.automationSettings.maxActionsPerRun; let created = 0;
         const runs: AutomationRun[] = []; const fuJobs: { reminderId: string; leadId: string; key: string; dueAt: string; rule: string }[] = [];
