@@ -5,12 +5,13 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   LayoutDashboard, Users, KanbanSquare, CalendarClock, Wallet, StickyNote, Moon, Sun,
-  BarChart3, Sunrise, Settings, MoreHorizontal, Plus, Search, Bell, ArrowUpRight, PhoneCall, Menu, ChevronRight, PanelLeftClose, PanelLeftOpen, Presentation, ShieldCheck,
+  BarChart3, Sunrise, Settings, MoreHorizontal, Plus, Search, Bell, ArrowUpRight, PhoneCall, Menu, ChevronRight, PanelLeftClose, PanelLeftOpen, Presentation, ShieldCheck, Activity,
   Archive, Eye, Lock,
 } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
 import { useSession, useAccess, routeAllowed, type PreviewSession } from "@/lib/crm/session";
 import { exitPreview } from "@/lib/crm/preview";
+import { NotificationCenter } from "./NotificationCenter";
 import { cn } from "@/lib/utils";
 import { initials, displayPrefs, formatDate, dayKey, formatDateTime } from "@/lib/crm/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -31,6 +32,7 @@ const NAV = [
   { to: "/notes", label: "Personal Notes", mobile: "Notes", icon: StickyNote, section: "" },
   { to: "/analytics", label: "Analytics", mobile: "Analytics", icon: BarChart3, section: "Insights" },
   { to: "/daily-briefing", label: "Daily Briefing", mobile: "Briefing", icon: Sunrise, section: "" },
+  { to: "/team-activity", label: "Team Activity", mobile: "Activity", icon: Activity, section: "" },
   { to: "/team", label: "Team Management", mobile: "Team", icon: ShieldCheck, section: "Admin" },
   { to: "/data-vault", label: "Data Vault", mobile: "Vault", icon: Archive, section: "" },
   { to: "/settings", label: "Settings", mobile: "Settings", icon: Settings, section: "Manage" },
@@ -56,7 +58,7 @@ function usePreferenceEffects() {
   }, [theme]);
   useEffect(() => { document.documentElement.dataset["accent"] = accent; document.documentElement.dataset["density"] = density; }, [accent, density]);
 }
-const isActive = (path: string, to: string) => to === "/" ? path === "/" : path.startsWith(to);
+const isActive = (path: string, to: string) => to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`) || (to === "/leads" && path.startsWith("/leads"));
 
 export function ScaleMark({ className }: { className?: string }) {
   return <svg viewBox="0 0 32 32" fill="none" aria-hidden="true" className={cn("size-8", className)}><path d="M5 23V14l7-5v9l-7 5Zm10-5V9l7-5v9l-7 5Zm0 10v-7l12-8v7l-12 8Z" fill="currentColor" /></svg>;
@@ -66,7 +68,7 @@ const GROUPS = [
   { label: "Workspace", items: ["/", "/leads", "/pipeline", "/follow-ups"] },
   { label: "Business", items: ["/deals", "/sales-studio", "/analytics", "/daily-briefing"] },
   { label: "Personal", items: ["/notes"] },
-  { label: "Owner admin", items: ["/team", "/data-vault"] },
+  { label: "Owner admin", items: ["/team", "/team-activity", "/data-vault"] },
   { label: "System", items: ["/settings"] },
 ] as const;
 const COLLAPSE_KEY = "scale-flow-sidebar-collapsed";
@@ -141,7 +143,7 @@ export function Shell({ title, subtitle, actions, children }: { title: string; s
             <button type="button" onClick={() => setSearch(true)} aria-label="Search workspace" className="os-command ml-auto min-w-0 sm:w-64 lg:w-80"><Search className="size-4 shrink-0" /><span className="hidden flex-1 truncate text-left sm:inline">Search…</span><span className="os-kbd hidden sm:inline">⌘K</span></button>
             {can("clients.calls") && <button type="button" onClick={() => setCallPick(true)} className="os-calllog" aria-label="Instant call log"><PhoneCall className="size-4" /><span className="hidden lg:inline">Call log</span></button>}
             <DropdownMenu><DropdownMenuTrigger asChild><button type="button" aria-label="Quick add" className="topbar-icon"><Plus className="size-[18px]" /></button></DropdownMenuTrigger><DropdownMenuContent align="end">{can("leads.create") && <DropdownMenuItem onSelect={() => setAdd(true)}><Users />Add lead</DropdownMenuItem>}{can("followups.create") && <DropdownMenuItem onSelect={() => setSchedule(true)}><CalendarClock />Schedule follow-up</DropdownMenuItem>}{routeAllowed(preview, "/deals") && <DropdownMenuItem asChild><Link to="/deals"><Wallet />Deals & Payments</Link></DropdownMenuItem>}{routeAllowed(preview, "/notes") && <DropdownMenuItem asChild><Link to="/notes"><StickyNote />New note</Link></DropdownMenuItem>}</DropdownMenuContent></DropdownMenu>
-            <button type="button" title="Notifications" aria-label="Notifications" onClick={() => setAlerts(true)} className="topbar-icon relative"><Bell className="size-[18px]" />{attention.length > 0 && <span className="absolute top-2 right-2 size-1.5 rounded-full bg-destructive" />}</button>
+            {preview ? <button type="button" title="Notifications" aria-label="Notifications" onClick={() => setAlerts(true)} className="topbar-icon relative"><Bell className="size-[18px]" />{attention.length > 0 && <span className="absolute top-2 right-2 size-1.5 rounded-full bg-destructive" />}</button> : <NotificationCenter />}
             <button type="button" title="Toggle theme" aria-label="Toggle theme" onClick={() => preferences({theme: dark ? "light" : "dark"})} className="topbar-icon !hidden sm:!grid">{dark ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}</button>
           </div>
         </header>

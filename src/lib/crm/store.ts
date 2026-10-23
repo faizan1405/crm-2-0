@@ -45,6 +45,7 @@ import type { PlanItem, SkipReason } from "./bulk";
 import { buildEmployee, employeeError, withStatus, type AccountStatus, type Employee, type EmployeeInput } from "./team";
 import { builtInTemplates, DEFAULT_DEMO_CATEGORIES, quotationTemplateError, safeUrl, type BusinessProfile, type Demo, type LegacyQuotation, type QuotationShare, type QuotationTemplate, type WaTemplate } from "./studio";
 import { activePreview, allows, previewSink, type CrmEventType } from "./session";
+import { deriveEvents, mergeEvents, markRead, markAllRead, DEFAULT_NOTIFY_PREFS, EMPTY_READS, OWNER_ACTOR_ID, type ActivityEvent, type EventSnap, type NotifyPrefs, type ReadState } from "./activity";
 
 // ---- Preview guards: every action is checked against the previewed employee's permissions (Owner: always allowed). ----
 const DENIED = "Not allowed by this employee's permissions.";
@@ -67,14 +68,29 @@ const GUARDS: Record<string, Guard> = {
   addEmployee: ["__owner", { ok: false, error: DENIED }], updateEmployee: ["__owner", DENIED], setEmployeeStatus: ["__owner", undefined], saveEmployeeAccess: ["__owner", undefined],
   saveRule: ["__owner", DENIED], deleteRule: ["__owner", undefined], moveRule: ["__owner", undefined], setRuleSettings: ["__owner", undefined], applyRulesToExisting: ["__owner", 0],
 };
-function guarded<T extends object>(state: T): T {
+/** Actions never recorded as Team Activity (bulk reset would be noise; settings/templates are not team activity). */
+const UNRECORDED = new Set(["reset", "logBackup"]);
+const snapOf = (s: CRMState): EventSnap => ({ leads: s.leads, followUps: s.followUps, deals: s.deals, payments: s.payments, activities: s.activities, assignments: s.assignments, employees: s.employees, employeeAccess: s.employeeAccess });
+let depth = 0;
+function guarded<T extends object>(state: T, get: () => CRMState, set: (p: Partial<CRMState>) => void): T {
   const out = { ...state } as Record<string, unknown>;
   for (const [name, [perm, denied, event]] of Object.entries(GUARDS)) {
     const fn = out[name] as ((...a: unknown[]) => unknown) | undefined;
     if (typeof fn !== "function") continue;
     out[name] = (...args: unknown[]) => {
       const pv = activePreview();
-      if (!pv) return fn(...args);
+      if (!pv) {
+        // Owner action: record Team Activity from the real before/after state (outermost action only).
+        if (depth > 0 || UNRECORDED.has(name)) return fn(...args);
+        const before = snapOf(get()); depth++;
+        let r: unknown;
+        try { r = fn(...args); } finally { depth--; }
+        const after = get();
+        const at = new Date().toISOString();
+        const evts = deriveEvents(before, snapOf(after), { action: name, operationId: uid("op"), at, actor: { id: OWNER_ACTOR_ID, role: "owner", name: after.owner || "Owner" } });
+        if (evts.length) set({ teamEvents: mergeEvents(after.teamEvents, evts) });
+        return r;
+      }
       const need = typeof perm === "function" ? (perm as (...a: unknown[]) => string | string[])(...args) : perm;
       const ok = Array.isArray(need) ? need.some((p) => allows(pv, p)) : allows(pv, need);
       if (!ok) return denied;
@@ -206,6 +222,15 @@ interface CRMState extends Prefs {
   setRuleSettings: (p: Partial<RuleSettings>) => void;
   /** Explicit, confirmed historical redistribution. Returns the number of leads assigned. */
   applyRulesToExisting: () => number;
+  // Phase 3C — Team Activity + Smart Notifications. One activity source; notifications are derived from it.
+  teamEvents: ActivityEvent[];
+  notifyPrefs: NotifyPrefs;
+  notifyReads: ReadState;
+  setNotifyPrefs: (p: Partial<NotifyPrefs>) => void;
+  markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => void;
+  /** Real-time entry point (future backend feed / reconnect replay) — deduplicated by eventId. */
+  ingestEvents: (events: ActivityEvent[]) => void;
 }
 
 export function duplicatePhone(leads: Lead[], phone: string): Lead | undefined {
@@ -273,6 +298,13 @@ export const useCRM = create<CRMState>()(
       };
       return guarded<CRMState>({
       ...initialData,
+      teamEvents: [],
+      notifyPrefs: DEFAULT_NOTIFY_PREFS,
+      notifyReads: EMPTY_READS,
+      setNotifyPrefs: (p) => set((s) => ({ notifyPrefs: { ...s.notifyPrefs, ...p } })),
+      markNotificationRead: (id) => set((s) => ({ notifyReads: markRead(s.notifyReads, id) })),
+      markAllNotificationsRead: () => set({ notifyReads: markAllRead(new Date().toISOString()) }),
+      ingestEvents: (events) => set((s) => ({ teamEvents: mergeEvents(s.teamEvents, events.filter((e) => e.eventSource !== "demo")) })),
       ...defaultPrefs,
       addLead: (lead) => {
         const id = uid("lead");
@@ -595,7 +627,7 @@ export const useCRM = create<CRMState>()(
         return n;
       },
       setEmployeeStatus: (id, status) => set((s) => ({ employees: s.employees.map((e) => (e.id === id ? withStatus(e, status, new Date().toISOString()) : e)) })),
-    });
+    }, get, set);
     },
     {
       name: "scale-flow-crm-2-demo",

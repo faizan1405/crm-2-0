@@ -22,9 +22,11 @@ import { Route as PipelineRouteImport } from './routes/pipeline'
 import { Route as SalesStudioRouteImport } from './routes/sales-studio'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as TeamRouteImport } from './routes/team'
+import { Route as TeamActivityRouteImport } from './routes/team-activity'
 import { Route as LeadsIdRouteImport } from './routes/leads_.$id'
 import { Route as LeadsBinRouteImport } from './routes/leads_.bin'
 import { Route as TeamPreviewIdRouteImport } from './routes/team_.preview.$id'
+import { Route as TeamWorkspaceIdRouteImport } from './routes/team_.workspace.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -91,6 +93,11 @@ const TeamRoute = TeamRouteImport.update({
   path: '/team',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TeamActivityRoute = TeamActivityRouteImport.update({
+  id: '/team-activity',
+  path: '/team-activity',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LeadsIdRoute = LeadsIdRouteImport.update({
   id: '/leads_/$id',
   path: '/leads/$id',
@@ -104,6 +111,11 @@ const LeadsBinRoute = LeadsBinRouteImport.update({
 const TeamPreviewIdRoute = TeamPreviewIdRouteImport.update({
   id: '/team_/preview/$id',
   path: '/team/preview/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeamWorkspaceIdRoute = TeamWorkspaceIdRouteImport.update({
+  id: '/team_/workspace/$id',
+  path: '/team/workspace/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -121,9 +133,11 @@ export interface FileRoutesByFullPath {
   '/sales-studio': typeof SalesStudioRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
+  '/team-activity': typeof TeamActivityRoute
   '/leads/$id': typeof LeadsIdRoute
   '/leads/bin': typeof LeadsBinRoute
   '/team/preview/$id': typeof TeamPreviewIdRoute
+  '/team/workspace/$id': typeof TeamWorkspaceIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -139,9 +153,11 @@ export interface FileRoutesByTo {
   '/sales-studio': typeof SalesStudioRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
+  '/team-activity': typeof TeamActivityRoute
   '/leads/$id': typeof LeadsIdRoute
   '/leads/bin': typeof LeadsBinRoute
   '/team/preview/$id': typeof TeamPreviewIdRoute
+  '/team/workspace/$id': typeof TeamWorkspaceIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -158,9 +174,11 @@ export interface FileRoutesById {
   '/sales-studio': typeof SalesStudioRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
+  '/team-activity': typeof TeamActivityRoute
   '/leads_/$id': typeof LeadsIdRoute
   '/leads_/bin': typeof LeadsBinRoute
   '/team_/preview/$id': typeof TeamPreviewIdRoute
+  '/team_/workspace/$id': typeof TeamWorkspaceIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -178,9 +196,11 @@ export interface FileRouteTypes {
     | '/sales-studio'
     | '/settings'
     | '/team'
+    | '/team-activity'
     | '/leads/$id'
     | '/leads/bin'
     | '/team/preview/$id'
+    | '/team/workspace/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -196,9 +216,11 @@ export interface FileRouteTypes {
     | '/sales-studio'
     | '/settings'
     | '/team'
+    | '/team-activity'
     | '/leads/$id'
     | '/leads/bin'
     | '/team/preview/$id'
+    | '/team/workspace/$id'
   id:
     | '__root__'
     | '/'
@@ -214,9 +236,11 @@ export interface FileRouteTypes {
     | '/sales-studio'
     | '/settings'
     | '/team'
+    | '/team-activity'
     | '/leads_/$id'
     | '/leads_/bin'
     | '/team_/preview/$id'
+    | '/team_/workspace/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -233,9 +257,11 @@ export interface RootRouteChildren {
   SalesStudioRoute: typeof SalesStudioRoute
   SettingsRoute: typeof SettingsRoute
   TeamRoute: typeof TeamRoute
+  TeamActivityRoute: typeof TeamActivityRoute
   LeadsIdRoute: typeof LeadsIdRoute
   LeadsBinRoute: typeof LeadsBinRoute
   TeamPreviewIdRoute: typeof TeamPreviewIdRoute
+  TeamWorkspaceIdRoute: typeof TeamWorkspaceIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -331,6 +357,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TeamRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/team-activity': {
+      id: '/team-activity'
+      path: '/team-activity'
+      fullPath: '/team-activity'
+      preLoaderRoute: typeof TeamActivityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/leads_/$id': {
       id: '/leads_/$id'
       path: '/leads/$id'
@@ -352,6 +385,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TeamPreviewIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/team_/workspace/$id': {
+      id: '/team_/workspace/$id'
+      path: '/team/workspace/$id'
+      fullPath: '/team/workspace/$id'
+      preLoaderRoute: typeof TeamWorkspaceIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -369,9 +409,11 @@ const rootRouteChildren: RootRouteChildren = {
   SalesStudioRoute: SalesStudioRoute,
   SettingsRoute: SettingsRoute,
   TeamRoute: TeamRoute,
+  TeamActivityRoute: TeamActivityRoute,
   LeadsIdRoute: LeadsIdRoute,
   LeadsBinRoute: LeadsBinRoute,
   TeamPreviewIdRoute: TeamPreviewIdRoute,
+  TeamWorkspaceIdRoute: TeamWorkspaceIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
