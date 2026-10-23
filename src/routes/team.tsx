@@ -1,0 +1,142 @@
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { toast } from "sonner";
+import { Plus, Search, ShieldCheck, X, Pencil, Power, KeyRound, Mail, Users, Activity, Lock, Trash2, Crown, Info } from "lucide-react";
+import { Shell, Empty, selectCls } from "@/components/crm/Shell";
+import { useCRM } from "@/lib/crm/store";
+import { formatDate, initials } from "@/lib/crm/format";
+import { ROLES, PLANNED_ACCESS, RESOURCE_LABEL, STATUS_LABEL, demoAuth, filterEmployees, roleLabel, teamSummary, type Employee, type EmployeeInput, type TeamFilter, type TeamSort } from "@/lib/crm/team";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+
+type Search = { employee?: string };
+export const Route = createFileRoute("/team")({
+  validateSearch: (s: Record<string, unknown>): Search => (typeof s["employee"] === "string" ? { employee: s["employee"] } : {}),
+  head: () => ({
+    meta: [
+      { title: "Team Management · Scale Flow Sales OS" },
+      { name: "description", content: "Owner workspace to add, edit, activate and deactivate employee profiles." },
+      { property: "og:title", content: "Team Management · Scale Flow Sales OS" },
+      { property: "og:description", content: "Owner workspace to add, edit, activate and deactivate employee profiles." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
+  component: Team,
+});
+
+const fmt = (iso: string) => formatDate(iso, { day: "numeric", month: "short", year: "numeric" });
+function StatusPill({ s }: { s: Employee["accountStatus"] }) { return <span className="tm-status" data-status={s}><span className="tm-dot" />{STATUS_LABEL[s]}</span>; }
+
+function Team() {
+  const { employees, owner, email, setEmployeeStatus } = useCRM();
+  const { employee: selectedId } = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const [q, setQ] = useState(""), [status, setStatus] = useState<TeamFilter>("all"), [sort, setSort] = useState<TeamSort>("newest");
+  const [form, setForm] = useState<{ open: boolean; edit?: Employee }>({ open: false });
+  const [confirm, setConfirm] = useState<{ kind: "deactivate" | "remove"; e: Employee } | null>(null);
+  const list = useMemo(() => filterEmployees(employees, q, status, sort), [employees, q, status, sort]);
+  const sum = teamSummary(employees);
+  const selected = employees.find((e) => e.id === selectedId && e.accountStatus !== "archived");
+  const select = (id?: string) => void navigate({ search: id ? { employee: id } : {}, replace: true, resetScroll: false });
+  useEffect(() => { if (!selected) return; const k = (e: KeyboardEvent) => { if (e.key === "Escape") select(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); });
+
+  return (
+    <Shell title="Team Management" subtitle="Create and manage employee profiles. Sign-in and permissions arrive with the secure backend." actions={<Button onClick={() => setForm({ open: true })}><Plus />Add employee</Button>}>
+      <div className="tm-notice"><Info className="size-4 shrink-0" /><span><b>Local demo.</b> Profiles are saved in this browser only. Production login isn't configured yet, so employees can't sign in and no passwords are created. <Link to="/login" className="font-semibold underline underline-offset-2">Preview the login screen</Link></span></div>
+      <div className="tm-summary">
+        {([["Total employees", sum.total], ["Active", sum.active], ["Pending setup", sum.pending], ["Inactive", sum.inactive]] as const).map(([l, v]) => <div key={l} className="tm-sum"><span className="eyebrow">{l}</span><span className="num tm-sum-v">{v}</span></div>)}
+      </div>
+      <div className={cn("tm-layout", selected && "has-panel")}>
+        <section className="surface tm-dir" aria-label="Employee directory">
+          <div className="tm-owner"><span className="tm-avatar tm-avatar-owner"><Crown className="size-4" /></span><div className="min-w-0 flex-1"><div className="text-sm font-semibold">{owner}</div><div className="truncate text-xs text-muted-foreground">{email || "Owner email not set"}</div></div><span className="tm-role-owner">Owner · Super admin</span></div>
+          <div className="tm-tools">
+            <label className="relative min-w-0 flex-1"><Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search employees" placeholder="Search name, email or role…" value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" /></label>
+            <select aria-label="Filter by status" className={selectCls} value={status} onChange={(e) => setStatus(e.target.value as TeamFilter)}><option value="all">All statuses</option><option value="active">Active</option><option value="pending">Pending setup</option><option value="inactive">Inactive</option></select>
+            <select aria-label="Sort employees" className={selectCls} value={sort} onChange={(e) => setSort(e.target.value as TeamSort)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="name">Name A–Z</option></select>
+          </div>
+          {list.length ? <ul className="tm-list" role="list">{list.map((e) => (
+            <li key={e.id}><button type="button" className="tm-row" aria-current={e.id === selectedId ? "true" : undefined} onClick={() => select(e.id)}>
+              <span className="tm-avatar">{initials(e.name)}</span>
+              <span className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-semibold">{e.name}</span><span className="block truncate text-xs text-muted-foreground">{e.email}</span></span>
+              <span className="tm-col hidden text-xs sm:block">{roleLabel(e)}</span>
+              <span className="tm-col tm-col-extra hidden text-xs text-muted-foreground lg:block">Added {fmt(e.createdAt)}</span>
+              <span className="tm-col tm-col-extra hidden text-xs text-muted-foreground xl:block">{e.lastLoginAt ? `Last login ${fmt(e.lastLoginAt)}` : "Login: not yet available"}</span>
+              <StatusPill s={e.accountStatus} />
+            </button></li>))}</ul>
+            : <Empty icon={<Users />} title={employees.some((e) => e.accountStatus !== "archived") ? "No matching employees" : "No employees yet"} hint={employees.length ? "Try another search or status." : "Add your first team member to start building your sales team."} action={!employees.length ? <Button onClick={() => setForm({ open: true })}><Plus />Add employee</Button> : undefined} />}
+        </section>
+        {selected && <Inspector e={selected} onClose={() => select()} onEdit={() => setForm({ open: true, edit: selected })} onConfirm={(kind) => setConfirm({ kind, e: selected })} onActivate={() => { setEmployeeStatus(selected.id, "active"); toast.success(`${selected.name} marked active in the demo`); }} />}
+      </div>
+      <EmployeeForm key={form.edit?.id ?? (form.open ? "new" : "closed")} open={form.open} edit={form.edit} onClose={() => setForm({ open: false })} onCreated={(id) => select(id)} />
+      <Dialog open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)}><DialogContent className="sm:max-w-md">
+        <DialogHeader><DialogTitle>{confirm?.kind === "remove" ? `Remove ${confirm.e.name}?` : `Deactivate ${confirm?.e.name}?`}</DialogTitle>
+          <DialogDescription>{confirm?.kind === "remove" ? "The profile is archived, not erased, so any future history stays linked. It disappears from the directory." : "Only the saved profile status changes. There's no real sign-in yet, so no session is revoked."}</DialogDescription></DialogHeader>
+        <DialogFooter><Button variant="outline" onClick={() => setConfirm(null)}>Cancel</Button><Button variant="destructive" onClick={() => { if (!confirm) return; setEmployeeStatus(confirm.e.id, confirm.kind === "remove" ? "archived" : "inactive"); if (confirm.kind === "remove") select(); toast.success(confirm.kind === "remove" ? `${confirm.e.name} removed` : `${confirm.e.name} deactivated`); setConfirm(null); }}>{confirm?.kind === "remove" ? "Remove" : "Deactivate"}</Button></DialogFooter>
+      </DialogContent></Dialog>
+    </Shell>
+  );
+}
+
+function Inspector({ e, onClose, onEdit, onConfirm, onActivate }: { e: Employee; onClose: () => void; onEdit: () => void; onConfirm: (k: "deactivate" | "remove") => void; onActivate: () => void }) {
+  const [wide, setWide] = useState(true);
+  useEffect(() => { const mq = window.matchMedia("(min-width: 1280px)"); const f = () => setWide(mq.matches); f(); mq.addEventListener("change", f); return () => mq.removeEventListener("change", f); }, []);
+  const access = PLANNED_ACCESS[e.roleId];
+  const panel = (
+    <aside className="tm-inspector" role="dialog" aria-modal={!wide} aria-label={`${e.name} details`} key={e.id}>
+      <div className="flex items-start gap-3">
+        <span className="tm-avatar tm-avatar-lg">{initials(e.name)}</span>
+        <div className="min-w-0 flex-1"><h2 className="truncate text-lg font-semibold">{e.name}</h2><p className="truncate text-xs text-muted-foreground">{e.email}</p><div className="mt-2 flex flex-wrap items-center gap-2"><span className="tm-role">{roleLabel(e)}</span><StatusPill s={e.accountStatus} /></div></div>
+        <button type="button" className="topbar-icon" aria-label="Close employee details" onClick={onClose}><X className="size-4" /></button>
+      </div>
+      <section className="tm-sec"><h3 className="eyebrow">Overview</h3><dl className="tm-dl">
+        <dt>Created</dt><dd>{fmt(e.createdAt)}</dd><dt>Last updated</dt><dd>{fmt(e.updatedAt)}</dd>
+        <dt>Last login</dt><dd>{e.lastLoginAt ? fmt(e.lastLoginAt) : "Not yet available"}</dd>
+        <dt>Production login</dt><dd>Not configured yet</dd></dl></section>
+      <section className="tm-sec"><h3 className="eyebrow">Access</h3><p className="text-xs text-muted-foreground">{ROLES.find((r) => r.id === e.roleId)?.description} Planned only — not enforced until the secure backend and the Permission Manager (Phase 3B).</p>
+        <div className="mt-2 flex flex-wrap gap-1.5">{access.length ? access.map((r) => <span key={r} className="tm-chip">{RESOURCE_LABEL[r]}</span>) : <span className="text-xs text-muted-foreground">Set in Phase 3B.</span>}<span className="tm-chip tm-chip-lock"><Lock className="size-3" />Team Management · Owner only</span></div></section>
+      <section className="tm-sec"><h3 className="eyebrow">Assigned leads</h3><p className="text-xs text-muted-foreground">0 assigned. Lead assignment arrives in Phase 3B; every lead currently stays with the Owner.</p></section>
+      <section className="tm-sec"><h3 className="eyebrow">Activity</h3><p className="flex items-center gap-2 text-xs text-muted-foreground"><Activity className="size-3.5" />No trusted activity yet. Records will come from the secure backend.</p></section>
+      <section className="tm-sec"><h3 className="eyebrow">Account controls</h3><div className="grid gap-2 sm:grid-cols-2">
+        <Button variant="outline" onClick={onEdit}><Pencil />Edit profile</Button>
+        {e.accountStatus === "inactive" ? <Button variant="outline" onClick={onActivate}><Power />Activate</Button> : <Button variant="outline" onClick={() => onConfirm("deactivate")}><Power />Deactivate</Button>}
+        <Button variant="outline" onClick={async () => { const r = await demoAuth.requestPasswordReset(e.email); if (!r.ok) toast.info(r.message); }}><KeyRound />Password reset</Button>
+        <Button variant="outline" disabled title="Needs the secure backend"><Mail />Send invite · soon</Button>
+        <Button variant="ghost" className="text-destructive sm:col-span-2" onClick={() => onConfirm("remove")}><Trash2 />Remove employee</Button>
+      </div></section>
+    </aside>
+  );
+  if (wide) return panel;
+  return createPortal(<div className="tm-overlay"><button type="button" aria-label="Close" className="tm-scrim" onClick={onClose} />{panel}</div>, document.body);
+}
+
+function EmployeeForm({ open, edit, onClose, onCreated }: { open: boolean; edit: Employee | undefined; onClose: () => void; onCreated: (id: string) => void }) {
+  const { addEmployee, updateEmployee } = useCRM();
+  const [f, setF] = useState<EmployeeInput>(() => edit ? { name: edit.name, email: edit.email, roleId: edit.roleId, customRoleLabel: edit.customRoleLabel ?? "", accountStatus: edit.accountStatus === "inactive" ? "inactive" : edit.accountStatus === "active" ? "active" : "pending" } : { name: "", email: "", roleId: "salesperson", customRoleLabel: "", accountStatus: "pending" });
+  const [err, setErr] = useState<string | null>(null);
+  const save = () => {
+    try {
+      if (edit) { const e = updateEmployee(edit.id, f); if (e) return setErr(e); toast.success("Employee updated"); }
+      else { const r = addEmployee(f); if (!r.ok) return setErr(r.error); toast.success(`${f.name.trim()} added to your team`); onCreated(r.id); }
+      onClose();
+    } catch { setErr("Couldn't save in this browser. Check storage space and try again."); }
+  };
+  return <Dialog open={open} onOpenChange={(o) => !o && onClose()}><DialogContent className="sm:max-w-lg">
+    <DialogHeader><DialogTitle>{edit ? "Edit employee" : "Add employee"}</DialogTitle><DialogDescription>Creates a profile in this local demo. A real login is set up later with the secure backend.</DialogDescription></DialogHeader>
+    <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); save(); }} noValidate>
+      <label className="q-field"><span>Full name</span><Input autoFocus value={f.name} placeholder="Rahul Sharma" onChange={(e) => { setF({ ...f, name: e.target.value }); setErr(null); }} /></label>
+      <label className="q-field"><span>Email address</span><Input type="email" value={f.email} placeholder="rahul@example.com" onChange={(e) => { setF({ ...f, email: e.target.value }); setErr(null); }} /></label>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="q-field"><span>Role</span><select className={selectCls} value={f.roleId} onChange={(e) => setF({ ...f, roleId: e.target.value as EmployeeInput["roleId"] })}><option value="salesperson">Salesperson</option><option value="sales_manager">Sales Manager</option><option value="custom">Custom role</option></select></label>
+        <label className="q-field"><span>Account status</span><select className={selectCls} value={f.accountStatus} onChange={(e) => setF({ ...f, accountStatus: e.target.value as EmployeeInput["accountStatus"] })}><option value="pending">Pending setup</option>{edit && <option value="active">Active</option>}<option value="inactive">Inactive</option></select></label>
+      </div>
+      {f.roleId === "custom" && <label className="q-field"><span>Custom role name</span><Input value={f.customRoleLabel ?? ""} placeholder="e.g. Field Executive" onChange={(e) => { setF({ ...f, customRoleLabel: e.target.value }); setErr(null); }} /></label>}
+      <div className="tm-cred"><ShieldCheck className="size-4 shrink-0" /><span>No password is created or stored here. When the backend is ready, the employee gets a secure invite to set their own password.</span></div>
+      {err && <p role="alert" className="text-sm font-medium text-destructive">{err}</p>}
+      <DialogFooter><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit">{edit ? "Save changes" : "Add employee"}</Button></DialogFooter>
+    </form>
+  </DialogContent></Dialog>;
+}
