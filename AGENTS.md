@@ -12,7 +12,7 @@
 ## Architecture rules
 - All CRM data and preferences live in one zustand store (`src/lib/crm/store.ts`, persisted to localStorage); pages derive everything from it — it is the single swap point for a real backend.
 - Business rules live in pure modules (`finance.ts`, `insights.ts`, `parse.ts`, `dates.ts`, `validation.ts`) with vitest tests — testable, backend-agnostic.
-- Store actions enforce edit/stage and payment validation and synchronize related records; datetime-local inputs use explicit business-zone conversion — keeps pages consistent regardless of device timezone.
+- Store actions enforce edit/stage and payment validation and synchronize related records; datetime-local inputs use explicit business-zone conversion — device-timezone independent.
 - CRM pages render after mount inside `Shell` — data is browser-local, so this avoids server/browser render mismatches.
 - `formatINRCompact` is hand-rolled (K/L/Cr) — Intl compact differs server vs browser.
 - Navigation is a collapsible graphite left sidebar in Shell (grouped Workspace/Business/Personal/System; collapse state in its own localStorage key) plus a top utility bar; mobile uses drawer, bottom bar and More sheet — nav and global actions stay separate.
