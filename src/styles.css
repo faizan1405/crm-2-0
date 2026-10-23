@@ -829,3 +829,4 @@ button.ph-chip:hover { background: var(--primary-soft); color: var(--primary); }
 @media (min-width: 1024px) { .login-brand { display: flex; flex-direction: column; justify-content: space-between; padding: 48px; background: var(--sidebar); color: var(--sidebar-foreground); } }
 .login-tag { font-family: var(--font-serif); font-size: 44px; line-height: 1.05; max-width: 14ch; }
 .login-card { width: 100%; max-width: 420px; margin: auto; padding: 40px 24px; }
+.tm-layout.has-panel .tm-col-extra { display: none !important; } .tm-row .tm-status { flex-shrink: 0; } .tm-col { width: 130px; }

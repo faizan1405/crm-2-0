@@ -63,8 +63,8 @@ function Team() {
               <span className="tm-avatar">{initials(e.name)}</span>
               <span className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-semibold">{e.name}</span><span className="block truncate text-xs text-muted-foreground">{e.email}</span></span>
               <span className="tm-col hidden text-xs sm:block">{roleLabel(e)}</span>
-              <span className="tm-col hidden text-xs text-muted-foreground lg:block">Added {fmt(e.createdAt)}</span>
-              <span className="tm-col hidden text-xs text-muted-foreground xl:block">{e.lastLoginAt ? `Last login ${fmt(e.lastLoginAt)}` : "Login: not yet available"}</span>
+              <span className="tm-col tm-col-extra hidden text-xs text-muted-foreground lg:block">Added {fmt(e.createdAt)}</span>
+              <span className="tm-col tm-col-extra hidden text-xs text-muted-foreground xl:block">{e.lastLoginAt ? `Last login ${fmt(e.lastLoginAt)}` : "Login: not yet available"}</span>
               <StatusPill s={e.accountStatus} />
             </button></li>))}</ul>
             : <Empty icon={<Users />} title={employees.some((e) => e.accountStatus !== "archived") ? "No matching employees" : "No employees yet"} hint={employees.length ? "Try another search or status." : "Add your first team member to start building your sales team."} action={!employees.length ? <Button onClick={() => setForm({ open: true })}><Plus />Add employee</Button> : undefined} />}
