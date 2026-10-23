@@ -7,12 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useCRM, automationCtxOf, automationIssues } from "@/lib/crm/store";
+import { useCRM, automationCtxOf, automationIssues, projectCtxOf, viewCtxOf } from "@/lib/crm/store";
 import { ConditionBuilder } from "@/components/crm/Customize";
-import type { ViewCondition } from "@/lib/crm/customize";
+import { describeCondition, filterFields, type FilterField, type ViewCondition } from "@/lib/crm/customize";
+import { projectFilterFields } from "@/lib/crm/projectCustomize";
 import { formatDateTime } from "@/lib/crm/format";
 import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, type LeadPriority, type LeadSource, type LeadStatus } from "@/lib/crm/types";
-import { ACTION_LABEL, RULE_TEMPLATES, TRIGGER_LABEL, planRule, ruleConflicts, ruleError, type ActionType, type AutomationRule, type RulePlan, type RunOutcome, type TriggerType } from "@/lib/crm/automation";
+import { ACTIONS_FOR, LEAD_TRIGGERS, PROJECT_RULE_TEMPLATES, PROJECT_TRIGGERS, TRIGGER_KIND, isProjectTrigger, type RuleSubject, ACTION_LABEL, RULE_TEMPLATES, TRIGGER_LABEL, planRule, ruleConflicts, ruleError, type ActionType, type AutomationRule, type RulePlan, type RunOutcome, type TriggerType } from "@/lib/crm/automation";
 
 export const Route = createFileRoute("/automation")({
   head: () => ({
@@ -33,8 +34,19 @@ const STATUS_TEXT: Record<AutomationRule["status"], string> = { enabled: "Enable
 const OUTCOME_TONE: Record<RunOutcome, string> = { triggered: "bg-success/15 text-success", skipped: "bg-secondary text-muted-foreground", evaluated: "bg-secondary text-muted-foreground", failed: "bg-destructive/10 text-destructive", disabled: "bg-warning/15 text-warning" };
 const ctxOf = (s: ReturnType<typeof useCRM.getState>) => automationCtxOf(s, new Date());
 
-function conditionText(r: AutomationRule, empName: (id: string) => string): string[] {
+/** Condition fields for a rule's subject, used to explain conditions in plain language. */
+function useRuleFields(): Record<RuleSubject, Map<string, FilterField>> {
+  const st = useCRM();
+  return { lead: new Map(filterFields(viewCtxOf(st, { owner: true })).map((f) => [f.key, f])), project: new Map(projectFilterFields(projectCtxOf(st)).map((f) => [f.key, f])) };
+}
+function conditionText(r: AutomationRule, empName: (id: string) => string, fields?: Record<RuleSubject, Map<string, FilterField>>): string[] {
   const c = r.conditions; const out: string[] = [];
+  if ((r.subject ?? "lead") === "project") {
+    const cs = (c.custom ?? []) as ViewCondition[];
+    const parts = fields ? cs.map((x) => describeCondition(x, fields.project)) : [`${cs.length} condition(s)`];
+    if (r.trigger === "project_due_soon" || r.trigger === "support_ending") parts.push(`within ${r.settings.withinDays ?? 0} day(s)`);
+    return parts.length ? [parts.join(c.customMode === "or" ? " OR " : " AND ")] : ["Every active project"];
+  }
   if (c.sources?.length) out.push(`Source: ${c.sources.join(", ")}`);
   if (c.stages?.length) out.push(`Stage: ${c.stages.map((x) => STATUS_LABEL[x]).join(", ")}`);
   if (c.priorities?.length) out.push(`Priority: ${c.priorities.join(", ")}`);
@@ -42,7 +54,7 @@ function conditionText(r: AutomationRule, empName: (id: string) => string): stri
   if (c.assigned && c.assigned !== "any") out.push(c.assigned === "assigned" ? "Assigned" : "Unassigned");
   if (c.inboxStatus && c.inboxStatus !== "any") out.push(c.inboxStatus === "needs_review" ? "Inbox: needs review" : "Inbox: reviewed");
   if (c.firstContactPending) out.push("No contact attempt recorded");
-  if (c.custom?.length) out.push(`${c.custom.length} custom field / tag condition${c.custom.length > 1 ? "s" : ""}`);
+  if (c.custom?.length) out.push(fields ? (c.custom as ViewCondition[]).map((x) => describeCondition(x, fields.lead)).join(c.customMode === "or" ? " OR " : " AND ") : `${c.custom.length} custom field / tag condition${c.custom.length > 1 ? "s" : ""}`);
   if (c.minCreatedMinutes !== undefined) out.push(`Created ≥ ${c.minCreatedMinutes} min ago`);
   if (c.minSinceAttemptMinutes !== undefined) out.push(`Last attempt ≥ ${c.minSinceAttemptMinutes} min ago`);
   if (c.minStageDays !== undefined) out.push(`In stage ≥ ${c.minStageDays} days`);
@@ -58,6 +70,7 @@ function AutomationPage() {
   const [histRule, setHistRule] = useState<string>("all");
   const [showArchived, setShowArchived] = useState(false);
   const empName = (id: string) => s.employees.find((e) => e.id === id)?.name ?? "Employee";
+  const rf = useRuleFields();
   const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
   const runs7 = s.automationRuns.filter((r) => r.at >= weekAgo);
   const rules = s.automationRules.filter((r) => showArchived || r.status !== "archived");
@@ -91,11 +104,12 @@ function AutomationPage() {
                 <article key={r.id} className="surface p-4" aria-label={r.name}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0"><h3 className="font-semibold">{r.name}</h3><p className="text-xs text-muted-foreground">{r.description}</p></div>
-                    <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold ${STATUS_TONE[r.status]}`}>{STATUS_TEXT[r.status]}</span>
+                    <span className="flex shrink-0 gap-1"><span className="rounded-md bg-secondary px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">{(r.subject ?? "lead") === "project" ? "Project" : "Lead"}</span><span className={`rounded-md px-2 py-0.5 text-[10px] font-semibold ${STATUS_TONE[r.status]}`}>{STATUS_TEXT[r.status]}</span></span>
                   </div>
                   <dl className="mt-3 grid gap-1 text-xs">
-                    <div><dt className="inline font-semibold">WHEN </dt><dd className="inline">{TRIGGER_LABEL[r.trigger]}</dd></div>
-                    <div><dt className="inline font-semibold">IF </dt><dd className="inline">{conditionText(r, empName).join(" · ")}</dd></div>
+                    <div><dt className="inline font-semibold">WHEN </dt><dd className="inline">{TRIGGER_LABEL[r.trigger]}{isProjectTrigger(r.trigger) ? ` · ${TRIGGER_KIND[r.trigger] === "event" ? "recorded event" : "checked on every evaluation"}` : ""}</dd></div>
+                    <div><dt className="inline font-semibold">IF </dt><dd className="inline">{conditionText(r, empName, rf).join(" · ")}</dd></div>
+                    {r.pausedReason && <div className="flex items-center gap-1.5 text-warning"><AlertTriangle className="size-3.5" />{r.pausedReason}</div>}
                     {(() => { const iss = automationIssues(s, r); return iss.length ? <div className="flex items-center gap-1.5 text-warning"><AlertTriangle className="size-3.5" />Won't run: {iss[0]!.text}</div> : null; })()}
                     <div><dt className="inline font-semibold">THEN </dt><dd className="inline">{r.actions.map((a) => ACTION_LABEL[a]).join(" · ")}{r.settings.escalateOwnerAfterMinutes !== undefined ? ` · escalate to Owner after ${r.settings.escalateOwnerAfterMinutes} min` : ""}</dd></div>
                   </dl>
@@ -127,9 +141,9 @@ function AutomationPage() {
       <section className="mb-6">
         <h2 className="mb-2 font-semibold">Rule templates</h2>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {RULE_TEMPLATES.map((t) => (
+          {[...RULE_TEMPLATES, ...PROJECT_RULE_TEMPLATES].map((t) => (
             <div key={t.templateId} className="surface flex flex-col p-3">
-              <div className="text-sm font-semibold">{t.name}</div>
+              <div className="text-sm font-semibold">{t.name}<span className="ml-1.5 rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">{t.subject === "project" ? "Project" : "Lead"}</span></div>
               <p className="mt-0.5 flex-1 text-xs text-muted-foreground">{t.description}</p>
               <Button size="sm" variant="outline" className="mt-2 self-start" onClick={() => useTemplate(t.templateId)}><Plus className="size-3.5" />Use template</Button>
             </div>
@@ -168,11 +182,11 @@ function blankRule(): AutomationRule {
 }
 
 function HistoryTable({ ruleId, setRuleId }: { ruleId: string; setRuleId: (v: string) => void }) {
-  const { automationRuns, automationRules, leads } = useCRM();
+  const { automationRuns, automationRules, leads, projects } = useCRM();
   const [outcome, setOutcome] = useState<"all" | RunOutcome>("all");
   const [q, setQ] = useState(""); const [page, setPage] = useState(0); const PER = 25;
-  const name = (id?: string) => (id ? leads.find((l) => l.id === id)?.name ?? "Removed lead" : "");
-  const list = automationRuns.filter((r) => (ruleId === "all" || r.ruleId === ruleId) && (outcome === "all" || r.outcome === outcome) && (!q.trim() || `${r.ruleName} ${name(r.leadId)} ${r.error ?? ""} ${r.actions.join(" ")}`.toLowerCase().includes(q.trim().toLowerCase())));
+  const name = (id?: string, pid?: string) => (pid ? projects.find((p) => p.id === pid)?.name ?? "Removed project" : id ? leads.find((l) => l.id === id)?.name ?? "Removed lead" : "");
+  const list = automationRuns.filter((r) => (ruleId === "all" || r.ruleId === ruleId) && (outcome === "all" || r.outcome === outcome) && (!q.trim() || `${r.ruleName} ${name(r.leadId, r.projectId)} ${r.error ?? ""} ${r.actions.join(" ")}`.toLowerCase().includes(q.trim().toLowerCase())));
   return (
     <section id="auto-history" className="surface p-4">
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -187,7 +201,7 @@ function HistoryTable({ ruleId, setRuleId }: { ruleId: string; setRuleId: (v: st
           <tbody>{list.slice(page * PER, page * PER + PER).map((r) => (
             <tr key={r.id} className="border-t align-top">
               <td className="whitespace-nowrap py-1.5 pr-3 text-xs">{formatDateTime(r.at)}{r.manual ? " · manual" : ""}</td>
-              <td className="py-1.5 pr-3">{r.ruleName}{r.leadId && <div className="text-xs text-muted-foreground">{name(r.leadId)}</div>}</td>
+              <td className="py-1.5 pr-3">{r.ruleName}{(r.leadId || r.projectId) && <div className="text-xs text-muted-foreground">{name(r.leadId, r.projectId)}</div>}</td>
               <td className="py-1.5 pr-3"><span className={`rounded-md px-2 py-0.5 text-[10px] font-semibold capitalize ${OUTCOME_TONE[r.outcome]}`}>{r.outcome}</span></td>
               <td className="num py-1.5 pr-3">{r.matched}</td>
               <td className="py-1.5 pr-3 text-xs">{r.actions.join(", ") || "—"}{r.error && <div className="text-destructive">{r.error}</div>}</td>
@@ -200,8 +214,7 @@ function HistoryTable({ ruleId, setRuleId }: { ruleId: string; setRuleId: (v: st
   );
 }
 
-const TRIGGERS = Object.keys(TRIGGER_LABEL) as TriggerType[];
-const ACTIONS = Object.keys(ACTION_LABEL) as ActionType[];
+const TRIGGERS_FOR: Record<RuleSubject, TriggerType[]> = { lead: LEAD_TRIGGERS, project: PROJECT_TRIGGERS };
 function RuleEditor({ initial, onClose }: { initial: AutomationRule; onClose: () => void }) {
   const { saveAutomationRule, employees } = useCRM();
   const [r, setR] = useState<AutomationRule>(initial);
@@ -210,6 +223,9 @@ function RuleEditor({ initial, onClose }: { initial: AutomationRule; onClose: ()
   const setS = (p: { [K in keyof AutomationRule["settings"]]?: AutomationRule["settings"][K] | undefined }) => setR((x) => ({ ...x, settings: Object.fromEntries(Object.entries({ ...x.settings, ...p }).filter(([, v]) => v !== undefined)) as unknown as AutomationRule["settings"] }));
   const num = (v: string) => (v === "" ? undefined : Math.max(0, Number(v)));
   const multi = <T extends string>(list: T[] | undefined, v: T, on: boolean) => (on ? [...new Set([...(list ?? []), v])] : (list ?? []).filter((x) => x !== v));
+  const subject: RuleSubject = r.subject ?? "lead";
+  const ACTIONS = ACTIONS_FOR[subject]; const TRIGGERS = TRIGGERS_FOR[subject];
+  const switchSubject = (sub: RuleSubject) => setR((x) => ({ ...x, subject: sub, trigger: TRIGGERS_FOR[sub][0]!, conditions: {}, actions: ["reminder"], settings: { cooldownHours: x.settings.cooldownHours, ...(sub === "project" ? {} : {}) } }));
   const err = ruleError(r);
   const save = () => { const e = saveAutomationRule(r); if (e) { toast.error(e); return; } toast.success(r.status === "enabled" ? "Rule updated" : "Saved — test it, then enable"); onClose(); };
   const chip = (on: boolean) => `rounded-full border px-2.5 py-1 text-xs ${on ? "border-primary bg-primary-soft text-primary" : "text-muted-foreground"}`;
@@ -220,7 +236,13 @@ function RuleEditor({ initial, onClose }: { initial: AutomationRule; onClose: ()
         <div className="grid gap-3">
           <div className="grid gap-1"><Label htmlFor="r-name">Rule name</Label><Input id="r-name" value={r.name} onChange={(e) => setR({ ...r, name: e.target.value })} /></div>
           <div className="grid gap-1"><Label htmlFor="r-desc">Description</Label><Input id="r-desc" value={r.description} onChange={(e) => setR({ ...r, description: e.target.value })} /></div>
-          <div className="grid gap-1"><Label htmlFor="r-when">WHEN</Label><select id="r-when" className={selectCls} value={r.trigger} onChange={(e) => setR({ ...r, trigger: e.target.value as TriggerType })}>{TRIGGERS.map((t) => <option key={t} value={t}>{TRIGGER_LABEL[t]}</option>)}</select></div>
+          <div className="grid gap-1"><Label htmlFor="r-subject">Applies to</Label><select id="r-subject" className={selectCls} value={subject} disabled={!!initial.version} onChange={(e) => switchSubject(e.target.value as RuleSubject)}><option value="lead">Leads</option><option value="project">Projects</option></select>{initial.version ? <p className="text-[11px] text-muted-foreground">Fixed once saved — duplicate the rule to change it.</p> : null}</div>
+          <div className="grid gap-1"><Label htmlFor="r-when">WHEN</Label><select id="r-when" className={selectCls} value={r.trigger} onChange={(e) => setR({ ...r, trigger: e.target.value as TriggerType })}>{TRIGGERS.map((t) => <option key={t} value={t}>{TRIGGER_LABEL[t]}</option>)}</select>{isProjectTrigger(r.trigger) && <p className="text-[11px] text-muted-foreground">{TRIGGER_KIND[r.trigger] === "event" ? "Reacts to changes recorded after this rule was created." : "Re-checked on every evaluation against today's date."}</p>}</div>
+          {subject === "project" ? <fieldset className="grid gap-2 rounded-lg border p-3"><legend className="px-1 text-xs font-semibold">IF</legend>
+            <ConditionBuilder entity="project" filter={{ mode: c.customMode ?? "and", conditions: (c.custom ?? []) as ViewCondition[] }} onChange={(f) => setC({ custom: f.conditions.length ? f.conditions : undefined, customMode: f.mode === "or" ? "or" : undefined })} />
+            {(r.trigger === "project_due_soon" || r.trigger === "support_ending") && <div className="grid gap-1 sm:max-w-xs"><Label htmlFor="s-within" className="text-xs">{r.trigger === "project_due_soon" ? "Days before target delivery" : "Days before support ends"}</Label><Input id="s-within" type="number" min={0} value={r.settings.withinDays ?? ""} onChange={(e) => setS({ withinDays: num(e.target.value) })} /></div>}
+            <p className="text-[11px] text-muted-foreground">Archived and cancelled projects are never matched.</p>
+          </fieldset> :
           <fieldset className="grid gap-2 rounded-lg border p-3"><legend className="px-1 text-xs font-semibold">IF</legend>
             <div className="flex flex-wrap gap-1.5" aria-label="Sources">{LEAD_SOURCES.map((x) => <button type="button" key={x} className={chip(!!c.sources?.includes(x))} onClick={() => setC({ sources: multi<LeadSource>(c.sources, x, !c.sources?.includes(x)) })}>{x}</button>)}</div>
             <div className="flex flex-wrap gap-1.5" aria-label="Stages">{LEAD_STATUSES.map((x) => <button type="button" key={x} className={chip(!!c.stages?.includes(x))} onClick={() => setC({ stages: multi<LeadStatus>(c.stages, x, !c.stages?.includes(x)) })}>{STATUS_LABEL[x]}</button>)}</div>
@@ -237,15 +259,17 @@ function RuleEditor({ initial, onClose }: { initial: AutomationRule; onClose: ()
               ))}
               {r.trigger === "followup_overdue" && <div className="grid gap-1"><Label htmlFor="s-od" className="text-xs">Minutes overdue before acting</Label><Input id="s-od" type="number" min={0} value={r.settings.overdueMinutes ?? ""} onChange={(e) => setS({ overdueMinutes: num(e.target.value) })} /></div>}
             </div>
-            <div className="grid gap-1.5 border-t pt-2"><p className="text-xs font-semibold">Custom fields &amp; tags (all must match)</p>
-              <ConditionBuilder allowMode={false} only={(f) => f.key.startsWith("cf:") || f.key === "tags"} filter={{ mode: "and", conditions: (c.custom ?? []) as ViewCondition[] }} onChange={(f) => setC({ custom: f.conditions.length ? f.conditions : undefined })} />
+            <div className="grid gap-1.5 border-t pt-2"><p className="text-xs font-semibold">Custom fields &amp; tags</p>
+              <ConditionBuilder only={(f) => f.key.startsWith("cf:") || f.key === "tags"} filter={{ mode: c.customMode ?? "and", conditions: (c.custom ?? []) as ViewCondition[] }} onChange={(f) => setC({ custom: f.conditions.length ? f.conditions : undefined, customMode: f.mode === "or" ? "or" : undefined })} />
             </div>
-          </fieldset>
+          </fieldset>}
           <fieldset className="grid gap-2 rounded-lg border p-3"><legend className="px-1 text-xs font-semibold">THEN</legend>
+            {subject === "project" && <p className="text-[11px] text-muted-foreground">Project rules never message clients, delete projects, mark payments, change deal amounts or mark delivery.</p>}
             <div className="grid gap-1.5 sm:grid-cols-2">{ACTIONS.map((a) => <label key={a} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={r.actions.includes(a)} onChange={(e) => setR({ ...r, actions: e.target.checked ? [...r.actions, a] : r.actions.filter((x) => x !== a) })} />{ACTION_LABEL[a]}</label>)}</div>
             <div className="grid gap-2 sm:grid-cols-3">
               <div className="grid gap-1"><Label htmlFor="s-cd" className="text-xs">Cooldown (hours)</Label><Input id="s-cd" type="number" min={1} value={r.settings.cooldownHours} onChange={(e) => setS({ cooldownHours: Number(e.target.value) })} /></div>
               <div className="grid gap-1"><Label htmlFor="s-esc" className="text-xs">Escalate to Owner after (min)</Label><Input id="s-esc" type="number" min={0} value={r.settings.escalateOwnerAfterMinutes ?? ""} onChange={(e) => setR((x) => { const { escalateOwnerAfterMinutes: _e, ...rest } = x.settings; const v = num(e.target.value); return { ...x, settings: v === undefined ? rest : { ...rest, escalateOwnerAfterMinutes: v } }; })} /></div>
+              {r.actions.includes("task") && <><div className="grid gap-1 sm:col-span-2"><Label htmlFor="s-task" className="text-xs">Task to create</Label><Input id="s-task" value={r.settings.taskTitle ?? ""} onChange={(e) => setS({ taskTitle: e.target.value || undefined })} placeholder="e.g. Chase client for content" /></div><div className="grid gap-1"><Label htmlFor="s-taskdue" className="text-xs">Task due in (days, optional)</Label><Input id="s-taskdue" type="number" min={0} value={r.settings.taskDueInDays ?? ""} onChange={(e) => setS({ taskDueInDays: num(e.target.value) })} /></div></>}
               {r.actions.includes("followup") && <div className="grid gap-1"><Label htmlFor="s-fu" className="text-xs">Follow-up due in (hours)</Label><Input id="s-fu" type="number" min={1} value={r.settings.followupInHours ?? ""} onChange={(e) => setS({ followupInHours: num(e.target.value) })} /></div>}
             </div>
           </fieldset>
@@ -261,7 +285,13 @@ function DryRun({ rule, onClose }: { rule: AutomationRule; onClose: () => void }
   const s = useCRM();
   const plan: RulePlan = useMemo(() => planRule(rule, ctxOf(useCRM.getState()), useCRM.getState().reminders), [rule]);
   const err = ruleError(rule); const conflicts = ruleConflicts(rule, s.automationRules);
-  const lead = (id: string) => s.leads.find((l) => l.id === id)?.name ?? id;
+  const lead = (id: string, pid?: string) => (pid ? s.projects.find((p) => p.id === pid)?.name ?? pid : s.leads.find((l) => l.id === id)?.name ?? id);
+  const rf = useRuleFields();
+  const project = (rule.subject ?? "lead") === "project";
+  const cs = (rule.conditions.custom ?? []) as ViewCondition[];
+  const why = cs.map((c) => describeCondition(c, project ? rf.project : rf.lead)).join(rule.conditions.customMode === "or" ? " OR " : " AND ");
+  const pool = project ? s.projects.filter((p) => !p.archived && p.status !== "cancelled").length : s.leads.length;
+  const matchedIds = new Set(plan.create.map((p) => p.projectId ?? p.leadId));
   const emp = (id: string | null) => (id ? s.employees.find((e) => e.id === id)?.name ?? "Employee" : "Unassigned");
   const enable = () => {
     if (plan.create.length > s.automationSettings.bulkConfirmThreshold && !window.confirm(`Enabling will create ${plan.create.length} reminders right away. Continue?`)) return;
@@ -275,8 +305,9 @@ function DryRun({ rule, onClose }: { rule: AutomationRule; onClose: () => void }
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {([["Matching now", plan.matched], ["Would create", plan.create.length], ["Already reminded", plan.skippedDuplicates], ["In cooldown", plan.cooldown]] as const).map(([k, v]) => <div key={k} className="rounded-lg bg-secondary p-2"><div className="text-[11px] text-muted-foreground">{k}</div><div className="num text-lg font-semibold">{v}</div></div>)}
         </div>
+        <p className="text-xs text-muted-foreground">Checked {pool} {project ? "active project" : "lead"}{pool === 1 ? "" : "s"} · {pool - matchedIds.size} not matching or already handled{why ? <> · Condition: <b className="text-foreground">{why}</b></> : null}</p>
         <p className="text-xs text-muted-foreground">Employees affected: {plan.affectedEmployees.length ? plan.affectedEmployees.map((e) => emp(e)).join(", ") : "none"} · Escalations to Owner: {plan.escalations.length} · Notifications: {rule.actions.includes("notify") ? (plan.create.length >= 5 ? "1 grouped summary" : `${plan.create.length}`) : "none"}</p>
-        {plan.create.length > 0 ? <ul className="max-h-64 divide-y overflow-y-auto rounded-lg border text-sm">{plan.create.slice(0, 50).map((p) => <li key={p.key} className="p-2"><div className="font-medium">{lead(p.leadId)}</div><div className="text-xs text-muted-foreground">{p.reason} · {emp(p.employeeId)}{p.escalated ? " · escalate" : ""}{p.followUpDueAt ? " · creates a follow-up" : ""}</div></li>)}</ul> : <p className="rounded-lg border p-3 text-sm text-muted-foreground">No new reminders would be created right now.</p>}
+        {plan.create.length > 0 ? <ul className="max-h-64 divide-y overflow-y-auto rounded-lg border text-sm">{plan.create.slice(0, 50).map((p) => <li key={p.key} className="p-2"><div className="font-medium">{lead(p.leadId, p.projectId)}</div><div className="text-xs text-muted-foreground">{p.reason}{why ? ` · Matched: ${why}` : ""} · {emp(p.employeeId)}{p.escalated ? " · escalate" : ""}{p.followUpDueAt ? " · creates a follow-up" : ""}</div></li>)}</ul> : <p className="rounded-lg border p-3 text-sm text-muted-foreground">No new reminders would be created right now.</p>}
         {(err || conflicts.length > 0) && <ul className="grid gap-1 rounded-md bg-warning/10 p-2 text-xs text-warning">{[err, ...conflicts].filter(Boolean).map((w) => <li key={w}>{w}</li>)}</ul>}
         <DialogFooter><Button variant="ghost" onClick={onClose}>Close</Button>{rule.status !== "enabled" && rule.status !== "archived" && <Button disabled={!!err} onClick={enable}><Play className="size-4" />Enable rule</Button>}</DialogFooter>
       </DialogContent>
