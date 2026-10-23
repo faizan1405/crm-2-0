@@ -167,7 +167,7 @@ export function evaluateRule(rule: AutomationRule, x: EvalCtx): Match[] {
       const want = rule.trigger === "followup_overdue" ? "overdue" : rule.trigger === "followup_completed" ? "completed" : (rule.conditions.followupStatus ?? "any");
       if (want !== "any" && st !== want) continue;
       if (rule.trigger === "followup_overdue" && late < (rule.settings.overdueMinutes ?? 0) * MIN) continue;
-      if (!leadPasses(l, { ...rule.conditions, followupStatus: undefined } as RuleConditions, x, contactState(l.id, x.activities))) continue;
+      if (!leadPasses(l, rule.conditions, x, contactState(l.id, x.activities))) continue;
       const reason = st === "overdue" ? `Follow-up with ${l.name} is ${fmt(late)} overdue.` : st === "completed" ? `Follow-up with ${l.name} was completed — review next step.` : `Follow-up scheduled with ${l.name}.`;
       out.push({ leadId: l.id, employeeId: x.assignments[l.id]?.employeeId ?? null, target: `fu:${f.id}`, signature: st === "completed" ? f.completedAt! : f.dueAt, reason, dueAt: nowIso, resolveWhen: st === "overdue" ? "followup_done" : "never", escalate: st === "overdue" && esc(late) });
     }
