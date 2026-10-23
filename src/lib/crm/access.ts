@@ -26,7 +26,7 @@ export const MODULES: PermModule[] = [
   { id: "quotations", label: "Quotation templates", desc: "Reusable package messages.", actions: [a("quotations", "use", "Use packages", "Send packages in WhatsApp."), a("quotations", "manage", "Manage packages", "Create, edit and delete packages.", true)] },
   { id: "templates", label: "WhatsApp templates", desc: "Message drafts.", actions: [a("templates", "use", "Use templates", "Pick approved templates."), a("templates", "manage", "Manage templates", "Create, edit and delete templates.", true)] },
   { id: "demos", label: "Demo library", desc: "Portfolio links.", actions: [a("demos", "use", "Share demos", "Include demos in messages."), a("demos", "manage", "Manage demos", "Add, edit and remove demos.", true)] },
-  { id: "notes", label: "Personal Notes", desc: "Their own private notes. Never the Owner's.", actions: [a("notes", "own", "Own private notes", "A personal notebook only they see.")] },
+  { id: "notes", label: "Own notebook", desc: "Their own private notes. Never the Owner's.", actions: [a("notes", "own", "Own private notes", "A personal notebook only they see.")] },
   { id: "briefing", label: "Daily Briefing", desc: "Morning plan.", actions: [a("briefing", "view", "View briefing", "Built only from leads in scope.")] },
   { id: "import", label: "Data import", desc: "Bulk add.", actions: [a("import", "run", "Import leads", "Bulk add or paste leads.", true)] },
   { id: "export", label: "Data export", desc: "Downloads leave the CRM.", actions: [a("export", "run", "Export data", "Download CSV/JSON of records in scope.", true)] },
