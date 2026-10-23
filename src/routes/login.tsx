@@ -44,8 +44,8 @@ function Login() {
         <div className="tm-notice mt-5"><Info className="size-4 shrink-0" /><span>Preview only — sign-in needs the secure backend, which isn't connected yet. Nothing you type is saved.</span></div>
         <form className="mt-5 grid gap-4" noValidate onSubmit={(e) => { e.preventDefault(); void submit(); }}>
           <label className="q-field"><span>Email</span><Input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" /></label>
-          {mode === "signin" && <label className="q-field"><span className="flex justify-between">Password</span>
-            <span className="relative block"><Input type={show ? "text" : "password"} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className="pr-10" /><button type="button" aria-label={show ? "Hide password" : "Show password"} onClick={() => setShow(!show)} className="absolute top-1/2 right-2 -translate-y-1/2 p-1 text-muted-foreground">{show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button></span></label>}
+          <label className="q-field"><span>Password</span>
+            <span className="relative block"><Input type={show ? "text" : "password"} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className="pr-10" /><button type="button" aria-label={show ? "Hide password" : "Show password"} onClick={() => setShow(!show)} className="absolute top-1/2 right-2 -translate-y-1/2 p-1 text-muted-foreground">{show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button></span></label>
           {error && <p role="alert" className="flex items-center gap-2 text-sm font-medium text-destructive"><AlertCircle className="size-4 shrink-0" />{error}</p>}
           <Button type="submit" disabled={busy} className="h-11">{busy && <Loader2 className="animate-spin" />}Sign in</Button>
           <p className="text-center text-xs text-muted-foreground">Forgot your password? Contact your administrator to reset it.</p>
