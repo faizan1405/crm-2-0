@@ -21,7 +21,7 @@
 - All data lives in this browser only (localStorage/IndexedDB). There is no multi-device sync and no real authentication.
 
 ## Tests
-- 366 automated tests, including `leadsSearch.test.ts` for the drill-down URL rules. Typecheck clean.
+- 366 automated tests, including `leadsSearch.test.ts` for the drill-down URL rules. Typecheck clean. Production build successful.
 
 ## Next checkpoint
 - B1 §3–8: Owner workspace audit; Employee A/B/C acceptance tests; admin/security; preview isolation; shared components; responsive/accessibility.
