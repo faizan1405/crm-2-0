@@ -41,6 +41,7 @@ import { dealOutstanding } from "./finance";
 import { leadEditError } from "./validation";
 import { applyAssign, assignable, evaluate, fireKey, ruleError, DEFAULT_RULE_SETTINGS, OWNER_ONLY_KEYS, type Assignment, type AssignmentEvent, type AssignmentRule, type EmployeeAccess, type RuleSettings, type RuleTrigger } from "./access";
 import type { BackupRecord } from "./vault";
+import type { PlanItem, SkipReason } from "./bulk";
 import { buildEmployee, employeeError, withStatus, type AccountStatus, type Employee, type EmployeeInput } from "./team";
 import { builtInTemplates, DEFAULT_DEMO_CATEGORIES, quotationTemplateError, safeUrl, type BusinessProfile, type Demo, type LegacyQuotation, type QuotationShare, type QuotationTemplate, type WaTemplate } from "./studio";
 import { activePreview, allows, previewSink, type CrmEventType } from "./session";
@@ -61,7 +62,7 @@ const GUARDS: Record<string, Guard> = {
   saveQuotationTemplate: ["quotations.manage", DENIED], duplicateQuotationTemplate: ["quotations.manage", undefined], deleteQuotationTemplate: ["quotations.manage", undefined], setQuotationTemplateActive: ["quotations.manage", undefined], moveQuotationTemplate: ["quotations.manage", undefined], logQuotationShare: ["quotations.use", ""],
   saveTemplate: ["templates.manage", undefined], deleteTemplate: ["templates.manage", undefined], setDefaultTemplate: ["templates.manage", undefined], resetTemplates: ["templates.manage", undefined],
   saveDemo: ["demos.manage", false], deleteDemo: ["demos.manage", undefined], moveDemo: ["demos.manage", undefined], addDemoCategory: ["demos.manage", undefined],
-  assignLeads: ["leads.assign", { ok: false, error: DENIED }, "lead.assigned"], restoreAssignments: ["leads.assign", undefined],
+  assignLeads: ["leads.assign", { ok: false, error: DENIED }, "lead.assigned"], restoreAssignments: ["leads.assign", undefined], applyAssignmentPlan: ["leads.assign", { ok: false, error: DENIED }, "lead.assigned"],
   saveBusinessProfile: ["__owner", undefined], reset: ["__owner", undefined], logBackup: ["__owner", undefined], deleteLegacyQuotations: ["__owner", undefined],
   addEmployee: ["__owner", { ok: false, error: DENIED }], updateEmployee: ["__owner", DENIED], setEmployeeStatus: ["__owner", undefined], saveEmployeeAccess: ["__owner", undefined],
   saveRule: ["__owner", DENIED], deleteRule: ["__owner", undefined], moveRule: ["__owner", undefined], setRuleSettings: ["__owner", undefined], applyRulesToExisting: ["__owner", 0],
@@ -194,6 +195,8 @@ interface CRMState extends Prefs {
   assignLeads: (leadIds: string[], employeeId: string | null, source: string) => { ok: true; changed: number } | { ok: false; error: string };
   /** Undo helper: restores exactly the given previous assignments for these leads. */
   restoreAssignments: (snapshot: Record<string, Assignment | undefined>) => void;
+  /** Bulk assign/distribute: re-validates every item against current data; stale or invalid items are skipped and reported, never forced. */
+  applyAssignmentPlan: (plan: PlanItem[], source: string) => { ok: true; changed: number; skipped: { leadId: string; reason: SkipReason }[]; snapshot: Record<string, Assignment | undefined> } | { ok: false; error: string };
   assignmentRules: AssignmentRule[];
   ruleSettings: RuleSettings;
   firedRules: string[];
@@ -542,6 +545,29 @@ export const useCRM = create<CRMState>()(
         const { next, events } = applyAssign(get().assignments, known, employeeId, new Date().toISOString(), source, true, () => uid("asg"));
         set((s) => ({ assignments: next, assignmentEvents: [...events, ...s.assignmentEvents].slice(0, 500) }));
         return { ok: true, changed: events.length };
+      },
+      applyAssignmentPlan: (plan, source) => {
+        const st = get(); const now = new Date().toISOString();
+        const ids = new Set(st.leads.map((l) => l.id));
+        const skipped: { leadId: string; reason: SkipReason }[] = []; const groups = new Map<string | null, string[]>();
+        const ok = new Map(st.employees.map((e) => [e.id, assignable(e)]));
+        const seen = new Set<string>();
+        for (const p of plan) {
+          if (seen.has(p.leadId)) continue; seen.add(p.leadId);
+          if (!ids.has(p.leadId)) { skipped.push({ leadId: p.leadId, reason: "missing" }); continue; }
+          if ((st.assignments[p.leadId]?.employeeId ?? null) !== p.previous) { skipped.push({ leadId: p.leadId, reason: "changed" }); continue; }
+          if (p.employeeId && !ok.get(p.employeeId)) { skipped.push({ leadId: p.leadId, reason: "inactive" }); continue; }
+          groups.set(p.employeeId, [...(groups.get(p.employeeId) ?? []), p.leadId]);
+        }
+        const snapshot: Record<string, Assignment | undefined> = {};
+        let next = st.assignments; const events: AssignmentEvent[] = [];
+        for (const [emp, leadIds] of groups) {
+          for (const id of leadIds) snapshot[id] = st.assignments[id];
+          const r = applyAssign(next, leadIds, emp, now, source, true, () => uid("asg"));
+          next = r.next; events.push(...r.events);
+        }
+        set((s) => ({ assignments: next, assignmentEvents: [...events, ...s.assignmentEvents].slice(0, 500) }));
+        return { ok: true, changed: events.length, skipped, snapshot };
       },
       restoreAssignments: (snap) => set((s) => { const next = { ...s.assignments }; for (const [id, a] of Object.entries(snap)) { if (a) next[id] = a; else delete next[id]; } return { assignments: next }; }),
       assignmentRules: [],
