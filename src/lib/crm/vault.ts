@@ -120,7 +120,7 @@ export async function buildBackup(plan: BackupPlan, state: Snapshot, proofInputs
   if (plan.type === "employee" && !emp) throw new Error("That employee no longer exists.");
   const raw = emp ? employeeScope(state, emp.id) : state;
   // Custom field values are keyed by Owner-chosen field ids (e.g. "cf_session_date"); they are business data, not credentials, so they bypass the key scrubber.
-  const src = { ...scrub(raw), ...(raw["fieldValues"] !== undefined ? { fieldValues: raw["fieldValues"] } : {}) };
+  const src: Snapshot = { ...scrub(raw), ...(raw["fieldValues"] !== undefined ? { fieldValues: raw["fieldValues"] } : {}) };
   const files: Record<string, Uint8Array> = {};
   const counts: Manifest["counts"] = {};
   const warnings: string[] = [], relationships: string[] = [];
