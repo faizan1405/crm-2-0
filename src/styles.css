@@ -1036,3 +1036,37 @@ button.ph-chip:hover { background: var(--primary-soft); color: var(--primary); }
 @media (max-width: 640px) { .sv-cond { grid-template-columns: 1fr 1fr; } .sv-cond > :nth-child(3) { grid-column: 1 / -1; } }
 .cfg-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 14px 4px; border-bottom: 1px solid var(--border); }
 .cfg-row[data-archived="true"] { opacity: .65; }
+
+/* Phase 3G.1 — Project Desk */
+.seg a { white-space: nowrap; flex-shrink: 0; height: 30px; padding: 0 12px; border-radius: 999px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); display: inline-flex; align-items: center; gap: 6px; transition: background 160ms ease, color 160ms ease; }
+.seg a[aria-pressed="true"] { background: var(--card); color: var(--foreground); box-shadow: 0 1px 2px oklch(0 0 0 / 8%); }
+.pd-kpis { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+.pd-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pd-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); transition: border-color 160ms ease, background 160ms ease; }
+a.pd-row:hover { border-color: var(--input); background: var(--muted); }
+.pd-row[data-void] { opacity: .65; }
+.pd-card { display: block; padding: 14px; border-radius: 16px; border: 1px solid var(--border); background: var(--card); transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease; }
+.pd-card:hover { border-color: var(--input); transform: translateY(-1px); box-shadow: 0 6px 18px -12px oklch(0 0 0 / 30%); }
+.pd-card[data-overdue] { border-color: color-mix(in oklch, var(--destructive) 45%, var(--border)); }
+.pd-pill { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 11px; font-weight: 500; background: var(--secondary); color: var(--secondary-foreground); border: 1px solid var(--border); }
+.pd-pill[data-status="in_progress"], .pd-pill[data-stage="development"] { background: color-mix(in oklch, var(--primary) 14%, var(--card)); color: var(--foreground); }
+.pd-pill[data-status="awaiting_client"], .pd-pill[data-status="on_hold"], .pd-pill[data-stage="awaiting_content"] { background: color-mix(in oklch, var(--warning) 16%, var(--card)); }
+.pd-pill[data-status="completed"], .pd-pill[data-stage="delivered"], .pd-pill[data-stage="support"] { background: color-mix(in oklch, var(--success) 16%, var(--card)); }
+.pd-pill[data-status="cancelled"] { color: var(--muted-foreground); text-decoration: line-through; }
+.pd-prio { font-size: 10px; font-weight: 600; text-transform: capitalize; color: var(--muted-foreground); }
+.pd-prio[data-p="high"] { color: var(--destructive); }
+.pd-board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(260px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 8px; }
+.pd-col { display: grid; align-content: start; gap: 10px; padding: 10px; border-radius: 18px; background: var(--secondary); border: 1px dashed transparent; min-height: 160px; transition: border-color 160ms ease, background 160ms ease; }
+.pd-col[data-over] { border-color: var(--primary); background: color-mix(in oklch, var(--primary) 8%, var(--secondary)); }
+.pd-col-head { display: flex; justify-content: space-between; align-items: center; padding: 2px 4px; font-size: 12px; font-weight: 600; }
+.pd-carry { display: grid; gap: 10px 16px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); font-size: 13px; }
+.pd-carry dt { font-size: 11px; color: var(--muted-foreground); }
+.pd-carry dd { overflow-wrap: anywhere; }
+.pd-note { padding: 12px 14px; border-radius: 14px; border: 1px solid color-mix(in oklch, var(--warning) 45%, var(--border)); background: color-mix(in oklch, var(--warning) 10%, var(--card)); font-size: 13px; }
+.pd-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); font-size: 12px; }
+.pd-task { padding: 10px 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--card); }
+.pd-task[data-done] { background: var(--secondary); }
+.pd-check { display: grid; place-items: center; width: 20px; height: 20px; margin-top: 1px; border-radius: 6px; border: 1.5px solid var(--input); color: var(--primary-foreground); flex-shrink: 0; }
+.pd-check[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); }
+.pd-check:disabled { opacity: .5; cursor: not-allowed; }
+@media (max-width: 640px) { .pd-board { grid-auto-columns: minmax(78vw, 1fr); } }
