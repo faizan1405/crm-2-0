@@ -39,7 +39,7 @@ import { demoLeads, demoDeals, demoPayments, demoFollowUps, demoNotes, demoActiv
 import { uid, digits, dayKey } from "./format";
 import { dealOutstanding } from "./finance";
 import { leadEditError } from "./validation";
-import { builtInTemplates, DEFAULT_DEMO_CATEGORIES, nextQuoteNumber, quoteError, quoteTotals, safeUrl, type BusinessProfile, type Demo, type Quotation, type QuoteStatus, type WaTemplate } from "./studio";
+import { builtInTemplates, DEFAULT_DEMO_CATEGORIES, quotationTemplateError, safeUrl, type BusinessProfile, type Demo, type LegacyQuotation, type QuotationShare, type QuotationTemplate, type WaTemplate } from "./studio";
 
 export type ThemePref = "light" | "dark" | "system";
 export interface Prefs {
@@ -98,16 +98,22 @@ interface CRMState extends Prefs {
   resetBriefing: () => void;
   preferences: (patch: Partial<Prefs>) => void;
   reset: () => void;
-  // Sales Studio — one shared source for quotations, templates and demos (not cleared by reset()).
-  quotations: Quotation[];
+  // Sales Studio — one shared source for quotation packages, templates and demos (not cleared by reset()).
+  quotationTemplates: QuotationTemplate[];
+  quotationShares: QuotationShare[];
+  /** Old billing-style quotations, kept read-only as a recoverable backup. */
+  legacyQuotations: LegacyQuotation[];
   waTemplates: WaTemplate[];
   demos: Demo[];
   demoCategories: string[];
   businessProfile: BusinessProfile;
-  saveQuotation: (q: Quotation) => string | null;
-  duplicateQuotation: (id: string) => string | undefined;
-  deleteQuotation: (id: string) => void;
-  setQuoteStatus: (id: string, status: QuoteStatus) => void;
+  saveQuotationTemplate: (t: QuotationTemplate) => string | null;
+  duplicateQuotationTemplate: (id: string) => string | undefined;
+  deleteQuotationTemplate: (id: string) => void;
+  setQuotationTemplateActive: (id: string, active: boolean) => void;
+  moveQuotationTemplate: (id: string, dir: -1 | 1) => void;
+  logQuotationShare: (s: Omit<QuotationShare, "id" | "createdAt">) => string;
+  deleteLegacyQuotations: () => void;
   saveTemplate: (t: WaTemplate) => void;
   deleteTemplate: (id: string) => void;
   setDefaultTemplate: (id: string) => void;
@@ -338,40 +344,49 @@ export const useCRM = create<CRMState>()(
       resetBriefing: () => set({ briefingDone: [], briefingDate: dayKey(new Date()) }),
       preferences: (patch) => set(patch),
       reset: () => set({ ...initialData }),
-      quotations: [],
+      quotationTemplates: [],
+      quotationShares: [],
+      legacyQuotations: [],
       waTemplates: builtInTemplates(),
       demos: [],
       demoCategories: DEFAULT_DEMO_CATEGORIES,
       businessProfile: { name: "" },
-      saveQuotation: (q) => {
-        const err = quoteError(q);
-        if (err) return null;
+      // Package templates are global sales messages — never linked to deals, payments or follow-ups.
+      saveQuotationTemplate: (t) => {
+        if (quotationTemplateError(t)) return null;
         const at = new Date().toISOString();
-        const prev = get().quotations.find((x) => x.id === q.id);
-        const total = quoteTotals(q).total;
-        if (!prev) {
-          const number = q.number || nextQuoteNumber(get().quotations, Number(q.issueDate.slice(0, 4)));
-          const row: Quotation = { ...q, number, revision: 1, history: [{ revision: 1, at, total, title: q.title }], createdAt: at, updatedAt: at };
-          set((s) => ({ quotations: [row, ...s.quotations] }));
-          return row.id;
-        }
-        const changed = quoteTotals(prev).total !== total || prev.title !== q.title || JSON.stringify(prev.items) !== JSON.stringify(q.items);
-        const revision = changed ? prev.revision + 1 : prev.revision;
-        const row: Quotation = { ...q, createdAt: prev.createdAt, number: prev.number, revision, history: changed ? [...prev.history, { revision, at, total, title: q.title }] : prev.history, updatedAt: at };
-        // Deals and payments are deliberately untouched: a quotation is never a confirmed amount.
-        set((s) => ({ quotations: s.quotations.map((x) => (x.id === q.id ? row : x)) }));
+        const row: QuotationTemplate = { ...t, name: t.name.trim(), currency: "INR", ...(t.priceType === "custom" ? { priceAmount: undefined } : { priceLabel: undefined }), updatedAt: at };
+        set((s) => {
+          const prev = s.quotationTemplates.find((x) => x.id === t.id);
+          if (prev) return { quotationTemplates: s.quotationTemplates.map((x) => (x.id === t.id ? { ...row, createdAt: prev.createdAt, sortOrder: prev.sortOrder } : x)) };
+          const order = s.quotationTemplates.reduce((m, x) => Math.max(m, x.sortOrder + 1), 0);
+          return { quotationTemplates: [...s.quotationTemplates, { ...row, createdAt: at, sortOrder: order }] };
+        });
         return row.id;
       },
-      duplicateQuotation: (id) => {
-        const src = get().quotations.find((x) => x.id === id);
+      duplicateQuotationTemplate: (id) => {
+        const src = get().quotationTemplates.find((x) => x.id === id);
         if (!src) return undefined;
         const at = new Date().toISOString();
-        const copy: Quotation = { ...src, id: uid("quo"), number: nextQuoteNumber(get().quotations, Number(at.slice(0, 4))), title: `${src.title} (copy)`, status: "draft", sharedAt: undefined, items: src.items.map((i) => ({ ...i, id: uid("qi") })), revision: 1, history: [{ revision: 1, at, total: quoteTotals(src).total, title: `${src.title} (copy)` }], createdAt: at, updatedAt: at };
-        set((s) => ({ quotations: [copy, ...s.quotations] }));
+        const copy: QuotationTemplate = { ...src, id: uid("qt"), name: `${src.name} (copy)`, sortOrder: src.sortOrder + 0.5, createdAt: at, updatedAt: at };
+        set((s) => ({ quotationTemplates: [...s.quotationTemplates, copy].sort((a, b) => a.sortOrder - b.sortOrder).map((x, i) => ({ ...x, sortOrder: i })) }));
         return copy.id;
       },
-      deleteQuotation: (id) => set((s) => ({ quotations: s.quotations.filter((x) => x.id !== id) })),
-      setQuoteStatus: (id, status) => set((s) => ({ quotations: s.quotations.map((x) => (x.id === id ? { ...x, status, updatedAt: new Date().toISOString(), ...(status === "shared" ? { sharedAt: new Date().toISOString() } : {}) } : x)) })),
+      deleteQuotationTemplate: (id) => set((s) => ({ quotationTemplates: s.quotationTemplates.filter((x) => x.id !== id) })),
+      setQuotationTemplateActive: (id, active) => set((s) => ({ quotationTemplates: s.quotationTemplates.map((x) => (x.id === id ? { ...x, isActive: active, updatedAt: new Date().toISOString() } : x)) })),
+      moveQuotationTemplate: (id, dir) => set((s) => {
+        const list = [...s.quotationTemplates].sort((a, b) => a.sortOrder - b.sortOrder);
+        const i = list.findIndex((x) => x.id === id), j = i + dir;
+        if (i < 0 || j < 0 || j >= list.length) return {};
+        [list[i], list[j]] = [list[j]!, list[i]!];
+        return { quotationTemplates: list.map((x, sortOrder) => ({ ...x, sortOrder })) };
+      }),
+      logQuotationShare: (share) => {
+        const row: QuotationShare = { ...share, id: uid("qs"), createdAt: new Date().toISOString() };
+        set((s) => ({ quotationShares: [row, ...s.quotationShares] }));
+        return row.id;
+      },
+      deleteLegacyQuotations: () => set({ legacyQuotations: [] }),
       saveTemplate: (t) => set((s) => {
         const row = { ...t, updatedAt: new Date().toISOString() };
         const exists = s.waTemplates.some((x) => x.id === t.id);
@@ -403,6 +418,22 @@ export const useCRM = create<CRMState>()(
       saveBusinessProfile: (p) => set({ businessProfile: p }),
     };
     },
-    { name: "scale-flow-crm-2-demo", version: 2, storage: createJSONStorage(() => localStorage), skipHydration: true },
+    {
+      name: "scale-flow-crm-2-demo",
+      version: 3,
+      storage: createJSONStorage(() => localStorage),
+      skipHydration: true,
+      // v3: billing quotations are moved, unchanged, into a read-only backup. Nothing is converted automatically.
+      migrate: (persisted, version) => migrateQuotations(persisted as Record<string, unknown>, version) as unknown as CRMState,
+    },
   ),
 );
+
+/** Move pre-v3 billing quotations into `legacyQuotations` untouched; deals and payments are never read or changed. */
+export function migrateQuotations(state: Record<string, unknown>, version: number): Record<string, unknown> {
+  if (!state || version >= 3) return state;
+  const { quotations, ...rest } = state;
+  const old = Array.isArray(quotations) ? (quotations as LegacyQuotation[]) : [];
+  const prev = Array.isArray(rest["legacyQuotations"]) ? (rest["legacyQuotations"] as LegacyQuotation[]) : [];
+  return { ...rest, legacyQuotations: [...prev, ...old], quotationTemplates: rest["quotationTemplates"] ?? [], quotationShares: rest["quotationShares"] ?? [] };
+}

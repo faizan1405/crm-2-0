@@ -1,41 +1,89 @@
-// Sales Studio rules: quotations, WhatsApp templates and the demo library.
+// Sales Studio rules: quotation (package) templates, WhatsApp templates and the demo library.
 // Pure and backend-agnostic — the store persists these shapes; a Hostinger API can return the same shapes later.
 import type { Lead } from "./types";
-import { formatINR, formatDate, uid } from "./format";
+import { formatINR, uid } from "./format";
 import { draftMessage } from "./whatsapp";
 
-export type QuoteStatus = "draft" | "ready" | "shared" | "accepted" | "rejected" | "expired";
-export const QUOTE_STATUSES: QuoteStatus[] = ["draft", "ready", "shared", "accepted", "rejected", "expired"];
-export const QUOTE_STATUS_LABEL: Record<QuoteStatus, string> = { draft: "Draft", ready: "Ready", shared: "Shared", accepted: "Accepted", rejected: "Rejected", expired: "Expired" };
-
-export interface QuoteItem { id: string; description: string; qty: number; unitPrice: number }
-export interface QuoteRevision { revision: number; at: string; total: number; title: string }
-export interface Quotation {
+/* ---------- quotation templates (reusable WhatsApp packages, global — not per client) ---------- */
+export interface QuotationTemplate {
   id: string;
-  number: string;
-  leadId: string;
-  clientName: string;
-  company?: string | undefined;
-  phone?: string | undefined;
-  email?: string | undefined;
-  title: string;
-  /** YYYY-MM-DD */
-  issueDate: string;
-  /** YYYY-MM-DD */
-  validUntil: string;
-  items: QuoteItem[];
-  discountType: "flat" | "percent";
-  discount: number;
-  gstEnabled: boolean;
-  gstRate: number;
-  paymentTerms?: string | undefined;
-  notes?: string | undefined;
-  status: QuoteStatus;
-  revision: number;
-  history: QuoteRevision[];
-  sharedAt?: string | undefined;
+  name: string;
+  priceType: "fixed" | "custom";
+  /** Rupees; only meaningful when priceType is "fixed". */
+  priceAmount?: number | undefined;
+  /** Shown when priceType is "custom", e.g. "On request". */
+  priceLabel?: string | undefined;
+  currency: "INR";
+  messageBody: string;
+  isActive: boolean;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
+}
+/** A user-confirmed record of a quotation sent to one client. Snapshots never change when the template is edited later. */
+export interface QuotationShare {
+  id: string;
+  leadId: string;
+  templateId: string;
+  packageNameSnapshot: string;
+  priceSnapshot: string;
+  messageSnapshot: string;
+  userConfirmedSent: boolean;
+  createdAt: string;
+}
+
+export const formatPackagePrice = (t: Pick<QuotationTemplate, "priceType" | "priceAmount" | "priceLabel">) =>
+  t.priceType === "fixed" && t.priceAmount !== undefined && Number.isFinite(t.priceAmount) ? formatINR(t.priceAmount) : t.priceLabel?.trim() || "Custom price";
+
+export const emptyQuotationTemplate = (sortOrder = 0): QuotationTemplate => ({
+  id: uid("qt"), name: "", priceType: "fixed", priceAmount: undefined, currency: "INR",
+  messageBody: "Hi {clientName},\n\nHere are the details of our *{packageName}* package — {packagePrice}.\n\nWhat we provide:\n- \n\nLet me know if you have any questions.",
+  isActive: true, sortOrder, createdAt: "", updatedAt: "",
+});
+
+export function quotationTemplateError(t: Pick<QuotationTemplate, "name" | "priceType" | "priceAmount" | "messageBody">): string | null {
+  if (!t.name.trim()) return "Add a package name.";
+  if (t.priceType === "fixed" && !(typeof t.priceAmount === "number" && Number.isFinite(t.priceAmount) && t.priceAmount > 0)) return "Enter a price above zero, or choose Custom price.";
+  if (!t.messageBody.trim()) return "Write the quotation message.";
+  return null;
+}
+
+/** Rupee amounts written by hand in the body that differ from the saved price. Never rewrites the text — only warns. */
+export function priceMismatch(t: Pick<QuotationTemplate, "priceType" | "priceAmount" | "messageBody">): string[] {
+  if (t.priceType !== "fixed" || !t.priceAmount) return [];
+  const found = [...t.messageBody.matchAll(/(?:₹|rs\.?|inr)\s*([\d,]+(?:\.\d+)?)/gi)].map((m) => ({ raw: m[0], n: Number(m[1]!.replace(/,/g, "")) }));
+  return [...new Set(found.filter((f) => f.n > 0 && f.n !== t.priceAmount).map((f) => f.raw.trim()))];
+}
+
+export const activeQuotationTemplates = (list: QuotationTemplate[]) => list.filter((t) => t.isActive).sort((a, b) => a.sortOrder - b.sortOrder);
+
+/** Render a package for one client from saved data only. */
+export function renderQuotation(t: QuotationTemplate, lead: Pick<Lead, "name" | "company" | "requirement" | "quotedAmount">, ctx: { owner: string; business: string; dealName?: string | undefined }) {
+  return renderTemplate(t.messageBody, { ...templateVars(lead, ctx), packageName: t.name.trim(), packagePrice: formatPackagePrice(t) });
+}
+
+/* ---------- legacy billing quotations (read-only backup; no longer editable) ---------- */
+export interface LegacyQuoteItem { id: string; description: string; qty: number; unitPrice: number }
+export interface LegacyQuotation {
+  id: string; number: string; leadId: string; clientName: string; company?: string | undefined; title: string;
+  issueDate: string; validUntil: string; items: LegacyQuoteItem[]; discountType: "flat" | "percent"; discount: number;
+  gstEnabled: boolean; gstRate: number; paymentTerms?: string | undefined; notes?: string | undefined; status: string; createdAt: string; updatedAt: string;
+  [k: string]: unknown;
+}
+const money = (n: number) => Math.round((Number.isFinite(n) ? n : 0) * 100) / 100;
+/** Total of a legacy record, used only to label the backup. */
+export function legacyTotal(q: Pick<LegacyQuotation, "items" | "discountType" | "discount" | "gstEnabled" | "gstRate">) {
+  const sub = money((q.items ?? []).reduce((s, i) => s + Math.max(0, i.qty) * Math.max(0, i.unitPrice), 0));
+  const disc = Math.min(sub, q.discountType === "percent" ? (sub * Math.min(100, Math.max(0, q.discount))) / 100 : Math.max(0, q.discount));
+  const taxable = money(sub - disc);
+  return money(taxable + (q.gstEnabled ? (taxable * Math.min(100, Math.max(0, q.gstRate))) / 100 : 0));
+}
+/** A starting point the user reviews in the editor — never saved automatically. */
+export function templateFromLegacy(q: LegacyQuotation, sortOrder: number): QuotationTemplate {
+  const lines = (q.items ?? []).filter((i) => i.description?.trim()).map((i) => `- ${i.description.trim()}`);
+  const body = ["Hi {clientName},", "", "Here are the details of our *{packageName}* package — {packagePrice}.", ...(lines.length ? ["", "What we provide:", ...lines] : []), ...(q.paymentTerms?.trim() ? ["", `Payment terms: ${q.paymentTerms.trim()}`] : []), ...(q.notes?.trim() ? ["", q.notes.trim()] : [])].join("\n");
+  const total = legacyTotal(q);
+  return { ...emptyQuotationTemplate(sortOrder), name: q.title || "Imported package", priceType: total > 0 ? "fixed" : "custom", priceAmount: total > 0 ? total : undefined, messageBody: body };
 }
 
 export interface BusinessProfile { name: string; address?: string; gstin?: string; email?: string; phone?: string; website?: string; paymentInstructions?: string }
@@ -45,48 +93,6 @@ export interface WaTemplate { id: string; purpose: TemplatePurpose; name: string
 
 export interface Demo { id: string; title: string; url: string; description?: string | undefined; category: string; tags: string[]; thumbnail?: string | undefined; active: boolean; order: number; includeByDefault: boolean }
 export const DEFAULT_DEMO_CATEGORIES = ["E-commerce", "Scroll-Based Website", "3D Website", "Business Website", "Portfolio", "Other"];
-
-/* ---------- money ---------- */
-const money = (n: number) => Math.round((Number.isFinite(n) ? n : 0) * 100) / 100;
-export const lineTotal = (i: Pick<QuoteItem, "qty" | "unitPrice">) => money(Math.max(0, i.qty) * Math.max(0, i.unitPrice));
-export function quoteTotals(q: Pick<Quotation, "items" | "discountType" | "discount" | "gstEnabled" | "gstRate">) {
-  const subtotal = money(q.items.reduce((s, i) => s + lineTotal(i), 0));
-  const rawDisc = q.discountType === "percent" ? (subtotal * Math.min(100, Math.max(0, q.discount))) / 100 : Math.max(0, q.discount);
-  const discount = money(Math.min(subtotal, rawDisc));
-  const taxable = money(subtotal - discount);
-  const rate = q.gstEnabled ? Math.min(100, Math.max(0, q.gstRate)) : 0;
-  const gst = money((taxable * rate) / 100);
-  return { subtotal, discount, taxable, gstRate: rate, gst, total: money(taxable + gst) };
-}
-
-/* ---------- lifecycle ---------- */
-export const quotesForLead = (quotes: Quotation[], leadId: string | null | undefined) => (leadId ? quotes.filter((q) => q.leadId === leadId) : []);
-export const isExpired = (q: Pick<Quotation, "validUntil" | "status">, today: string) => q.status === "expired" || (!!q.validUntil && q.validUntil < today && q.status !== "accepted" && q.status !== "rejected");
-export const effectiveStatus = (q: Quotation, today: string): QuoteStatus => (isExpired(q, today) ? "expired" : q.status);
-/** Only ready (or already shared) quotations that are still valid and priced can be sent to a client. */
-export function shareBlocker(q: Quotation, today: string): string | null {
-  if (isExpired(q, today)) return "This quotation has expired — extend its validity first.";
-  if (q.status === "draft") return "Mark this quotation Ready before sharing it.";
-  if (q.status === "rejected" || q.status === "accepted") return `This quotation is ${QUOTE_STATUS_LABEL[q.status].toLowerCase()}.`;
-  if (!q.items.some((i) => i.description.trim() && lineTotal(i) > 0)) return "Add at least one priced item.";
-  return null;
-}
-export function quoteError(q: Pick<Quotation, "title" | "leadId" | "items" | "issueDate" | "validUntil">): string | null {
-  if (!q.leadId) return "Choose a client.";
-  if (!q.title.trim()) return "Add a quotation title.";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(q.issueDate) || !/^\d{4}-\d{2}-\d{2}$/.test(q.validUntil)) return "Enter valid dates.";
-  if (q.validUntil < q.issueDate) return "Validity must be on or after the quotation date.";
-  if (!q.items.length) return "Add at least one item.";
-  if (q.items.some((i) => !i.description.trim())) return "Every item needs a description.";
-  if (q.items.some((i) => !(i.qty > 0) || !(i.unitPrice >= 0) || !Number.isFinite(i.qty) || !Number.isFinite(i.unitPrice))) return "Quantities must be above zero and prices cannot be negative.";
-  return null;
-}
-export function nextQuoteNumber(quotes: Pick<Quotation, "number">[], year: number) {
-  const prefix = `SF-Q-${year}-`;
-  const max = quotes.reduce((m, q) => (q.number.startsWith(prefix) ? Math.max(m, Number(q.number.slice(prefix.length)) || 0) : m), 0);
-  return `${prefix}${String(max + 1).padStart(3, "0")}`;
-}
-export const emptyItem = (): QuoteItem => ({ id: uid("qi"), description: "", qty: 1, unitPrice: 0 });
 
 /* ---------- URLs ---------- */
 /** Only absolute http(s) links are allowed into client messages. */
@@ -104,7 +110,8 @@ export function selectedDemos(demos: Demo[], override?: string[] | null) {
 export const demoLines = (demos: Demo[]) => demos.map((d) => `• ${d.title}: ${safeUrl(d.url)}`).join("\n");
 
 /* ---------- templates ---------- */
-export const PLACEHOLDERS = ["clientName", "firstName", "companyName", "projectType", "quotedAmount", "ownerName", "businessName", "quotationTitle", "quotationNumber", "quotationAmount", "validUntil", "demoLinks"] as const;
+export const PLACEHOLDERS = ["clientName", "firstName", "companyName", "projectType", "quotedAmount", "ownerName", "businessName", "packageName", "packagePrice", "demoLinks"] as const;
+export const QUOTATION_PLACEHOLDERS = ["clientName", "firstName", "companyName", "projectType", "packageName", "packagePrice", "ownerName", "businessName"] as const;
 export type TemplateVars = Partial<Record<(typeof PLACEHOLDERS)[number], string>>;
 const TOKEN = /\{(\w+)\}/g;
 /** Fill placeholders from saved data only. A sentence (or line) whose value is missing is dropped, so clients never see `{tokens}` or invented values. */
@@ -124,13 +131,13 @@ export function renderTemplate(body: string, vars: TemplateVars): string {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
-export function templateVars(lead: Pick<Lead, "name" | "company" | "requirement" | "quotedAmount">, ctx: { owner: string; business: string; dealName?: string | undefined; quote?: Quotation | undefined; demos?: Demo[] }): TemplateVars {
+export function templateVars(lead: Pick<Lead, "name" | "company" | "requirement" | "quotedAmount">, ctx: { owner: string; business: string; dealName?: string | undefined; pkg?: QuotationTemplate | undefined; demos?: Demo[] }): TemplateVars {
   const v: TemplateVars = { clientName: lead.name, firstName: lead.name.trim().split(/\s+/)[0] ?? lead.name, ownerName: ctx.owner, businessName: ctx.business };
   if (lead.company) v.companyName = lead.company;
   const project = ctx.dealName || lead.requirement?.trim();
   if (project) v.projectType = project;
   if (lead.quotedAmount) v.quotedAmount = formatINR(lead.quotedAmount);
-  if (ctx.quote) { v.quotationTitle = ctx.quote.title; v.quotationNumber = ctx.quote.number; v.quotationAmount = formatINR(quoteTotals(ctx.quote).total); v.validUntil = formatDate(`${ctx.quote.validUntil}T12:00:00Z`, { day: "numeric", month: "short", year: "numeric" }); }
+  if (ctx.pkg) { v.packageName = ctx.pkg.name.trim(); v.packagePrice = formatPackagePrice(ctx.pkg); }
   const links = demoLines(ctx.demos ?? []);
   if (links) v.demoLinks = links;
   return v;
@@ -150,19 +157,20 @@ export interface ComposeInput {
   business: string;
   dealName?: string | undefined;
   templates: WaTemplate[];
-  quote?: Quotation | undefined;
+  /** For the Quotation purpose: the chosen package template. Its message is the draft. */
+  pkg?: QuotationTemplate | undefined;
   demos?: Demo[];
 }
-/** The composer's draft, always built from the one shared template / quotation / demo source. */
+/** The composer's draft, always built from the one shared package / template / demo source. */
 export function composeDraft(i: ComposeInput): string {
+  const ctx = { owner: i.owner, business: i.business, dealName: i.dealName };
+  if (i.purpose === "quotation" && i.pkg) return renderQuotation(i.pkg, i.lead, ctx);
   const chosen = i.templateId ? i.templates.find((t) => t.id === i.templateId && t.enabled && t.purpose === i.purpose) : undefined;
   const t = chosen ?? (i.purpose === "custom" ? undefined : pickTemplate(i.templates, i.purpose));
-  const ctx = { owner: i.owner, business: i.business, dealName: i.dealName };
-  // A quotation message without a saved quotation falls back to the generic draft (never "I'll attach the PDF").
-  if (!t || (i.purpose === "quotation" && !i.quote)) {
+  if (!t || i.purpose === "quotation") {
     return i.purpose === "custom" ? "" : draftMessage(i.purpose, i.lead, { ...ctx, assets: (i.demos ?? []).map((d) => ({ label: d.title, url: safeUrl(d.url)! })) });
   }
-  return renderTemplate(t.body, templateVars(i.lead, { ...ctx, quote: i.quote, demos: i.demos ?? [] }));
+  return renderTemplate(t.body, templateVars(i.lead, { ...ctx, demos: i.demos ?? [] }));
 }
 /**
  * Keep the composer in step with shared data without destroying the user's work:
@@ -173,12 +181,11 @@ export function syncDraft(s: { text: string; base: string; edited: boolean }, fr
   if (!s.edited || !s.text.trim()) return { text: fresh, base: fresh, notice: false };
   return { text: s.text, base: s.base, notice: true };
 }
-export const addDaysYmd = (ymd: string, n: number) => { const d = new Date(`${ymd}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 export function builtInTemplates(at = new Date().toISOString()): WaTemplate[] {
   const t = (id: string, purpose: TemplatePurpose, name: string, body: string): WaTemplate => ({ id, purpose, name, body, isDefault: true, enabled: true, builtIn: true, updatedAt: at });
   return [
     t("tpl_followup", "followup", "Friendly follow-up", "Hi {firstName}, this is {ownerName} from {businessName}. Just following up on our conversation about {projectType}. Would you have a few minutes today or tomorrow to discuss the next steps?"),
-    t("tpl_quotation", "quotation", "Quotation share", "Hi {firstName}, this is {ownerName} from {businessName}. Sharing quotation {quotationNumber} for {quotationTitle}. The total is {quotationAmount}, valid until {validUntil}. I'll attach the PDF here. Happy to walk you through what's included."),
+    t("tpl_quotation", "quotation", "Quotation intro", "Hi {firstName}, this is {ownerName} from {businessName}. Happy to share our website packages for {projectType}. Let me know which one suits you and I'll send the full details."),
     t("tpl_samples", "samples", "Website samples", "Hi {firstName}, this is {ownerName} from {businessName}. Sharing some website samples relevant to {projectType}.\n\n{demoLinks}\n\nLet me know which style you like and we can take it from there."),
   ];
 }

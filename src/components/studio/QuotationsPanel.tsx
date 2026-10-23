@@ -1,98 +1,105 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Link } from "@tanstack/react-router";
-import { Plus, Search, FileText, Copy, Download, Pencil, Trash2, MessageCircle, Building2, Info } from "lucide-react";
+import { Plus, Search, FileText, Copy, Pencil, Trash2, Eye, ArrowUp, ArrowDown, Archive, Download } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
-import { formatINR, dayKey } from "@/lib/crm/format";
-import { effectiveStatus, quoteTotals, QUOTE_STATUSES, QUOTE_STATUS_LABEL, type BusinessProfile, type Quotation, type QuoteStatus } from "@/lib/crm/studio";
-import { openWhatsApp } from "@/components/crm/WhatsAppComposer";
+import { formatINR, formatDate } from "@/lib/crm/format";
+import { formatPackagePrice, legacyTotal, renderQuotation, templateFromLegacy, type QuotationTemplate } from "@/lib/crm/studio";
 import { Empty, selectCls } from "@/components/crm/Shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { QuotationEditor } from "./QuotationEditor";
-import { QuotationPreview } from "./QuotationPreview";
+import { QuotationTemplateEditor } from "./QuotationTemplateEditor";
 import { cn } from "@/lib/utils";
 
-export function QuotationsPanel({ selected, client, onSelect, onClient }: { selected?: string | undefined; client?: string | undefined; onSelect: (id: string | undefined) => void; onClient: (id: string | undefined) => void }) {
-  const { quotations, leads, businessProfile, business, duplicateQuotation, deleteQuotation, setQuoteStatus } = useCRM();
-  const [q, setQ] = useState(""), [status, setStatus] = useState<QuoteStatus | "all">("all");
-  const [editing, setEditing] = useState<Quotation | "new" | null>(null);
-  const [bizOpen, setBizOpen] = useState(false);
-  const today = dayKey(new Date());
-  const list = useMemo(() => quotations
-    .filter((x) => (!client || x.leadId === client) && (status === "all" || effectiveStatus(x, today) === status) && `${x.number} ${x.title} ${x.clientName} ${x.company ?? ""}`.toLowerCase().includes(q.toLowerCase()))
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), [quotations, client, status, q, today]);
-  const current = quotations.find((x) => x.id === selected) ?? list[0];
-  const leadExists = (id: string) => leads.some((l) => l.id === id);
-  const quoted = quotations.filter((x) => ["ready", "shared"].includes(effectiveStatus(x, today))).reduce((s, x) => s + quoteTotals(x).total, 0);
-  const accepted = quotations.filter((x) => x.status === "accepted").reduce((s, x) => s + quoteTotals(x).total, 0);
-  const pdf = async (x: Quotation) => { try { const { downloadQuotationPdf } = await import("@/lib/crm/quotepdf"); await downloadQuotationPdf(x, businessProfile, business); toast.success("PDF downloaded"); } catch { toast.error("Couldn't create the PDF"); } };
-  const clientsWithQuotes = leads.filter((l) => quotations.some((x) => x.leadId === l.id));
+/** Quotation Templates: reusable, global WhatsApp packages. Not linked to any client, deal or payment. */
+export function QuotationsPanel({ client, create }: { client?: string | undefined; create?: boolean | undefined }) {
+  const { quotationTemplates, legacyQuotations, duplicateQuotationTemplate, deleteQuotationTemplate, setQuotationTemplateActive, moveQuotationTemplate } = useCRM();
+  const [q, setQ] = useState("");
+  const [editing, setEditing] = useState<QuotationTemplate | "new" | null>(create ? "new" : null);
+  const [previewing, setPreviewing] = useState<QuotationTemplate | null>(null);
+  const [legacyOpen, setLegacyOpen] = useState(false);
+  const sorted = useMemo(() => [...quotationTemplates].sort((a, b) => a.sortOrder - b.sortOrder), [quotationTemplates]);
+  const list = sorted.filter((t) => `${t.name} ${t.messageBody} ${formatPackagePrice(t)}`.toLowerCase().includes(q.toLowerCase()));
 
   return (
     <div className="grid gap-4">
-      <div className="studio-metrics">
-        <div className="studio-metric"><span className="eyebrow">Quotations</span><span className="num text-2xl font-semibold">{quotations.length}</span></div>
-        <div className="studio-metric"><span className="eyebrow">Open quoted value</span><span className="num text-2xl font-semibold">{formatINR(quoted)}</span><span className="text-[11px] text-muted-foreground">Ready or shared — not confirmed revenue</span></div>
-        <div className="studio-metric"><span className="eyebrow">Accepted</span><span className="num text-2xl font-semibold">{formatINR(accepted)}</span><span className="text-[11px] text-muted-foreground">Convert to a deal manually</span></div>
-      </div>
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-48 flex-1"><Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" /><Input aria-label="Search quotations" className="pl-8" placeholder="Search number, title or client" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-        <select aria-label="Filter by status" className={selectCls} value={status} onChange={(e) => setStatus(e.target.value as QuoteStatus | "all")}><option value="all">All statuses</option>{QUOTE_STATUSES.map((s) => <option key={s} value={s}>{QUOTE_STATUS_LABEL[s]}</option>)}</select>
-        <select aria-label="Filter by client" className={selectCls} value={client ?? ""} onChange={(e) => onClient(e.target.value || undefined)}><option value="">All clients</option>{clientsWithQuotes.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
-        <Button variant="outline" onClick={() => setBizOpen(true)}><Building2 />Business details</Button>
-        <Button onClick={() => setEditing("new")}><Plus />New quotation</Button>
+        <div className="relative min-w-48 flex-1"><Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" /><Input aria-label="Search quotations" className="pl-8" placeholder="Search packages" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+        {legacyQuotations.length > 0 && <Button variant="outline" onClick={() => setLegacyOpen(true)}><Archive />Old quotations ({legacyQuotations.length})</Button>}
+        <Button onClick={() => setEditing("new")}><Plus />Add quotation</Button>
       </div>
-      {quotations.length === 0 ? (
-        <div className="surface"><Empty icon={<FileText />} title="No quotations yet" hint="Create your first quotation. It stays separate from deals and payments until you convert it yourself." action={<Button onClick={() => setEditing("new")}><Plus />New quotation</Button>} /></div>
+      {quotationTemplates.length === 0 ? (
+        <div className="surface"><Empty icon={<FileText />} title="No quotation packages yet" hint="Add a package once — name, price and message — and send it to any client from WhatsApp." action={<Button onClick={() => setEditing("new")}><Plus />Add quotation</Button>} /></div>
       ) : (
-        <div className="studio-split">
-          <div className="studio-list" role="listbox" aria-label="Quotations">
-            {list.length === 0 && <p className="p-6 text-center text-sm text-muted-foreground">No quotations match these filters.</p>}
-            {list.map((x) => { const st = effectiveStatus(x, today); return (
-              <button key={x.id} type="button" role="option" aria-selected={current?.id === x.id} onClick={() => onSelect(x.id)} className="studio-row">
-                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{x.title}</span><span className="block truncate text-xs text-muted-foreground">{x.clientName}{x.company ? ` · ${x.company}` : ""}</span><span className="num block text-[11px] text-muted-foreground">{x.number} · until {x.validUntil}</span></span>
-                <span className="grid justify-items-end gap-1"><span className="num text-sm font-semibold">{formatINR(quoteTotals(x).total)}</span><span className="q-status" data-status={st}>{QUOTE_STATUS_LABEL[st]}</span></span>
-              </button>); })}
-          </div>
-          {current && (
-            <div className="grid content-start gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <select aria-label="Quotation status" className={cn(selectCls, "h-9")} value={current.status} onChange={(e) => { setQuoteStatus(current.id, e.target.value as QuoteStatus); toast.success(`Marked ${QUOTE_STATUS_LABEL[e.target.value as QuoteStatus]}`); }}>
-                  {QUOTE_STATUSES.map((s) => <option key={s} value={s}>{QUOTE_STATUS_LABEL[s]}</option>)}
-                </select>
-                <Button size="sm" variant="outline" onClick={() => setEditing(current)}><Pencil />Edit</Button>
-                <Button size="sm" variant="outline" onClick={() => { const id = duplicateQuotation(current.id); if (id) { onSelect(id); toast.success("Duplicated as a new draft"); } }}><Copy />Duplicate</Button>
-                <Button size="sm" variant="outline" onClick={() => pdf(current)}><Download />PDF</Button>
-                <Button size="sm" variant="outline" disabled={!leadExists(current.leadId)} title={leadExists(current.leadId) ? undefined : "This client is no longer an active lead"} onClick={() => openWhatsApp(current.leadId, "Sales Studio", { purpose: "quotation", quoteId: current.id })}><MessageCircle />WhatsApp</Button>
-                <Button size="sm" variant="ghost" aria-label="Delete quotation" className="hover:text-destructive" onClick={() => { if (window.confirm(`Delete ${current.number} — ${current.title}? This can't be undone.`)) { deleteQuotation(current.id); onSelect(undefined); toast.success("Quotation deleted"); } }}><Trash2 /></Button>
-              </div>
-              {current.status === "accepted" && <p className="flex items-center gap-2 rounded-lg bg-success-soft p-2.5 text-xs"><Info className="size-4 shrink-0" />Accepted quotations aren't turned into deals automatically. Create the deal yourself in <Link to="/deals" className="underline">Deals &amp; Payments</Link>.</p>}
-              <QuotationPreview q={current} biz={businessProfile} fallbackName={business} />
-            </div>
-          )}
+        <div className="qt-grid" aria-label="Quotation templates">
+          {list.length === 0 && <p className="p-6 text-center text-sm text-muted-foreground">No packages match “{q}”.</p>}
+          {list.map((t) => { const i = sorted.indexOf(t); return (
+            <article key={t.id} className={cn("qt-card", !t.isActive && "is-off")} aria-label={t.name}>
+              <header className="flex items-start justify-between gap-3">
+                <div className="min-w-0"><h3 className="truncate text-[15px] font-semibold">{t.name}</h3><div className="num text-lg font-semibold text-primary">{formatPackagePrice(t)}</div></div>
+                <Switch aria-label={`${t.isActive ? "Deactivate" : "Activate"} ${t.name}`} checked={t.isActive} onCheckedChange={(v) => { setQuotationTemplateActive(t.id, v); toast.success(v ? "Package active in WhatsApp" : "Package hidden from WhatsApp"); }} />
+              </header>
+              <p className="qt-snippet">{t.messageBody}</p>
+              <footer className="flex flex-wrap items-center gap-1">
+                <span className="mr-auto text-[11px] text-muted-foreground">{t.isActive ? "Active" : "Inactive"} · edited {formatDate(t.updatedAt, { day: "numeric", month: "short" })}</span>
+                <Button size="icon" variant="ghost" className="size-8" aria-label={`Move ${t.name} up`} disabled={i === 0} onClick={() => moveQuotationTemplate(t.id, -1)}><ArrowUp className="size-4" /></Button>
+                <Button size="icon" variant="ghost" className="size-8" aria-label={`Move ${t.name} down`} disabled={i === sorted.length - 1} onClick={() => moveQuotationTemplate(t.id, 1)}><ArrowDown className="size-4" /></Button>
+                <Button size="icon" variant="ghost" className="size-8" aria-label={`Preview ${t.name}`} onClick={() => setPreviewing(t)}><Eye className="size-4" /></Button>
+                <Button size="icon" variant="ghost" className="size-8" aria-label={`Duplicate ${t.name}`} onClick={() => { if (duplicateQuotationTemplate(t.id)) toast.success("Package duplicated"); }}><Copy className="size-4" /></Button>
+                <Button size="icon" variant="ghost" className="size-8 hover:text-destructive" aria-label={`Delete ${t.name}`} onClick={() => { if (window.confirm(`Delete “${t.name}”? Messages already logged keep their copy.`)) { deleteQuotationTemplate(t.id); toast.success("Package deleted"); } }}><Trash2 className="size-4" /></Button>
+                <Button size="sm" variant="outline" onClick={() => setEditing(t)}><Pencil />Edit</Button>
+              </footer>
+            </article>); })}
         </div>
       )}
-      {editing && <QuotationEditor initial={editing === "new" ? undefined : editing} {...(editing === "new" && client ? { leadId: client } : {})} onClose={() => setEditing(null)} onSaved={(id) => onSelect(id)} />}
-      {bizOpen && <BusinessDialog initial={businessProfile} onClose={() => setBizOpen(false)} />}
+      {editing && <QuotationTemplateEditor initial={editing === "new" ? undefined : editing} previewLeadId={client} onClose={() => setEditing(null)} />}
+      {previewing && <PreviewDialog t={previewing} leadId={client} onClose={() => setPreviewing(null)} />}
+      {legacyOpen && <LegacyDialog onClose={() => setLegacyOpen(false)} onUse={(t) => { setLegacyOpen(false); setEditing(t); }} />}
     </div>
   );
 }
 
-function BusinessDialog({ initial, onClose }: { initial: BusinessProfile; onClose: () => void }) {
-  const save = useCRM((s) => s.saveBusinessProfile);
-  const [b, setB] = useState<BusinessProfile>(initial);
-  const f = (k: keyof BusinessProfile, label: string, ph: string, area = false) => (
-    <label className="q-field"><span>{label}</span>{area ? <Textarea rows={3} value={b[k] ?? ""} placeholder={ph} onChange={(e) => setB({ ...b, [k]: e.target.value })} /> : <Input value={b[k] ?? ""} placeholder={ph} onChange={(e) => setB({ ...b, [k]: e.target.value })} />}</label>
-  );
+function PreviewDialog({ t, leadId, onClose }: { t: QuotationTemplate; leadId?: string | undefined; onClose: () => void }) {
+  const { leads, deals, owner, business } = useCRM();
+  const [id, setId] = useState(leadId ?? leads[0]?.id ?? "");
+  const lead = leads.find((l) => l.id === id);
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader><DialogTitle>Business details for quotations</DialogTitle><DialogDescription>Only what you enter here appears on quotations. Leave anything blank to hide it.</DialogDescription></DialogHeader>
-        <div className="grid gap-3">{f("name", "Business name", "Your registered business name")}{f("address", "Address", "Street, city, PIN", true)}<div className="grid gap-3 sm:grid-cols-2">{f("email", "Email", "billing@…")}{f("phone", "Phone", "+91…")}</div><div className="grid gap-3 sm:grid-cols-2">{f("website", "Website", "yourdomain.com")}{f("gstin", "GSTIN", "Only if registered")}</div>{f("paymentInstructions", "Payment instructions", "Bank / UPI details shown on every quotation", true)}</div>
-        <div className="flex justify-end gap-2"><Button variant="ghost" onClick={onClose}>Cancel</Button><Button onClick={() => { const clean = Object.fromEntries(Object.entries(b).map(([k, v]) => [k, (v ?? "").trim()]).filter(([k, v]) => k === "name" || v)) as unknown as BusinessProfile; save(clean); toast.success("Business details saved"); onClose(); }}>Save</Button></div>
+        <DialogHeader><DialogTitle>{t.name} · {formatPackagePrice(t)}</DialogTitle><DialogDescription>How this package reads for a real client. Only saved client details are used.</DialogDescription></DialogHeader>
+        <select aria-label="Preview client" className={selectCls} value={id} onChange={(e) => setId(e.target.value)}>{leads.map((l) => <option key={l.id} value={l.id}>{l.name}{l.company ? ` · ${l.company}` : ""}</option>)}</select>
+        <div className="qt-bubble">{lead ? renderQuotation(t, lead, { owner, business, dealName: deals.find((d) => d.leadId === lead.id && d.status !== "cancelled")?.name }) : "Add a lead to preview."}</div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function LegacyDialog({ onClose, onUse }: { onClose: () => void; onUse: (t: QuotationTemplate) => void }) {
+  const { legacyQuotations, quotationTemplates, deleteLegacyQuotations } = useCRM();
+  const exportJson = () => {
+    const blob = new Blob([JSON.stringify(legacyQuotations, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = "old-quotations-backup.json"; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  };
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader><DialogTitle>Old quotations</DialogTitle><DialogDescription>These came from the earlier invoice-style builder. They're kept unchanged as a backup and aren't used in WhatsApp. Turn one into a package only if you want to — you'll review it before saving.</DialogDescription></DialogHeader>
+        <div className="grid gap-1.5">
+          {legacyQuotations.map((x) => (
+            <div key={x.id} className="studio-row">
+              <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{x.title || "Untitled"}</span><span className="block truncate text-xs text-muted-foreground">{x.clientName} · {x.number}</span></span>
+              <span className="num text-sm font-semibold">{formatINR(legacyTotal(x))}</span>
+              <Button size="sm" variant="outline" onClick={() => onUse(templateFromLegacy(x, quotationTemplates.length))}>Use as package</Button>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
+          <Button variant="ghost" className="hover:text-destructive" onClick={() => { if (window.confirm("Delete the backup of old quotations? Download it first if you might need it.")) { deleteLegacyQuotations(); onClose(); toast.success("Old quotations removed"); } }}><Trash2 />Delete backup</Button>
+          <Button variant="outline" onClick={exportJson}><Download />Download backup</Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

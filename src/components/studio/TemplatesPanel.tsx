@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { Plus, Copy, Trash2, Star, RotateCcw, AlertTriangle, MessagesSquare, FileText, LayoutTemplate, PenLine } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
 import { uid } from "@/lib/crm/format";
-import { PLACEHOLDERS, quotesForLead, renderTemplate, selectedDemos, templateVars, unknownPlaceholders, type TemplatePurpose, type WaTemplate } from "@/lib/crm/studio";
+import { PLACEHOLDERS, renderTemplate, selectedDemos, templateVars, unknownPlaceholders, type TemplatePurpose, type WaTemplate } from "@/lib/crm/studio";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,7 +19,7 @@ const PURPOSES: { key: TemplatePurpose; label: string; icon: typeof FileText }[]
 ];
 
 export function TemplatesPanel() {
-  const { waTemplates, saveTemplate, deleteTemplate, setDefaultTemplate, resetTemplates, leads, quotations, demos, owner, business, deals } = useCRM();
+  const { waTemplates, saveTemplate, deleteTemplate, setDefaultTemplate, resetTemplates, leads, demos, owner, business, deals } = useCRM();
   const [selId, setSelId] = useState<string | null>(waTemplates[0]?.id ?? null);
   const saved = waTemplates.find((t) => t.id === selId);
   const [draft, setDraft] = useState<WaTemplate | null>(saved ?? null);
@@ -39,10 +39,9 @@ export function TemplatesPanel() {
   const lead = leads.find((l) => l.id === previewLead);
   const preview = useMemo(() => {
     if (!draft || !lead) return "";
-    const quote = [...quotesForLead(quotations, lead.id)].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
     const dealName = deals.find((d) => d.leadId === lead.id && d.status !== "cancelled")?.name;
-    return renderTemplate(draft.body, templateVars(lead, { owner, business, dealName, quote, demos: selectedDemos(demos) }));
-  }, [draft, lead, quotations, demos, owner, business, deals]);
+    return renderTemplate(draft.body, templateVars(lead, { owner, business, dealName, demos: selectedDemos(demos) }));
+  }, [draft, lead, demos, owner, business, deals]);
   const unknown = draft ? unknownPlaceholders(draft.body) : [];
 
   return (
