@@ -21,12 +21,13 @@ export type EventType =
   | "lead.reviewed" | "lead.duplicate_flagged" | "lead.duplicate_resolved" | "lead.related" | "lead.merged" | "lead.intake_status_changed"
   | "automation.reminder" | "automation.escalated" | "automation.reminder_resolved"
   | "project.fields_changed" | "project.tag_added" | "project.tag_removed"
+  | "analytics.forecast_changed" | "analytics.report_changed"
   | "lead.tag_added" | "lead.tag_removed" | "lead.fields_changed" | "config.field_changed" | "config.view_changed"
   | "project.created" | "project.booked" | "project.started" | "project.stage_changed" | "project.task_created" | "project.task_completed" | "project.assigned" | "project.delivered" | "project.support_started" | "project.support_request_created" | "project.support_request_resolved"
   | "employee.added" | "employee.updated" | "employee.status_changed" | "employee.permissions_changed";
 
 export type EntityType = "lead" | "followup" | "deal" | "payment" | "employee" | "bulk" | "project";
-export type CrmModule = "leads" | "calls" | "followups" | "pipeline" | "finance" | "assignments" | "team" | "projects";
+export type CrmModule = "leads" | "calls" | "followups" | "pipeline" | "finance" | "assignments" | "team" | "projects" | "analytics";
 export type Importance = "low" | "normal" | "high";
 export type EventSource = "local" | "demo" | "backend";
 
@@ -61,6 +62,7 @@ export interface EventSnap {
   reminders?: { id: string; leadId: string; projectId?: string | undefined; ruleName: string; reason: string; escalated?: boolean; employeeId: string | null; status?: string; closedAt?: string | undefined }[];
   projectTags?: Record<string, string[]>; projectFieldValues?: Record<string, Record<string, unknown>>; projectFields?: { id: string; label: string }[];
   inboxMeta?: Record<string, { reviewedAt?: string; flaggedAt?: string }>;
+  forecastConfig?: { version: number }; savedReports?: { id: string; name: string; version: number; archived: boolean }[];
   leadTags?: Record<string, string[]>; fieldValues?: Record<string, Record<string, unknown>>;
   customFields?: { id: string; label: string; status: string; version: number }[]; tagDefs?: { id: string; name: string }[];
   savedViews?: { id: string; name: string; visibility: string; version: number }[];
@@ -84,7 +86,7 @@ export const MODULE_OF: Record<EventType, CrmModule> = {
   "payment.recorded": "finance", "payment.updated": "finance",
   "bulk.completed": "assignments", "bulk.reversed": "assignments",
   "lead.reviewed": "leads", "lead.duplicate_flagged": "leads", "lead.duplicate_resolved": "leads", "lead.related": "leads", "lead.merged": "leads", "lead.intake_status_changed": "leads",
-  "automation.reminder": "followups", "automation.escalated": "followups", "automation.reminder_resolved": "followups", "project.fields_changed": "projects", "project.tag_added": "projects", "project.tag_removed": "projects",
+  "automation.reminder": "followups", "automation.escalated": "followups", "automation.reminder_resolved": "followups", "project.fields_changed": "projects", "analytics.forecast_changed": "analytics", "analytics.report_changed": "analytics", "project.tag_added": "projects", "project.tag_removed": "projects",
   "employee.added": "team", "employee.updated": "team", "employee.status_changed": "team", "employee.permissions_changed": "team",
 };
 export const EVENT_LABEL: Record<EventType, string> = {
@@ -96,14 +98,14 @@ export const EVENT_LABEL: Record<EventType, string> = {
   "payment.recorded": "Payment recorded", "payment.updated": "Payment updated",
   "bulk.completed": "Bulk operation", "bulk.reversed": "Bulk operation reversed",
   "lead.reviewed": "Lead reviewed", "lead.duplicate_flagged": "Possible duplicate flagged", "lead.duplicate_resolved": "Duplicate kept separate", "lead.related": "Leads marked related", "lead.merged": "Leads merged", "lead.intake_status_changed": "Inbox status changed",
-  "automation.reminder": "Automation reminder", "automation.escalated": "Escalated to Owner", "automation.reminder_resolved": "Automation reminder resolved", "project.fields_changed": "Project field changed", "project.tag_added": "Project tag added", "project.tag_removed": "Project tag removed",
+  "automation.reminder": "Automation reminder", "automation.escalated": "Escalated to Owner", "automation.reminder_resolved": "Automation reminder resolved", "analytics.forecast_changed": "Forecast probabilities changed", "analytics.report_changed": "Saved report changed", "project.fields_changed": "Project field changed", "project.tag_added": "Project tag added", "project.tag_removed": "Project tag removed",
   "lead.tag_added": "Lead tag added", "lead.tag_removed": "Lead tag removed", "lead.fields_changed": "Custom field changed", "config.field_changed": "Field definition changed", "config.view_changed": "Shared view changed",
   "project.created": "Project created", "project.booked": "Project booked", "project.started": "Project started", "project.stage_changed": "Project stage changed", "project.task_created": "Project task added", "project.task_completed": "Project task completed", "project.assigned": "Project team changed", "project.delivered": "Project delivered", "project.support_started": "Support configured", "project.support_request_created": "Support request opened", "project.support_request_resolved": "Support request resolved",
   "employee.added": "Employee added", "employee.updated": "Employee updated", "employee.status_changed": "Account status changed", "employee.permissions_changed": "Permissions changed",
 };
-export const MODULE_LABEL: Record<CrmModule, string> = { leads: "Leads", calls: "Calls", followups: "Follow-ups", pipeline: "Pipeline", finance: "Finance", assignments: "Assignments", team: "Team", projects: "Projects" };
+export const MODULE_LABEL: Record<CrmModule, string> = { analytics: "Analytics", leads: "Leads", calls: "Calls", followups: "Follow-ups", pipeline: "Pipeline", finance: "Finance", assignments: "Assignments", team: "Team", projects: "Projects" };
 const IMPORTANCE: Partial<Record<EventType, Importance>> = {
-  "lead.edited": "low", "project.task_created": "low", "project.fields_changed": "low", "project.tag_added": "low", "project.tag_removed": "low", "automation.reminder_resolved": "low", "project.stage_changed": "low", "lead.fields_changed": "low", "lead.tag_added": "low", "lead.tag_removed": "low", "config.field_changed": "low", "config.view_changed": "low", "followup.rescheduled": "low", "client.note_added": "low", "deal.created": "low", "employee.updated": "low",
+  "lead.edited": "low", "project.task_created": "low", "project.fields_changed": "low", "analytics.report_changed": "low", "project.tag_added": "low", "project.tag_removed": "low", "automation.reminder_resolved": "low", "project.stage_changed": "low", "lead.fields_changed": "low", "lead.tag_added": "low", "lead.tag_removed": "low", "config.field_changed": "low", "config.view_changed": "low", "followup.rescheduled": "low", "client.note_added": "low", "deal.created": "low", "employee.updated": "low",
   "deal.won": "high", "deal.lost": "high", "lead.hot": "high", "bulk.completed": "high", "payment.updated": "high", "employee.status_changed": "high", "employee.permissions_changed": "high", "bulk.reversed": "high", "automation.escalated": "high",
 };
 
@@ -247,6 +249,12 @@ export function deriveEvents(prev: EventSnap, next: EventSnap, ctx: DeriveCtx): 
     const labels = changed.map((k) => next.customFields?.find((f) => f.id === k)?.label ?? "a field");
     push("lead.fields_changed", id, { entityType: "lead", entityId: id, relatedLeadId: id, summary: `${who} updated ${labels.join(", ")} on ${leadName(id)}.`, newValues: { fieldIds: changed } });
   }
+  // Phase 3G.2 — Analytics settings (definitions only; viewing reports or changing filters never records events).
+  if (prev.forecastConfig && next.forecastConfig && next.forecastConfig.version !== prev.forecastConfig.version)
+    push("analytics.forecast_changed", `v${next.forecastConfig.version}`, { entityType: "lead", entityId: "forecast", summary: `${who} updated forecast stage probabilities (version ${next.forecastConfig.version}).` });
+  if (prev.savedReports !== next.savedReports) { const pr = new Map((prev.savedReports ?? []).map((r) => [r.id, r])); for (const r of next.savedReports ?? []) { const o = pr.get(r.id); if (o && o.version === r.version) continue;
+    const verb = !o ? "created" : r.archived && !o.archived ? "archived" : !r.archived && o.archived ? "restored" : "updated";
+    push("analytics.report_changed", `${r.id}:${r.version}`, { entityType: "lead", entityId: r.id, summary: `${who} ${verb} report “${r.name}”.` }); } }
   // Phase 3G.1.1 — Project tags and Project custom fields (names only, never values).
   const prjName = (id: string) => (next.projects ?? []).find((x) => x.id === id)?.name ?? "a project";
   const ppt = prev.projectTags ?? {}, npt = next.projectTags ?? {};

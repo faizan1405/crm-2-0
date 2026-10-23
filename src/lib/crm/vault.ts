@@ -6,10 +6,10 @@ import type { ProofMeta } from "./attachments";
 
 export const APP_NAME = "Scale Flow Sales OS";
 export const FORMAT_VERSION = 1;
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 export const BUSINESS_TZ = "Asia/Kolkata";
 
-export type CategoryId = "leads" | "activities" | "followups" | "deals" | "payments" | "proofs" | "notes" | "quotations" | "waTemplates" | "demos" | "employees" | "permissions" | "assignments" | "teamActivity" | "inbox" | "automation" | "performance" | "customization" | "projects" | "settings";
+export type CategoryId = "leads" | "activities" | "followups" | "deals" | "payments" | "proofs" | "notes" | "quotations" | "waTemplates" | "demos" | "employees" | "permissions" | "assignments" | "teamActivity" | "inbox" | "automation" | "performance" | "customization" | "projects" | "analytics" | "settings";
 export interface Category { id: CategoryId; label: string; group: string; desc: string; keys: string[]; file: string; isPrivate?: boolean }
 
 export const CATEGORIES: Category[] = [
@@ -32,6 +32,7 @@ export const CATEGORIES: Category[] = [
   { id: "performance", label: "Sales goals & scorecards", group: "Team", desc: "Goal definitions, individual and team goal assignments, full revision history, goal alerts and scorecard settings. Demo performance data is never included.", keys: ["goals", "goalRevisions", "goalAlerts", "perfPrefs"], file: "data/sales-goals.json" },
   { id: "projects", label: "Project Desk", group: "Delivery", desc: "Projects with their Lead and Deal links, templates, tasks, milestones, assignments, requirements, dependencies, reference links, delivery records, support periods and support requests, Project custom field definitions (archived ones included) and typed values, Project tag links, plus full project history. Tag definitions are in Custom fields, tags & views; Project automation rules and history are in Automation Studio. Money stays in Deals and Payments — never duplicated. No project file uploads exist yet.", keys: ["projects", "projectTasks", "projectMilestones", "projectTemplates", "supportRequests", "projectFields", "projectFieldValues", "projectTags"], file: "data/projects.json" },
   { id: "customization", label: "Custom fields, tags & views", group: "Lead management", desc: "Custom field definitions with options, visibility and history, every stored field value, tags, lead–tag links, saved views with their filters and visibility, and pin/default preferences.", keys: ["customFields", "fieldValues", "tagDefs", "leadTags", "savedViews", "viewPrefs"], file: "data/crm-customization.json" },
+  { id: "analytics", label: "Analytics Studio", group: "System", desc: "Saved report definitions with their filters, pins and favourites, forecast stage probabilities with their full change history, and expected close dates. Report results and chart data are not stored — they are rebuilt from your records.", keys: ["savedReports", "forecastConfig", "forecastHistory", "expectedClose"], file: "data/analytics-settings.json" },
   { id: "settings", label: "Settings", group: "System", desc: "Workspace preferences, business profile and Daily Briefing state.", keys: ["owner", "email", "business", "theme", "accent", "density", "timeFormat", "dateStyle", "defaultLeadSort", "notifyFollowUps", "notifyPayments", "notifyDigest", "businessProfile", "briefingDone", "briefingDate"], file: "data/settings.json" },
 ];
 export const ALL_CATEGORY_IDS = CATEGORIES.map((c) => c.id);
@@ -99,7 +100,7 @@ export function estimate(s: Snapshot, proofs: ProofMeta[], plan: BackupPlan) {
   const payIds = new Set(arr(src, "payments").map((p) => p.id));
   const scopedProofs = proofs.filter((p) => payIds.has(p.paymentId));
   const counts: Partial<Record<CategoryId, number>> = {};
-  for (const c of CATEGORIES) counts[c.id] = c.id === "proofs" ? scopedProofs.length : c.id === "settings" ? (plan.type === "employee" ? 0 : 1) : countOf(src[c.keys[0]!]);
+  for (const c of CATEGORIES) counts[c.id] = c.id === "proofs" ? scopedProofs.length : c.id === "settings" ? (plan.type === "employee" ? 0 : 1) : c.id === "analytics" ? (plan.type === "employee" ? 0 : countOf(src["savedReports"])) : countOf(src[c.keys[0]!]);
   return { counts, proofs: scopedProofs, proofBytes: scopedProofs.reduce((n, p) => n + p.fileSize, 0) };
 }
 
@@ -124,7 +125,7 @@ const safeName = (n: string) => n.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 80)
 
 /** Builds a ZIP archive. Throws on failure — callers must never report success unless this resolves. */
 export async function buildBackup(plan: BackupPlan, state: Snapshot, proofInputs: ProofInput[], now = new Date()): Promise<BuildResult> {
-  const cats = CATEGORIES.filter((c) => plan.categories.includes(c.id) && !(plan.type === "employee" && c.id === "settings"));
+  const cats = CATEGORIES.filter((c) => plan.categories.includes(c.id) && !(plan.type === "employee" && (c.id === "settings" || c.id === "analytics")));
   if (!cats.length) throw new Error("Choose at least one category to back up.");
   const emp = plan.type === "employee" ? arr(state, "employees").find((e) => e.id === plan.employeeId) as (Rec & { name: string }) | undefined : undefined;
   if (plan.type === "employee" && !emp) throw new Error("That employee no longer exists.");
