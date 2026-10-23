@@ -40,6 +40,7 @@ import { uid, digits, dayKey } from "./format";
 import { dealOutstanding } from "./finance";
 import { leadEditError } from "./validation";
 import { applyAssign, assignable, evaluate, fireKey, ruleError, DEFAULT_RULE_SETTINGS, OWNER_ONLY_KEYS, type Assignment, type AssignmentEvent, type AssignmentRule, type EmployeeAccess, type RuleSettings, type RuleTrigger } from "./access";
+import type { BackupRecord } from "./vault";
 import { buildEmployee, employeeError, withStatus, type AccountStatus, type Employee, type EmployeeInput } from "./team";
 import { builtInTemplates, DEFAULT_DEMO_CATEGORIES, quotationTemplateError, safeUrl, type BusinessProfile, type Demo, type LegacyQuotation, type QuotationShare, type QuotationTemplate, type WaTemplate } from "./studio";
 
@@ -128,6 +129,9 @@ interface CRMState extends Prefs {
   saveBusinessProfile: (p: BusinessProfile) => void;
   // Team Management (Phase 3A) — local employee profiles only, never credentials. Not cleared by reset().
   employees: Employee[];
+  /** Data Vault history — genuine local backup operations only. Not cleared by reset(). */
+  backupHistory: BackupRecord[];
+  logBackup: (r: BackupRecord) => void;
   addEmployee: (input: EmployeeInput) => { ok: true; id: string } | { ok: false; error: string };
   updateEmployee: (id: string, input: EmployeeInput) => string | null;
   setEmployeeStatus: (id: string, status: AccountStatus) => void;
@@ -456,6 +460,8 @@ export const useCRM = create<CRMState>()(
       addDemoCategory: (name) => set((s) => (name.trim() && !s.demoCategories.includes(name.trim()) ? { demoCategories: [...s.demoCategories, name.trim()] } : {})),
       saveBusinessProfile: (p) => set({ businessProfile: p }),
       employees: [],
+      backupHistory: [],
+      logBackup: (r) => set((s) => ({ backupHistory: [r, ...s.backupHistory].slice(0, 100) })),
       addEmployee: (input) => {
         const err = employeeError(input, get().employees, get().email);
         if (err) return { ok: false, error: err };

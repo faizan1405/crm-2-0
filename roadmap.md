@@ -45,3 +45,4 @@ Frontend-only demo. No backend; production CRM untouched.
 - [x] Phase 3A Team Management (Phase 3B Permission Manager + lead assignment awaiting approval)
 - [x] Phase 3B permissions, lead assignment, rules, employee preview (Phase 3C awaiting approval)
 - [x] Phase 3C Owner-set employee email/password UI + backend contract (real logins wait on the Hostinger backend)
+- [x] Phase 3B.5 Dual login portal + Owner-only Data Vault (full/custom/employee backups, history, read-only verify; restore waits on Hostinger backend)

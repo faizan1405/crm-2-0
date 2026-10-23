@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as DailyBriefingRouteImport } from './routes/daily-briefing'
+import { Route as DataVaultRouteImport } from './routes/data-vault'
 import { Route as DealsRouteImport } from './routes/deals'
 import { Route as FollowUpsRouteImport } from './routes/follow-ups'
 import { Route as LeadsRouteImport } from './routes/leads'
@@ -38,6 +39,11 @@ const AnalyticsRoute = AnalyticsRouteImport.update({
 const DailyBriefingRoute = DailyBriefingRouteImport.update({
   id: '/daily-briefing',
   path: '/daily-briefing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DataVaultRoute = DataVaultRouteImport.update({
+  id: '/data-vault',
+  path: '/data-vault',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DealsRoute = DealsRouteImport.update({
@@ -105,6 +111,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/daily-briefing': typeof DailyBriefingRoute
+  '/data-vault': typeof DataVaultRoute
   '/deals': typeof DealsRoute
   '/follow-ups': typeof FollowUpsRoute
   '/leads': typeof LeadsRoute
@@ -122,6 +129,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/daily-briefing': typeof DailyBriefingRoute
+  '/data-vault': typeof DataVaultRoute
   '/deals': typeof DealsRoute
   '/follow-ups': typeof FollowUpsRoute
   '/leads': typeof LeadsRoute
@@ -140,6 +148,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/daily-briefing': typeof DailyBriefingRoute
+  '/data-vault': typeof DataVaultRoute
   '/deals': typeof DealsRoute
   '/follow-ups': typeof FollowUpsRoute
   '/leads': typeof LeadsRoute
@@ -159,6 +168,7 @@ export interface FileRouteTypes {
     | '/'
     | '/analytics'
     | '/daily-briefing'
+    | '/data-vault'
     | '/deals'
     | '/follow-ups'
     | '/leads'
@@ -176,6 +186,7 @@ export interface FileRouteTypes {
     | '/'
     | '/analytics'
     | '/daily-briefing'
+    | '/data-vault'
     | '/deals'
     | '/follow-ups'
     | '/leads'
@@ -193,6 +204,7 @@ export interface FileRouteTypes {
     | '/'
     | '/analytics'
     | '/daily-briefing'
+    | '/data-vault'
     | '/deals'
     | '/follow-ups'
     | '/leads'
@@ -211,6 +223,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnalyticsRoute: typeof AnalyticsRoute
   DailyBriefingRoute: typeof DailyBriefingRoute
+  DataVaultRoute: typeof DataVaultRoute
   DealsRoute: typeof DealsRoute
   FollowUpsRoute: typeof FollowUpsRoute
   LeadsRoute: typeof LeadsRoute
@@ -246,6 +259,13 @@ declare module '@tanstack/react-router' {
       path: '/daily-briefing'
       fullPath: '/daily-briefing'
       preLoaderRoute: typeof DailyBriefingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/data-vault': {
+      id: '/data-vault'
+      path: '/data-vault'
+      fullPath: '/data-vault'
+      preLoaderRoute: typeof DataVaultRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/deals': {
@@ -339,6 +359,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnalyticsRoute: AnalyticsRoute,
   DailyBriefingRoute: DailyBriefingRoute,
+  DataVaultRoute: DataVaultRoute,
   DealsRoute: DealsRoute,
   FollowUpsRoute: FollowUpsRoute,
   LeadsRoute: LeadsRoute,

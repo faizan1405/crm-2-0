@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { Eye, Workflow, SlidersHorizontal, ArrowUpRight, UserPlus, UserMinus, Repeat } from "lucide-react";
+import { Archive, Eye, Workflow, SlidersHorizontal, ArrowUpRight, UserPlus, UserMinus, Repeat } from "lucide-react";
 import { RulesPanel } from "@/components/team/RulesPanel";
 import { PermissionEditor } from "@/components/team/PermissionEditor";
 import { AssignDialog } from "@/components/team/AssignDialog";
@@ -119,6 +119,7 @@ function Inspector({ e, onClose, onEdit, onConfirm, onActivate }: { e: Employee;
         {e.accountStatus === "inactive" ? <Button variant="outline" onClick={onActivate}><Power />Activate</Button> : <Button variant="outline" onClick={() => onConfirm("deactivate")}><Power />Deactivate</Button>}
         <Button variant="outline" onClick={() => setCred("email")}><Mail />Change login email</Button>
         <Button variant="outline" onClick={() => setCred("password")}><KeyRound />Reset password</Button>
+        <Button asChild variant="outline" className="sm:col-span-2"><Link to="/data-vault" search={{ tab: "employee", employee: e.id }}><Archive />Backup employee data</Link></Button>
         <Button variant="ghost" className="text-destructive sm:col-span-2" onClick={() => onConfirm("remove")}><Trash2 />Remove employee</Button>
       </div></section>
       {cred && <CredentialDialog e={e} kind={cred} onClose={() => setCred(null)} />}

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { User, Palette, Clock, SlidersHorizontal, Bell, Shield, Database, Sun, Moon, Monitor, Download } from "lucide-react";
@@ -94,11 +94,7 @@ function Settings() {
             <Row label="Sessions"><Button variant="outline" onClick={() => toast.info("Sign-out will work once accounts are connected")}>Log out</Button></Row>
           </>}
           {sec === "data" && <>
-            <Row label="Export" hint="Download all demo records as JSON · payment proof files are not included"><Button variant="outline" onClick={() => {
-              const { leads, deals, payments, followUps, notes, activities } = useCRM.getState();
-              const url = URL.createObjectURL(new Blob([JSON.stringify({ leads, deals, payments, followUps, notes, activities }, null, 2)], { type: "application/json" }));
-              const a = document.createElement("a"); a.href = url; a.download = "scale-flow-demo.json"; a.click(); URL.revokeObjectURL(url);
-            }}><Download className="size-4" />Export JSON</Button></Row>
+            <Row label="Backups & export" hint="Owner only · full, custom and employee backups with payment proof files live in Data Vault"><Button asChild variant="outline"><Link to="/data-vault"><Download className="size-4" />Open Data Vault</Link></Button></Row>
             <Row label="Reset demo data" hint="Restores the original sample leads, deals and notes. Preferences are kept."><Button variant="destructive" onClick={() => { if (window.confirm("Reset all demo data?")) { s.reset(); toast.success("Demo data restored"); } }}>Reset demo data</Button></Row>
           </>}
         </section>

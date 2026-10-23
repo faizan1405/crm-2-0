@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Eye, EyeOff, Loader2, AlertCircle, Info } from "lucide-react";
+import { Eye, EyeOff, Loader2, AlertCircle, Info, Crown, Users } from "lucide-react";
 import { ScaleMark } from "@/components/crm/Shell";
 import { demoAuth } from "@/lib/crm/team";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,10 @@ export const Route = createFileRoute("/login")({
 });
 
 // Design foundation only: demoAuth never authenticates, compares passwords or issues tokens.
+// The Owner/Employee choice is presentation only — the backend decides the real role from the session.
+export type Portal = "owner" | "employee";
 function Login() {
+  const [portal, setPortal] = useState<Portal>("owner");
     const [email, setEmail] = useState(""), [password, setPassword] = useState(""), [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
   const submit = async () => {
@@ -39,17 +42,24 @@ function Login() {
       <div className="login-brand" aria-hidden="true"><div className="flex items-center gap-3"><span className="sb-mark"><ScaleMark className="size-5" /></span><span className="text-lg font-semibold">Scale Flow</span></div><p className="login-tag">One CRM. Every seller in their own workspace.</p><span className="sb-os">Sales OS 3.0</span></div>
       <main className="login-card">
         <div className="mb-6 flex items-center gap-2 lg:hidden"><span className="sb-mark sb-mark-light"><ScaleMark className="size-4" /></span><span className="font-semibold">Scale Flow · Sales OS</span></div>
-        <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Use the email and password your administrator gave you.</p>
+        <div className="login-switch mb-6" role="group" aria-label="Choose how to sign in">
+          <button type="button" aria-pressed={portal === "owner"} onClick={() => { setPortal("owner"); setError(null); setPassword(""); }}><Crown className="size-4" />Owner login</button>
+          <button type="button" aria-pressed={portal === "employee"} onClick={() => { setPortal("employee"); setError(null); setPassword(""); }}><Users className="size-4" />Employee login</button>
+        </div>
+        <div key={portal} className="login-form-anim">
+        <h1 className="text-2xl font-semibold tracking-tight">{portal === "owner" ? "Owner sign in" : "Employee sign in"}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{portal === "owner" ? "Full CRM, team and Data Vault access for the business owner." : "Use the email and password your administrator gave you."}</p>
         <div className="tm-notice mt-5"><Info className="size-4 shrink-0" /><span>Preview only — sign-in needs the secure backend, which isn't connected yet. Nothing you type is saved.</span></div>
         <form className="mt-5 grid gap-4" noValidate onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-          <label className="q-field"><span>Email</span><Input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" /></label>
+          <label className="q-field"><span>{portal === "owner" ? "Owner email" : "Employee email"}</span><Input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" /></label>
           <label className="q-field"><span>Password</span>
             <span className="relative block"><Input type={show ? "text" : "password"} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className="pr-10" /><button type="button" aria-label={show ? "Hide password" : "Show password"} onClick={() => setShow(!show)} className="absolute top-1/2 right-2 -translate-y-1/2 p-1 text-muted-foreground">{show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button></span></label>
           {error && <p role="alert" className="flex items-center gap-2 text-sm font-medium text-destructive"><AlertCircle className="size-4 shrink-0" />{error}</p>}
           <Button type="submit" disabled={busy} className="h-11">{busy && <Loader2 className="animate-spin" />}Sign in</Button>
-          <p className="text-center text-xs text-muted-foreground">Forgot your password? Contact your administrator to reset it.</p>
+          {portal === "employee" && <p className="text-center text-xs text-muted-foreground">Forgot your password? Contact your administrator to reset it.</p>}
+          <p className="text-center text-[11px] text-muted-foreground">Choosing a login type never grants access by itself — your account decides what you can open.</p>
         </form>
+        </div>
         <Link to="/" className="mt-6 block text-center text-xs text-muted-foreground hover:underline">Back to the demo workspace</Link>
       </main>
     </div>
