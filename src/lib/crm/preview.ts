@@ -5,8 +5,9 @@ import { resolve, leadsInScope, type Assignment, type Effective } from "./access
 import { roleLabel, type Employee } from "./team";
 import type { Deal, FollowUp, Lead, LeadActivity, Payment } from "./types";
 import type { QuotationShare } from "./studio";
+import { scopeCustomization, viewAllowed, type CustomFieldDef, type FieldValues, type LeadTags, type SavedView } from "./customize";
 
-interface ScopeInput { leads: Lead[]; followUps: FollowUp[]; activities: LeadActivity[]; deals: Deal[]; payments: Payment[]; quotationShares: QuotationShare[]; assignments: Record<string, Assignment> }
+interface ScopeInput { leads: Lead[]; followUps: FollowUp[]; activities: LeadActivity[]; deals: Deal[]; payments: Payment[]; quotationShares: QuotationShare[]; assignments: Record<string, Assignment>; customFields?: CustomFieldDef[]; fieldValues?: FieldValues; leadTags?: LeadTags; savedViews?: SavedView[] }
 
 /** Pure: the working copy an employee would receive from the backend. Owner notes are never included. */
 export function scopeWorkspace(d: ScopeInput, employeeId: string, eff: Effective) {
@@ -22,6 +23,8 @@ export function scopeWorkspace(d: ScopeInput, employeeId: string, eff: Effective
     deals,
     payments: d.payments.filter((p) => dealIds.has(p.dealId)),
     quotationShares: d.quotationShares.filter((s) => ids.has(s.leadId)),
+    // Sensitive (Owner-only) field definitions and values never reach the employee copy; views never widen record scope.
+    ...(() => { const viewer = { owner: false as const, employeeId, canEdit: eff.can("leads.edit") }; const c = scopeCustomization(d.customFields ?? [], d.fieldValues ?? {}, ids, viewer); return { ...c, leadTags: Object.fromEntries(Object.entries(d.leadTags ?? {}).filter(([id]) => ids.has(id))), savedViews: (d.savedViews ?? []).filter((v) => !v.archived && viewAllowed(v, viewer)) }; })(),
     automationRules: [], automationRuns: [],
     notes: [], bin: [], callOps: [], briefingDone: [], legacyQuotations: [], backupHistory: [], assignmentRules: [], firedRules: [],
   };
