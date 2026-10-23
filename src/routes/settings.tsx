@@ -94,7 +94,7 @@ function Settings() {
             <Row label="Sessions"><Button variant="outline" onClick={() => toast.info("Sign-out will work once accounts are connected")}>Log out</Button></Row>
           </>}
           {sec === "data" && <>
-            <Row label="Export" hint="Download all demo records as JSON"><Button variant="outline" onClick={() => {
+            <Row label="Export" hint="Download all demo records as JSON · payment proof files are not included"><Button variant="outline" onClick={() => {
               const { leads, deals, payments, followUps, notes, activities } = useCRM.getState();
               const url = URL.createObjectURL(new Blob([JSON.stringify({ leads, deals, payments, followUps, notes, activities }, null, 2)], { type: "application/json" }));
               const a = document.createElement("a"); a.href = url; a.download = "scale-flow-demo.json"; a.click(); URL.revokeObjectURL(url);

@@ -82,7 +82,8 @@ interface CRMState extends Prefs {
   setQuickStatus: (id: string, q: QuickStatus | undefined) => void;
   addActivity: (leadId: string, text: string, type?: LeadActivity["type"]) => void;
   addDeal: (deal: Omit<Deal, "id" | "createdAt">) => void;
-  addPayment: (payment: Omit<Payment, "id">) => boolean;
+  /** `id` lets callers pre-assign the identifier (e.g. to attach staged proof); rejected if already used. */
+  addPayment: (payment: Omit<Payment, "id">, id?: string) => boolean;
   voidPayment: (id: string) => void;
   /** One active follow-up per lead: returns a conflict unless replaceId names the active one. Same opId never saves twice. */
   addFollowUp: (followUp: Omit<FollowUp, "id">, opts?: { replaceId?: string }) => FollowUpResult;
@@ -234,10 +235,11 @@ export const useCRM = create<CRMState>()(
       addActivity: (leadId, text, type = "note") =>
         set((s) => ({ activities: [{ id: uid("activity"), leadId, type, text, at: new Date().toISOString() }, ...s.activities] })),
       addDeal: (deal) => set((s) => ({ deals: [{ ...deal, id: uid("deal"), createdAt: new Date().toISOString() }, ...s.deals] })),
-      addPayment: (payment) => {
+      addPayment: (payment, id) => {
+        if (id && get().payments.some((p) => p.id === id)) return false;
         const target = get().deals.find((d) => d.id === payment.dealId);
         if (!target || !Number.isFinite(payment.amount) || payment.amount <= 0 || payment.amount > dealOutstanding(target, get().payments) || !/^\d{4}-\d{2}-\d{2}$/.test(payment.date)) return false;
-        set((s) => ({ payments: [{ ...payment, id: uid("payment") }, ...s.payments] }));
+        set((s) => ({ payments: [{ ...payment, id: id ?? uid("payment") }, ...s.payments] }));
         const deal = get().deals.find((d) => d.id === payment.dealId);
         if (deal?.leadId) get().addActivity(deal.leadId, `Payment of ₹${payment.amount.toLocaleString("en-IN")} recorded`, "payment");
         return true;
