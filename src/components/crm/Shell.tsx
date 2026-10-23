@@ -29,6 +29,7 @@ const NAV = [
   { to: "/analytics", label: "Analytics", mobile: "Analytics", icon: BarChart3, section: "Insights" },
   { to: "/daily-briefing", label: "Daily Briefing", mobile: "Briefing", icon: Sunrise, section: "" },
   { to: "/team", label: "Team Management", mobile: "Team", icon: ShieldCheck, section: "Admin" },
+  { to: "/data-vault", label: "Data Vault", mobile: "Vault", icon: Archive, section: "" },
   { to: "/settings", label: "Settings", mobile: "Settings", icon: Settings, section: "Manage" },
 ] as const;
 const MOBILE_MAIN = ["/", "/leads", "/pipeline", "/follow-ups"];
@@ -61,7 +62,7 @@ const GROUPS = [
   { label: "Workspace", items: ["/", "/leads", "/pipeline", "/follow-ups"] },
   { label: "Business", items: ["/deals", "/sales-studio", "/analytics", "/daily-briefing"] },
   { label: "Personal", items: ["/notes"] },
-  { label: "Owner admin", items: ["/team"] },
+  { label: "Owner admin", items: ["/team", "/data-vault"] },
   { label: "System", items: ["/settings"] },
 ] as const;
 const COLLAPSE_KEY = "scale-flow-sidebar-collapsed";
