@@ -735,8 +735,8 @@ button.ph-chip:hover { background: var(--primary-soft); color: var(--primary); }
 .pipe-scrim { display: none; }
 @media (min-width: 1280px) { .pipe-inspector { position: sticky; top: 76px; max-height: calc(100dvh - 96px); overflow-y: auto; } }
 @media (max-width: 1279px) {
-  .pipe-scrim { display: block; position: fixed; inset: 0; z-index: 40; background: color-mix(in oklab, var(--foreground) 28%, transparent); animation: pipe-fade 200ms ease both; }
-  .pipe-inspector { position: fixed; z-index: 41; top: 12px; right: 12px; bottom: 12px; width: min(420px, calc(100vw - 24px)); overflow-y: auto; }
+  .pipe-scrim { display: block; position: fixed; inset: 0; z-index: 70; background: color-mix(in oklab, var(--foreground) 28%, transparent); animation: pipe-fade 200ms ease both; }
+  .pipe-inspector { position: fixed; z-index: 71; top: 12px; right: 12px; bottom: 12px; width: min(420px, calc(100vw - 24px)); overflow-y: auto; }
 }
 @media (max-width: 640px) {
   .pipe-intel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
