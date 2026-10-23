@@ -70,7 +70,8 @@ function Dashboard() {
   const won = stage.find((s) => s.s === "won")!.count, closed = won + stage.find((s) => s.s === "lost")!.count;
   const next7 = Array.from({ length: 7 }, (_, i) => { const k = dayKey(new Date(now + i * 864e5)); return pending.filter((f) => dayKey(f.dueAt) === k).length; });
   const max7 = Math.max(1, ...next7);
-  const first = owner.split(" ")[0] ?? owner;
+  const who = preview?.name ?? owner;
+  const first = who.split(" ")[0] ?? who;
 
   const tasks: Task[] = [
     ...overdue.map((f): Task => ({ key: f.id, kind: "overdue", leadId: f.leadId, followUpId: f.id, title: lead(f.leadId)?.name ?? "Lead", detail: `${FOLLOWUP_LABEL[f.type]}${f.note ? ` · ${f.note}` : ""}`, when: `Due ${relative(f.dueAt)}`, phone: lead(f.leadId)?.phone })),
