@@ -112,16 +112,22 @@ function Leads() {
     if (due === "today") return f.some((x) => dayKey(x.dueAt) === today);
     return f.some((x) => { const d = new Date(x.dueAt).getTime(); return d >= t && d <= t + 7 * 864e5; });
   }
-  const rows = useMemo(() => {
+  // One filter pass: `scoped` = every active filter except the stage tab; stage counts and rows both derive from it.
+  const scoped = useMemo(() => {
     const base = activeView ? runView(activeView, leads, viewCtxOf(crm, viewer, now)) : leads;
-    const r = base.filter((l) => tagF === "all" || (crm.leadTags[l.id] ?? []).includes(tagF)).filter((l) => (status === "all" || l.status === status) && (source === "all" || l.source === source) && (prio === "all" || l.priority === prio) && (quick === "all" || (quick === "stale" ? staleDays(l, now) !== undefined : l.quickStatus === quick)) && `${l.name} ${l.company ?? ""} ${l.phone} ${l.email ?? ""}`.toLowerCase().includes(q.toLowerCase())
+    const r = base.filter((l) => tagF === "all" || (crm.leadTags[l.id] ?? []).includes(tagF)).filter((l) => (source === "all" || l.source === source) && (prio === "all" || l.priority === prio) && (quick === "all" || (quick === "stale" ? staleDays(l, now) !== undefined : l.quickStatus === quick)) && `${l.name} ${l.company ?? ""} ${l.phone} ${l.email ?? ""}`.toLowerCase().includes(q.toLowerCase())
       && (who === "all" || (who === "__none" ? !assignments[l.id] : assignments[l.id]?.employeeId === who))
       && (created === "all" || now.getTime() - new Date(l.createdAt).getTime() <= Number(created) * 864e5)
       && matchesCreatedRange(dayKey(l.createdAt), l.source, search)
       && (due === "all" || dueMatch(l.id)));
+    return r;
+  }, [leads, q, source, prio, quick, now, who, created, due, assignments, followUps, activeView, tagF, crm.leadTags, crm.fieldValues, crm.customFields, cFrom, cTo, cSrc]); // eslint-disable-line react-hooks/exhaustive-deps
+  const stageCounts = useMemo(() => { const m: Record<string, number> = { all: scoped.length }; for (const l of scoped) m[l.status] = (m[l.status] ?? 0) + 1; return m; }, [scoped]);
+  const rows = useMemo(() => {
+    const r = scoped.filter((l) => status === "all" || l.status === status);
     const cmp = { recent: (a: typeof r[0], b: typeof r[0]) => b.createdAt.localeCompare(a.createdAt), score: (a: typeof r[0], b: typeof r[0]) => (b.aiScore ?? 0) - (a.aiScore ?? 0), value: (a: typeof r[0], b: typeof r[0]) => (b.quotedAmount ?? 0) - (a.quotedAmount ?? 0), name: (a: typeof r[0], b: typeof r[0]) => a.name.localeCompare(b.name) }[sort];
     return r.sort((a, b) => Number(b.pinned) - Number(a.pinned) || cmp(a, b));
-  }, [leads, q, status, source, prio, sort, quick, now, who, created, due, assignments, followUps, activeView, tagF, crm.leadTags, crm.fieldValues, crm.customFields, cFrom, cTo, cSrc]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [scoped, status, sort]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => setPage(0), [q, status, source, prio, sort, quick, who, created, due, viewId, tagF, cFrom, cTo, cSrc]);
   const pages = Math.max(1, Math.ceil(rows.length / PAGE)), pg = Math.min(page, pages - 1);
   const pageRows = rows.slice(pg * PAGE, pg * PAGE + PAGE);
@@ -199,7 +205,7 @@ function Leads() {
     <Shell title="Prospects" subtitle={`${rows.length} of ${leads.length} leads in view · select one to inspect it without leaving the list`} actions={<div className="flex flex-wrap gap-2">{canDel && <Button variant="outline" asChild className="rounded-full"><Link to="/leads/bin"><Archive className="size-4" />Waste & deleted{bin.length ? <span className="num ml-1 text-xs text-muted-foreground">{bin.length}</span> : null}</Link></Button>}{can("import.run") && <Button variant="outline" onClick={() => setBulk(true)} className="rounded-full"><Layers className="size-4" />Bulk add</Button>}{can("leads.create") && <Button onClick={() => setOpen(true)} className="rounded-full"><Plus className="size-4" />Add lead</Button>}</div>}>
       {(cFrom || cTo || cSrc) && <div role="status" className="mb-3 flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs"><span>From Analytics: created {cFrom ? formatDate(cFrom, { day: "numeric", month: "short", year: "numeric" }) : "…"} – {cTo ? formatDate(cTo, { day: "numeric", month: "short", year: "numeric" }) : "…"}{cSrc ? ` · source ${cSrc}` : ""} (India time)</span><Button size="sm" variant="ghost" className="h-7 rounded-full" onClick={() => void navigate({ to: "/leads", search: viewId ? { view: viewId } : {} })}>Clear date filter</Button></div>}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-t border-foreground pt-4">
-        <div className="flex max-w-full gap-4 overflow-x-auto scrollbar-thin">{(["all", ...LEAD_STATUSES] as const).map(s => <button key={s} type="button" aria-pressed={status === s} onClick={() => setStatus(s)} data-stage={s} className={cn("flex shrink-0 items-baseline gap-1.5 border-b-2 pb-1.5 text-sm transition-colors", status === s ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{s === "all" ? "Everyone" : STATUS_LABEL[s]}<span className="num text-[11px] opacity-70">{s === "all" ? leads.length : leads.filter(l => l.status === s).length}</span></button>)}</div>
+        <div className="flex max-w-full gap-4 overflow-x-auto scrollbar-thin">{(["all", ...LEAD_STATUSES] as const).map(s => <button key={s} type="button" aria-pressed={status === s} onClick={() => setStatus(s)} data-stage={s} className={cn("flex shrink-0 items-baseline gap-1.5 border-b-2 pb-1.5 text-sm transition-colors", status === s ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{s === "all" ? "Everyone" : STATUS_LABEL[s]}<span className="num text-[11px] opacity-70">{stageCounts[s] ?? 0}</span></button>)}</div>
         <div className="seg" role="group" aria-label="View">{([["workspace", Columns2, "Workspace"], ["table", List, "Ledger"], ["cards", LayoutGrid, "Tiles"]] as const).map(([v, I, label]) => <button key={v} type="button" aria-label={`${v} view`} aria-pressed={view === v} onClick={() => setView(v)}><I className="size-3.5" /><span className="hidden sm:inline">{label}</span></button>)}</div>
       </div>
       {viewBar}
