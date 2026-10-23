@@ -233,3 +233,19 @@ describe("store, privacy and backups", () => {
     expect(migrateAnalytics({ leads: [1] }, 9)).toMatchObject({ leads: [1], savedReports: [], forecastConfig: { version: 0 } });
   });
 });
+
+describe("won date semantics (Phase 3H)", () => {
+  it("period Won value uses the recorded won date, not the creation date", () => {
+    const d = deal("W", 50000, { createdAt: "2026-09-20T06:00:00Z", wonAt: "2026-10-03T06:00:00Z" });
+    expect(financeKpis([d], [], W, NOW).wonValue).toBe(50000);
+    expect(financeKpis([d], [], { start: "2026-09-01", end: "2026-09-30" }, NOW).wonValue).toBe(0);
+  });
+  it("legacy deals without a won date fall back to creation date", () => {
+    expect(financeKpis([deal("L", 10000)], [], W, NOW).wonValue).toBe(10000);
+  });
+  it("new deals record wonAt at booking", () => {
+    useCRM.getState().addDeal({ clientType: "crm", clientName: "QA", name: "QA won", quotedAmount: 1, finalAmount: 1, status: "active", milestones: [] });
+    const d = useCRM.getState().deals[0]!;
+    expect(d.wonAt).toBe(d.createdAt);
+  });
+});
