@@ -3,9 +3,10 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ChevronDown, Lock, Pencil, Plus, Tag, Trash2, AlertTriangle } from "lucide-react";
-import { useCRM, viewCtxOf } from "@/lib/crm/store";
+import { useCRM, viewCtxOf, projectCtxOf } from "@/lib/crm/store";
+import { projectFilterFields, projectFilterIssues } from "@/lib/crm/projectCustomize";
 import { useAccess } from "@/lib/crm/session";
-import { activeFields, displayValue, fieldEditable, fieldVisible, filterFields, OP_LABEL, OPS_FOR, viewIssues, type CustomFieldDef, type FieldValue, type FilterField, type Money, type Op, type ViewCondition, type ViewFilter, type Viewer } from "@/lib/crm/customize";
+import { tagForLeads, activeFields, displayValue, fieldEditable, fieldVisible, filterFields, OP_LABEL, OPS_FOR, viewIssues, type CustomFieldDef, type FieldValue, type FilterField, type Money, type Op, type ViewCondition, type ViewFilter, type Viewer } from "@/lib/crm/customize";
 import { uid } from "@/lib/crm/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -109,7 +110,7 @@ export function TagPicker({ leadId, value, onChange, label = "Tags" }: { leadId?
   const tags = useCRM((s) => s.tagDefs); const bound = useCRM((s) => (leadId ? s.leadTags[leadId] : undefined)); const setLeadTags = useCRM((s) => s.setLeadTags);
   const { can } = useAccess();
   const cur = leadId ? bound ?? [] : value ?? [];
-  const active = tags.filter((t) => t.status === "active");
+  const active = tags.filter((t) => t.status === "active" && tagForLeads(t));
   const toggle = (id: string) => { const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]; if (leadId) { if (!setLeadTags(leadId, next)) toast.error("Not allowed by this employee's permissions"); } else onChange?.(next); };
   const editable = !leadId || can("leads.edit");
   return <div className="flex flex-wrap items-center gap-1.5">
@@ -140,13 +141,14 @@ export function ConditionValue({ f, c, onChange }: { f: FilterField; c: ViewCond
   if (c.op === "within_days") return <Input aria-label="Days" type="number" min={0} value={String(c.value ?? "")} onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))} />;
   return <Input aria-label={`${f.label} value`} type={f.kind === "date" ? "date" : f.kind === "number" ? "number" : "text"} value={String(c.value ?? "")} onChange={(e) => onChange(f.kind === "number" && e.target.value !== "" ? Number(e.target.value) : e.target.value)} />;
 }
-export function ConditionBuilder({ filter, onChange, only, allowMode = true }: { filter: ViewFilter; onChange: (f: ViewFilter) => void; only?: (f: FilterField) => boolean; allowMode?: boolean }) {
+/** Shared condition builder. `entity="project"` offers Project Desk fields (stage, tags, Project custom fields…) through the same UI. */
+export function ConditionBuilder({ filter, onChange, only, allowMode = true, entity = "lead" }: { filter: ViewFilter; onChange: (f: ViewFilter) => void; only?: (f: FilterField) => boolean; allowMode?: boolean; entity?: "lead" | "project" }) {
   const st = useCRM(); const viewer = useViewer();
-  const ctx = viewCtxOf(st, viewer);
-  const all = filterFields(ctx).filter((f) => !f.archived || filter.conditions.some((c) => c.field === f.key));
+  const ctx = viewCtxOf(st, viewer); const pctx = projectCtxOf(st, viewer);
+  const all = (entity === "project" ? projectFilterFields(pctx) : filterFields(ctx)).filter((f) => !f.archived || filter.conditions.some((c) => c.field === f.key));
   const fields = only ? all.filter(only) : all;
   const byKey = new Map(all.map((f) => [f.key, f]));
-  const issues = viewIssues(filter.conditions.length ? { filter } : { filter: { mode: "and", conditions: [] } }, ctx);
+  const issues = entity === "project" ? projectFilterIssues(filter.conditions, pctx) : viewIssues(filter.conditions.length ? { filter } : { filter: { mode: "and", conditions: [] } }, ctx);
   const upd = (id: string, p: Partial<ViewCondition>) => onChange({ ...filter, conditions: filter.conditions.map((c) => (c.id === id ? { ...c, ...p } : c)) });
   const add = () => { const f = fields[0]; if (!f) return; onChange({ ...filter, conditions: [...filter.conditions, { id: uid("cond"), field: f.key, op: defaultOp(f) }] }); };
   return <div className="grid gap-3">
@@ -155,7 +157,7 @@ export function ConditionBuilder({ filter, onChange, only, allowMode = true }: {
       return <div key={c.id} className="grid gap-1">
         <div className="sv-cond">
           <select aria-label="Filter field" className={cn(selectCls, "w-full")} value={f ? c.field : ""} onChange={(e) => { const nf = byKey.get(e.target.value)!; upd(c.id, { field: nf.key, op: defaultOp(nf), value: undefined }); }}>{!f && <option value="">Unavailable field</option>}{fields.map((x) => <option key={x.key} value={x.key}>{x.label}{x.archived ? " (archived)" : ""}</option>)}</select>
-          <select aria-label="Operator" className={cn(selectCls, "w-full")} value={c.op} disabled={!f} onChange={(e) => upd(c.id, { op: e.target.value as Op, value: undefined })}>{(f ? OPS_FOR[f.kind] : [c.op]).filter((o) => (o === "today" || o === "overdue" ? c.field === "followupDue" : true)).map((o) => <option key={o} value={o}>{OP_LABEL[o]}</option>)}</select>
+          <select aria-label="Operator" className={cn(selectCls, "w-full")} value={c.op} disabled={!f} onChange={(e) => upd(c.id, { op: e.target.value as Op, value: undefined })}>{(f ? OPS_FOR[f.kind] : [c.op]).filter((o) => (o === "today" ? c.field === "followupDue" : o === "overdue" ? c.field === "followupDue" || c.field === "p.due" : true)).map((o) => <option key={o} value={o}>{OP_LABEL[o]}</option>)}</select>
           {f ? <ConditionValue f={f} c={c} onChange={(v) => upd(c.id, { value: v })} /> : <span />}
           <Button size="icon" variant="ghost" aria-label="Remove condition" onClick={() => onChange({ ...filter, conditions: filter.conditions.filter((x) => x.id !== c.id) })}><Trash2 className="size-4" /></Button>
         </div>
