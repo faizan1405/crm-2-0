@@ -35,7 +35,14 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Bookmark, BookmarkPlus, Star, Tag, AlertTriangle, Pencil } from "lucide-react";
 
 export const Route = createFileRoute("/leads")({
-  validateSearch: (s: Record<string, unknown>): { view?: string } => (typeof s["view"] === "string" && s["view"] ? { view: s["view"] } : {}),
+  validateSearch: (s: Record<string, unknown>): { view?: string; from?: string; to?: string; src?: string } => {
+    const out: { view?: string; from?: string; to?: string; src?: string } = {};
+    const ymd = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
+    if (typeof s["view"] === "string" && s["view"]) out.view = s["view"];
+    const f = ymd(s["from"]), t = ymd(s["to"]); if (f) out.from = f; if (t) out.to = t;
+    if (typeof s["src"] === "string" && s["src"]) out.src = s["src"];
+    return out;
+  },
   head: () => ({
     meta: [
       { property: "og:type", content: "website" },
@@ -55,7 +62,9 @@ function Leads() {
   const { leads, updateLead, deleteLead, wasteLead, restoreLead, setQuickStatus, bin, defaultLeadSort, assignments, employees, followUps } = useCRM();
   const crm = useCRM();
   const viewer = useViewer(); const me = viewerId(viewer);
-  const viewId = Route.useSearch().view;
+  const search = Route.useSearch(); const viewId = search.view;
+  // Created-date range from Analytics drill-downs lives only in the URL (India business days) — never saved into views.
+  const cFrom = search.from, cTo = search.to, cSrc = search.src;
   const myViews = crm.savedViews.filter((v) => !v.archived && viewAllowed(v, viewer));
   const activeView = myViews.find((v) => v.id === viewId);
   const vprefs = crm.viewPrefs[me] ?? { pinned: [] };
@@ -114,14 +123,15 @@ function Leads() {
     const r = base.filter((l) => tagF === "all" || (crm.leadTags[l.id] ?? []).includes(tagF)).filter((l) => (status === "all" || l.status === status) && (source === "all" || l.source === source) && (prio === "all" || l.priority === prio) && (quick === "all" || (quick === "stale" ? staleDays(l, now) !== undefined : l.quickStatus === quick)) && `${l.name} ${l.company ?? ""} ${l.phone} ${l.email ?? ""}`.toLowerCase().includes(q.toLowerCase())
       && (who === "all" || (who === "__none" ? !assignments[l.id] : assignments[l.id]?.employeeId === who))
       && (created === "all" || now.getTime() - new Date(l.createdAt).getTime() <= Number(created) * 864e5)
+      && (!cFrom || dayKey(l.createdAt) >= cFrom) && (!cTo || dayKey(l.createdAt) <= cTo) && (!cSrc || l.source === cSrc)
       && (due === "all" || dueMatch(l.id)));
     const cmp = { recent: (a: typeof r[0], b: typeof r[0]) => b.createdAt.localeCompare(a.createdAt), score: (a: typeof r[0], b: typeof r[0]) => (b.aiScore ?? 0) - (a.aiScore ?? 0), value: (a: typeof r[0], b: typeof r[0]) => (b.quotedAmount ?? 0) - (a.quotedAmount ?? 0), name: (a: typeof r[0], b: typeof r[0]) => a.name.localeCompare(b.name) }[sort];
     return r.sort((a, b) => Number(b.pinned) - Number(a.pinned) || cmp(a, b));
-  }, [leads, q, status, source, prio, sort, quick, now, who, created, due, assignments, followUps, activeView, tagF, crm.leadTags, crm.fieldValues, crm.customFields]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => setPage(0), [q, status, source, prio, sort, quick, who, created, due, viewId, tagF]);
+  }, [leads, q, status, source, prio, sort, quick, now, who, created, due, assignments, followUps, activeView, tagF, crm.leadTags, crm.fieldValues, crm.customFields, cFrom, cTo, cSrc]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setPage(0), [q, status, source, prio, sort, quick, who, created, due, viewId, tagF, cFrom, cTo, cSrc]);
   const pages = Math.max(1, Math.ceil(rows.length / PAGE)), pg = Math.min(page, pages - 1);
   const pageRows = rows.slice(pg * PAGE, pg * PAGE + PAGE);
-  const filterLabel = [activeView && `view “${activeView.name}”`, tagF !== "all" && `tag ${crm.tagDefs.find((t) => t.id === tagF)?.name}`, status !== "all" && STATUS_LABEL[status], source !== "all" && source, prio !== "all" && prio, who === "__none" ? "Unassigned" : who !== "all" && employees.find((e) => e.id === who)?.name, created !== "all" && `created ≤${created}d`, due !== "all" && `follow-up ${due}`, q && `“${q}”`].filter(Boolean).join(" · ") || "all leads";
+  const filterLabel = [activeView && `view “${activeView.name}”`, tagF !== "all" && `tag ${crm.tagDefs.find((t) => t.id === tagF)?.name}`, status !== "all" && STATUS_LABEL[status], source !== "all" && source, prio !== "all" && prio, who === "__none" ? "Unassigned" : who !== "all" && employees.find((e) => e.id === who)?.name, created !== "all" && `created ≤${created}d`, (cFrom || cTo) && `created ${cFrom ?? "…"} → ${cTo ?? "…"}`, cSrc && `source ${cSrc}`, due !== "all" && `follow-up ${due}`, q && `“${q}”`].filter(Boolean).join(" · ") || "all leads";
 
   /** Turn the current quick filters into Saved View conditions (only filters that have an exact equivalent). */
   const currentConditions = (): ViewCondition[] => {

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState, type ReactNode } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
@@ -139,6 +139,7 @@ function Filters({ search, set, st }: { search: Search; set: (p: Patch) => void;
 type SecProps = { st: Studio; open: (d: Drill) => void };
 function Overview({ st, open }: SecProps) {
   const { s, w, prev, leads, idx, now, compare } = st;
+  const nav = useNavigate(); const srch = Route.useSearch();
   const cur = useMemo(() => {
     const cohort = leads.filter((l) => inW(l.createdAt, w));
     const pc = leads.filter((l) => inW(l.createdAt, prev));
@@ -161,7 +162,7 @@ function Overview({ st, open }: SecProps) {
         <Kpi primary label="Outstanding balance" value={formatINR(cur.fin.outstanding)} tone="warning" def={DEFINITIONS["outstanding"]!} hint="As of today, all active deals" onOpen={() => open({ title: "Deals with an outstanding balance", kind: "deal", ids: s.deals.filter((x) => x.status !== "cancelled" && financeSummary([x], s.payments).outstanding > 0).map((x) => x.id) })} />
       </div>
       <div className="as-kpi-grid">
-        <Kpi label="New leads" value={String(cur.cohort.length)} def={DEFINITIONS["newLeads"]!} delta={d(cur.cohort.length, cur.pc.length)} onOpen={() => open({ title: "New leads in range", kind: "lead", ids: cur.cohort.map((l) => l.id) })} />
+        <Kpi label="New leads" value={String(cur.cohort.length)} def={DEFINITIONS["newLeads"]!} delta={d(cur.cohort.length, cur.pc.length)} onOpen={() => (srch.stage || srch.priority || srch.assignee || srch.tag || srch.view ? open({ title: "New leads in range", kind: "lead", ids: cur.cohort.map((l) => l.id) }) : void nav({ to: "/leads", search: { from: w.start, to: w.end, ...(srch.source ? { src: srch.source } : {}) } }))} />
         <Kpi label="Awaiting first contact" value={String(cur.awaiting.length)} tone={cur.awaiting.length ? "warning" : "default"} def={DEFINITIONS["awaitingContact"]!} hint="Open leads, right now" onOpen={() => open({ title: "Open leads with no saved call outcome", kind: "lead", ids: cur.awaiting.map((l) => l.id) })} />
         <Kpi label="Qualified leads" value={String(cur.qualified.length)} def={DEFINITIONS["qualified"]!} delta={d(cur.qualified.length, cur.pqual)} onOpen={() => open({ title: "Qualified or later (created in range)", kind: "lead", ids: cur.qualified.map((l) => l.id) })} />
         <Kpi label="Deals won" value={String(cur.fin.wonCount)} def={DEFINITIONS["wonDeals"]!} delta={d(cur.fin.wonCount, cur.pfin.wonCount)} onOpen={() => open({ title: "Deals booked in range", kind: "deal", ids: cur.fin.wonIds })} />
