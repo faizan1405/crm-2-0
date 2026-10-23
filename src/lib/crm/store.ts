@@ -210,7 +210,8 @@ interface CRMState extends Prefs {
   /** Returns how many leads changed, or an error. */
   assignLeads: (leadIds: string[], employeeId: string | null, source: string) => { ok: true; changed: number } | { ok: false; error: string };
   /** Undo helper: restores exactly the given previous assignments for these leads. */
-  restoreAssignments: (snapshot: Record<string, Assignment | undefined>) => void;
+  /** Undo: restores the previous assignments. With `expected` (what the operation set), any lead changed again since is kept as-is and counted in `kept`. */
+  restoreAssignments: (snapshot: Record<string, Assignment | undefined>, expected?: Record<string, string | null>) => { restored: number; kept: number };
   /** Bulk assign/distribute: re-validates every item against current data; stale or invalid items are skipped and reported, never forced. */
   applyAssignmentPlan: (plan: PlanItem[], source: string) => { ok: true; changed: number; skipped: { leadId: string; reason: SkipReason }[]; snapshot: Record<string, Assignment | undefined> } | { ok: false; error: string };
   assignmentRules: AssignmentRule[];
@@ -601,7 +602,16 @@ export const useCRM = create<CRMState>()(
         set((s) => ({ assignments: next, assignmentEvents: [...events, ...s.assignmentEvents].slice(0, 500) }));
         return { ok: true, changed: events.length, skipped, snapshot };
       },
-      restoreAssignments: (snap) => set((s) => { const next = { ...s.assignments }; for (const [id, a] of Object.entries(snap)) { if (a) next[id] = a; else delete next[id]; } return { assignments: next }; }),
+      restoreAssignments: (snap, expected) => {
+        const next = { ...get().assignments }; let restored = 0, kept = 0;
+        for (const [id, a] of Object.entries(snap)) {
+          if (expected && id in expected && (next[id]?.employeeId ?? null) !== expected[id]) { kept++; continue; }
+          if (a) next[id] = a; else delete next[id];
+          restored++;
+        }
+        set({ assignments: next });
+        return { restored, kept };
+      },
       assignmentRules: [],
       ruleSettings: DEFAULT_RULE_SETTINGS,
       firedRules: [],
