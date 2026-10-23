@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
 import { AdditionalInfo, TagChips, TagPicker, useViewer } from "@/components/crm/Customize";
 import { ViewEditor, newView } from "@/components/crm/ViewEditor";
 import { viewCtxOf, viewerId } from "@/lib/crm/store";
-import { runView, viewAllowed, viewEditable, viewIssues, type SavedView, type ViewCondition } from "@/lib/crm/customize";
+import { tagForLeads, runView, viewAllowed, viewEditable, viewIssues, type SavedView, type ViewCondition } from "@/lib/crm/customize";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Bookmark, BookmarkPlus, Star, Tag, AlertTriangle, Pencil } from "lucide-react";
 
