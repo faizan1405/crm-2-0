@@ -12,3 +12,9 @@ export function parseLeadsSearch(s: Record<string, unknown>): LeadsSearch {
 export function matchesCreatedRange(createdDay: string, source: string, q: LeadsSearch): boolean {
   return (!q.from || createdDay >= q.from) && (!q.to || createdDay <= q.to) && (!q.src || source === q.src);
 }
+/** Stage-tab counts for an already-filtered lead set ("all" = total). Same set the list shows, so counts never disagree with rows. */
+export function countByStage(leads: { status: string }[]): Record<string, number> {
+  const m: Record<string, number> = { all: leads.length };
+  for (const l of leads) m[l.status] = (m[l.status] ?? 0) + 1;
+  return m;
+}

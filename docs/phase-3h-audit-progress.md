@@ -17,11 +17,16 @@
 
 ## Known limitations
 - If Analytics has a stage, priority, assignee, tag or saved-view filter, New leads keeps its own record-list sheet, because Prospects can't express those filters from the URL.
-- The stage tab counts on Prospects ("Everyone 12") ignore the date range, as with other filters.
 - All data lives in this browser only (localStorage/IndexedDB). There is no multi-device sync and no real authentication.
 
+## Checkpoint B1.2 — Part 1 (done)
+- **Fixed:** the Prospects stage-tab counts used every lead. Now one filtered set (view, search, source, priority, assignee, tag, quick status, created and the Analytics date/source) feeds both the tab counts and the rows. Counting is pure `countByStage` and tested.
+- Browser test, run in a separate test browser with 60 synthetic `QA Sel` Instagram leads, not real data. With source = Instagram the tabs showed Everyone 62 / New 61 / Qualified 1. Select page = 50, Select all matching = 62, excluding one = 61. No page errors.
+- Selection survives filter changes by design. Changing the saved view clears it.
+- **Not yet run (B1.2 Parts 2–7):** Owner lead create/call/WhatsApp/follow-up, Pipeline, Finance, Team Management, Project Desk and cross-module walkthroughs, plus the 5-width responsive pass.
+
 ## Tests
-- 366 automated tests, including `leadsSearch.test.ts` for the drill-down URL rules. Typecheck clean. Production build successful.
+- 367 automated tests, including `leadsSearch.test.ts` for the drill-down URL rules. Typecheck clean. Production build successful.
 
 ## Next checkpoint
 - B1 §3–8: Owner workspace audit; Employee A/B/C acceptance tests; admin/security; preview isolation; shared components; responsive/accessibility.
