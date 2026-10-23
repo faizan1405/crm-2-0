@@ -48,7 +48,7 @@ import { activePreview, allows, previewSink, type CrmEventType } from "./session
 import { DEFAULT_AUTOMATION_SETTINGS, planRule, reconcileReminders, ruleError as automationRuleError, ruleFromTemplate, type AutomationRule, type AutomationRun, type AutomationSettings, type Reminder, type RuleStatus } from "./automation";
 import { pairKey, pairSignature, type InboxMeta, type LeadRelation, type RelationKind } from "./inbox";
 import { buildGoal, goalError, reviseGoal, mergeAlerts, DEFAULT_PERF_PREFS, type GoalAlert, type GoalDef, type GoalInput, type GoalRevision, type GoalStatus, type PerfPrefs } from "./performance";
-import { activeFields, bulkTag, fieldDefError, matchCondition, filterFields, removedUsedOptions, starterViews, tagError, typeChangeImpact, convertValue, undoTags, validateLeadValues, viewEditable, viewError, viewIssues, CUSTOMIZE_SCHEMA, type CustomFieldDef, type FieldValues, type FieldValue, type LeadTags, type SavedView, type TagDef, type ViewCtx, type ViewPrefs, type Viewer, type ViewCondition } from "./customize";
+import { applyFieldSave, applyFieldValues, tagForLeads, activeFields, bulkTag, fieldDefError, matchCondition, filterFields, removedUsedOptions, starterViews, tagError, typeChangeImpact, convertValue, undoTags, validateLeadValues, viewEditable, viewError, viewIssues, CUSTOMIZE_SCHEMA, type CustomFieldDef, type FieldValues, type FieldValue, type LeadTags, type SavedView, type TagDef, type ViewCtx, type ViewPrefs, type Viewer, type ViewCondition } from "./customize";
 import { createProjectSlice, migrateProjects, type ProjectSlice } from "./projectStore";
 import { deriveEvents, mergeEvents, markRead, markAllRead, DEFAULT_NOTIFY_PREFS, EMPTY_READS, OWNER_ACTOR_ID, type ActivityEvent, type EventSnap, type NotifyPrefs, type ReadState } from "./activity";
 
@@ -537,13 +537,13 @@ export const useCRM = create<CRMState>()(
         const st = get(); if (!st.leads.some((l) => l.id === leadId)) return false;
         const known = new Map(st.tagDefs.map((t) => [t.id, t])); const cur = st.leadTags[leadId] ?? [];
         // Archived tags already on the lead may stay; new ones must be active.
-        const next = [...new Set(tagIds)].filter((id) => known.has(id) && (known.get(id)!.status === "active" || cur.includes(id)));
+        const next = [...new Set(tagIds)].filter((id) => known.has(id) && (cur.includes(id) || (known.get(id)!.status === "active" && tagForLeads(known.get(id)!))));
         set((s) => ({ leadTags: { ...s.leadTags, [leadId]: next } }));
         return true;
       },
       bulkTagLeads: (ids, tagId, mode) => {
         const st = get(); const tag = st.tagDefs.find((t) => t.id === tagId);
-        if (!tag || (mode === "add" && tag.status !== "active")) return { changed: 0, before: {}, applied: {} };
+        if (!tag || (mode === "add" && (tag.status !== "active" || !tagForLeads(tag)))) return { changed: 0, before: {}, applied: {} };
         const live = new Set(st.leads.map((l) => l.id));
         const r = bulkTag(st.leadTags, ids.filter((id) => live.has(id)), tagId, mode);
         if (r.changed) set({ leadTags: r.next });
