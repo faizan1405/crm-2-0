@@ -153,7 +153,7 @@ function Custom() {
   </div>;
 }
 
-function EmployeeBackup({ id, onPick }: { id?: string; onPick: (id: string) => void }) {
+function EmployeeBackup({ id, onPick }: { id: string | undefined; onPick: (id: string) => unknown }) {
   const employees = useCRM((s) => s.employees).filter((e) => e.accountStatus !== "archived");
   const emp = employees.find((e) => e.id === id);
   const [sel, setSel] = useState<CategoryId[]>(EMPLOYEE_CATEGORY_IDS.filter((c) => c !== "payments" && c !== "proofs"));

@@ -54,7 +54,7 @@ const arr = (s: Snapshot, k: string) => (Array.isArray(s[k]) ? (s[k] as Rec[]) :
 
 /** Restricts a snapshot to one employee's currently assigned leads and records connected to them. */
 export function employeeScope(s: Snapshot, employeeId: string): Snapshot {
-  const asg = (s.assignments ?? {}) as Record<string, { employeeId: string }>;
+  const asg = (s["assignments"] ?? {}) as Record<string, { employeeId: string }>;
   const leadIds = new Set(Object.entries(asg).filter(([, a]) => a.employeeId === employeeId).map(([id]) => id));
   const deals = arr(s, "deals").filter((d) => d.leadId && leadIds.has(d.leadId));
   const dealIds = new Set(deals.map((d) => d.id));
@@ -64,7 +64,7 @@ export function employeeScope(s: Snapshot, employeeId: string): Snapshot {
     activities: byLead("activities"), callOps: byLead("callOps"), followUps: byLead("followUps"),
     deals, payments: arr(s, "payments").filter((p) => p.dealId && dealIds.has(p.dealId)),
     employees: arr(s, "employees").filter((e) => e.id === employeeId),
-    employeeAccess: Object.fromEntries(Object.entries((s.employeeAccess ?? {}) as Record<string, unknown>).filter(([k]) => k === employeeId)),
+    employeeAccess: Object.fromEntries(Object.entries((s["employeeAccess"] ?? {}) as Record<string, unknown>).filter(([k]) => k === employeeId)),
     assignments: Object.fromEntries(Object.entries(asg).filter(([id]) => leadIds.has(id))),
     assignmentEvents: (arr(s, "assignmentEvents") as unknown as { previousAssigneeId: string | null; newAssigneeId: string | null }[]).filter((e) => e.previousAssigneeId === employeeId || e.newAssigneeId === employeeId),
     assignmentRules: [], ruleSettings: undefined, firedRules: [],
@@ -79,7 +79,7 @@ export function estimate(s: Snapshot, proofs: ProofMeta[], plan: BackupPlan) {
   const payIds = new Set(arr(src, "payments").map((p) => p.id));
   const scopedProofs = proofs.filter((p) => payIds.has(p.paymentId));
   const counts: Partial<Record<CategoryId, number>> = {};
-  for (const c of CATEGORIES) counts[c.id] = c.id === "proofs" ? scopedProofs.length : c.id === "settings" ? (plan.type === "employee" ? 0 : 1) : countOf(src[c.keys[0]]);
+  for (const c of CATEGORIES) counts[c.id] = c.id === "proofs" ? scopedProofs.length : c.id === "settings" ? (plan.type === "employee" ? 0 : 1) : countOf(src[c.keys[0]!]);
   return { counts, proofs: scopedProofs, proofBytes: scopedProofs.reduce((n, p) => n + p.fileSize, 0) };
 }
 
@@ -118,7 +118,7 @@ export async function buildBackup(plan: BackupPlan, state: Snapshot, proofInputs
     if (c.id === "proofs") continue;
     const data = Object.fromEntries(c.keys.map((k) => [k, src[k] ?? null]));
     put(c.file, data);
-    counts[c.id] = c.id === "settings" ? 1 : countOf(src[c.keys[0]]);
+    counts[c.id] = c.id === "settings" ? 1 : countOf(src[c.keys[0]!]);
   }
   const ids = (k: string) => new Set(arr(src, k).map((x) => x.id));
   if (plan.categories.includes("payments") && !plan.categories.includes("deals")) {

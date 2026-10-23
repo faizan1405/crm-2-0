@@ -55,10 +55,10 @@ describe("Data Vault backups", () => {
   });
   it("employee backup holds only currently assigned leads and linked records", async () => {
     const s = employeeScope(state, "E1");
-    expect((s.leads as { id: string }[]).map((l) => l.id)).toEqual(["L1"]);
-    expect((s.payments as { id: string }[]).map((p) => p.id)).toEqual(["P1"]);
-    expect(Object.keys(s.employeeAccess as object)).toEqual(["E1"]);
-    expect((s.assignmentEvents as unknown[]).length).toBe(1);
+    expect((s["leads"] as { id: string }[]).map((l) => l.id)).toEqual(["L1"]);
+    expect((s["payments"] as { id: string }[]).map((p) => p.id)).toEqual(["P1"]);
+    expect(Object.keys(s["employeeAccess"] as object)).toEqual(["E1"]);
+    expect((s["assignmentEvents"] as unknown[]).length).toBe(1);
     const r = await buildBackup({ type: "employee", categories: ["leads", "payments", "proofs", "employees"], employeeId: "E1" }, state, proofs);
     expect(r.manifest.employee?.name).toBe("Rahul");
     expect(r.manifest.attachments.included).toBe(1);
