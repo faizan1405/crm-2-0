@@ -15,6 +15,7 @@ import { Route as DailyBriefingRouteImport } from './routes/daily-briefing'
 import { Route as DataVaultRouteImport } from './routes/data-vault'
 import { Route as DealsRouteImport } from './routes/deals'
 import { Route as FollowUpsRouteImport } from './routes/follow-ups'
+import { Route as InboxRouteImport } from './routes/inbox'
 import { Route as LeadsRouteImport } from './routes/leads'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as NotesRouteImport } from './routes/notes'
@@ -56,6 +57,11 @@ const DealsRoute = DealsRouteImport.update({
 const FollowUpsRoute = FollowUpsRouteImport.update({
   id: '/follow-ups',
   path: '/follow-ups',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxRoute = InboxRouteImport.update({
+  id: '/inbox',
+  path: '/inbox',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LeadsRoute = LeadsRouteImport.update({
@@ -126,6 +132,7 @@ export interface FileRoutesByFullPath {
   '/data-vault': typeof DataVaultRoute
   '/deals': typeof DealsRoute
   '/follow-ups': typeof FollowUpsRoute
+  '/inbox': typeof InboxRoute
   '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
   '/notes': typeof NotesRoute
@@ -146,6 +153,7 @@ export interface FileRoutesByTo {
   '/data-vault': typeof DataVaultRoute
   '/deals': typeof DealsRoute
   '/follow-ups': typeof FollowUpsRoute
+  '/inbox': typeof InboxRoute
   '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
   '/notes': typeof NotesRoute
@@ -167,6 +175,7 @@ export interface FileRoutesById {
   '/data-vault': typeof DataVaultRoute
   '/deals': typeof DealsRoute
   '/follow-ups': typeof FollowUpsRoute
+  '/inbox': typeof InboxRoute
   '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
   '/notes': typeof NotesRoute
@@ -189,6 +198,7 @@ export interface FileRouteTypes {
     | '/data-vault'
     | '/deals'
     | '/follow-ups'
+    | '/inbox'
     | '/leads'
     | '/login'
     | '/notes'
@@ -209,6 +219,7 @@ export interface FileRouteTypes {
     | '/data-vault'
     | '/deals'
     | '/follow-ups'
+    | '/inbox'
     | '/leads'
     | '/login'
     | '/notes'
@@ -229,6 +240,7 @@ export interface FileRouteTypes {
     | '/data-vault'
     | '/deals'
     | '/follow-ups'
+    | '/inbox'
     | '/leads'
     | '/login'
     | '/notes'
@@ -250,6 +262,7 @@ export interface RootRouteChildren {
   DataVaultRoute: typeof DataVaultRoute
   DealsRoute: typeof DealsRoute
   FollowUpsRoute: typeof FollowUpsRoute
+  InboxRoute: typeof InboxRoute
   LeadsRoute: typeof LeadsRoute
   LoginRoute: typeof LoginRoute
   NotesRoute: typeof NotesRoute
@@ -306,6 +319,13 @@ declare module '@tanstack/react-router' {
       path: '/follow-ups'
       fullPath: '/follow-ups'
       preLoaderRoute: typeof FollowUpsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox': {
+      id: '/inbox'
+      path: '/inbox'
+      fullPath: '/inbox'
+      preLoaderRoute: typeof InboxRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/leads': {
@@ -402,6 +422,7 @@ const rootRouteChildren: RootRouteChildren = {
   DataVaultRoute: DataVaultRoute,
   DealsRoute: DealsRoute,
   FollowUpsRoute: FollowUpsRoute,
+  InboxRoute: InboxRoute,
   LeadsRoute: LeadsRoute,
   LoginRoute: LoginRoute,
   NotesRoute: NotesRoute,

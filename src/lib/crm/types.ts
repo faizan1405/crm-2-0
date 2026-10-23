@@ -11,6 +11,11 @@ export type LeadSource =
   | "LinkedIn"
   | "Walk-in"
   | "WhatsApp"
+  | "Meta Ads"
+  | "Facebook"
+  | "Google"
+  | "IndiaMART"
+  | "Direct Enquiry"
   | "Other";
 
 export interface Lead {
@@ -139,6 +144,11 @@ export const LEAD_SOURCES: LeadSource[] = [
   "LinkedIn",
   "Walk-in",
   "WhatsApp",
+  "Meta Ads",
+  "Facebook",
+  "Google",
+  "IndiaMART",
+  "Direct Enquiry",
   "Other",
 ];
 

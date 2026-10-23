@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { Plus, Copy, Trash2, Star, RotateCcw, AlertTriangle, MessagesSquare, FileText, LayoutTemplate, PenLine } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
 import { uid } from "@/lib/crm/format";
-import { PLACEHOLDERS, renderTemplate, selectedDemos, templateVars, unknownPlaceholders, type TemplatePurpose, type WaTemplate } from "@/lib/crm/studio";
+import { PLACEHOLDERS, renderTemplate, selectedDemos, templateVars, placeholderIssues, type TemplatePurpose, type WaTemplate } from "@/lib/crm/studio";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,7 +28,7 @@ export function TemplatesPanel() {
   const dirty = !!draft && (!saved || JSON.stringify({ ...draft, updatedAt: "" }) !== JSON.stringify({ ...saved, updatedAt: "" }));
   const select = (t: WaTemplate) => { if (t.id === selId) return; if (dirty && !window.confirm("Discard unsaved template changes?")) return; setSelId(t.id); setDraft(t); };
   const create = (purpose: TemplatePurpose) => { if (dirty && !window.confirm("Discard unsaved template changes?")) return; const t: WaTemplate = { id: uid("tpl"), purpose, name: "New template", body: "Hi {firstName}, this is {ownerName} from {businessName}. ", isDefault: false, enabled: true, updatedAt: "" }; setSelId(t.id); setDraft(t); };
-  const save = () => { if (!draft) return; if (!draft.name.trim() || !draft.body.trim()) { toast.error("Add a name and message"); return; } saveTemplate({ ...draft, name: draft.name.trim() }); toast.success("Template saved — the WhatsApp composer uses it right away"); };
+  const save = () => { if (!draft) return; if (!draft.name.trim() || !draft.body.trim()) { toast.error("Add a name and message"); return; } const bad = placeholderIssues(draft.body); if (bad.length) { toast.error(`Fix unsupported placeholder ${bad.join(", ")} before saving`); return; } saveTemplate({ ...draft, name: draft.name.trim() }); toast.success("Template saved — the WhatsApp composer uses it right away"); };
   const insert = (k: string) => {
     if (!draft) return;
     const el = bodyRef.current; const token = `{${k}}`;
@@ -42,7 +42,7 @@ export function TemplatesPanel() {
     const dealName = deals.find((d) => d.leadId === lead.id && d.status !== "cancelled")?.name;
     return renderTemplate(draft.body, templateVars(lead, { owner, business, dealName, demos: selectedDemos(demos) }));
   }, [draft, lead, demos, owner, business, deals]);
-  const unknown = draft ? unknownPlaceholders(draft.body) : [];
+  const unknown = draft ? placeholderIssues(draft.body) : [];
 
   return (
     <div className="studio-split">
@@ -63,7 +63,7 @@ export function TemplatesPanel() {
           </div>
           <div className="q-field"><span>Message</span><Textarea ref={bodyRef} rows={7} value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} className="text-sm leading-relaxed" /></div>
           <div className="flex flex-wrap gap-1.5" aria-label="Insert a placeholder">{PLACEHOLDERS.map((k) => <button key={k} type="button" className="ph-chip" onClick={() => insert(k)}>{`{${k}}`}</button>)}</div>
-          {unknown.length > 0 && <p role="alert" className="flex items-center gap-2 rounded-lg bg-warning-soft p-2.5 text-xs"><AlertTriangle className="size-4 shrink-0 text-warning" />Unknown placeholder{unknown.length > 1 ? "s" : ""}: {unknown.map((u) => `{${u}}`).join(", ")}. Those sentences will be left out of messages.</p>}
+          {unknown.length > 0 && <p role="alert" className="flex items-center gap-2 rounded-lg bg-warning-soft p-2.5 text-xs"><AlertTriangle className="size-4 shrink-0 text-warning" />Unsupported placeholder{unknown.length > 1 ? "s" : ""}: {unknown.join(", ")}. Use the Insert buttons instead — this template can't be saved until it's fixed.</p>}
           <div className="flex flex-wrap items-center gap-2">
             <Button onClick={save} disabled={!dirty}>Save template</Button>
             {saved && !saved.isDefault && <Button variant="outline" onClick={() => { if (dirty && !window.confirm("Save is required first — discard unsaved changes and set the saved version as default?")) return; setDefaultTemplate(saved.id); setDraft({ ...saved, isDefault: true, enabled: true }); toast.success(`Default ${saved.purpose} template set`); }}><Star />Make default</Button>}

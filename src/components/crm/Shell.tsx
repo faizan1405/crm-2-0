@@ -6,7 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   LayoutDashboard, Users, KanbanSquare, CalendarClock, Wallet, StickyNote, Moon, Sun,
   BarChart3, Sunrise, Settings, MoreHorizontal, Plus, Search, Bell, ArrowUpRight, PhoneCall, Menu, ChevronRight, PanelLeftClose, PanelLeftOpen, Presentation, ShieldCheck, Activity,
-  Archive, Eye, Lock,
+  Archive, Eye, Lock, Inbox,
 } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
 import { useSession, useAccess, routeAllowed, type PreviewSession } from "@/lib/crm/session";
@@ -24,6 +24,7 @@ import { FollowUpDialog } from "./Dialogs";
 
 const NAV = [
   { to: "/", label: "Dashboard", mobile: "Home", icon: LayoutDashboard, section: "Workspace" },
+  { to: "/inbox", label: "Smart Inbox", mobile: "Inbox", icon: Inbox, section: "" },
   { to: "/leads", label: "Leads", mobile: "Leads", icon: Users, section: "" },
   { to: "/pipeline", label: "Pipeline", mobile: "Pipeline", icon: KanbanSquare, section: "" },
   { to: "/follow-ups", label: "Follow-ups", mobile: "Follow-ups", icon: CalendarClock, section: "" },
@@ -65,7 +66,7 @@ export function ScaleMark({ className }: { className?: string }) {
 }
 
 const GROUPS = [
-  { label: "Workspace", items: ["/", "/leads", "/pipeline", "/follow-ups"] },
+  { label: "Workspace", items: ["/", "/inbox", "/leads", "/pipeline", "/follow-ups"] },
   { label: "Business", items: ["/deals", "/sales-studio", "/analytics", "/daily-briefing"] },
   { label: "Personal", items: ["/notes"] },
   { label: "Owner admin", items: ["/team", "/team-activity", "/data-vault"] },

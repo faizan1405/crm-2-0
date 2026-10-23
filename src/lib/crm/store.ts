@@ -45,6 +45,7 @@ import type { PlanItem, SkipReason } from "./bulk";
 import { buildEmployee, employeeError, withStatus, type AccountStatus, type Employee, type EmployeeInput } from "./team";
 import { builtInTemplates, DEFAULT_DEMO_CATEGORIES, quotationTemplateError, safeUrl, type BusinessProfile, type Demo, type LegacyQuotation, type QuotationShare, type QuotationTemplate, type WaTemplate } from "./studio";
 import { activePreview, allows, previewSink, type CrmEventType } from "./session";
+import { pairKey, type InboxMeta, type LeadRelation, type RelationKind } from "./inbox";
 import { deriveEvents, mergeEvents, markRead, markAllRead, DEFAULT_NOTIFY_PREFS, EMPTY_READS, OWNER_ACTOR_ID, type ActivityEvent, type EventSnap, type NotifyPrefs, type ReadState } from "./activity";
 
 // ---- Preview guards: every action is checked against the previewed employee's permissions (Owner: always allowed). ----
@@ -63,6 +64,7 @@ const GUARDS: Record<string, Guard> = {
   saveQuotationTemplate: ["quotations.manage", DENIED], duplicateQuotationTemplate: ["quotations.manage", undefined], deleteQuotationTemplate: ["quotations.manage", undefined], setQuotationTemplateActive: ["quotations.manage", undefined], moveQuotationTemplate: ["quotations.manage", undefined], logQuotationShare: ["quotations.use", ""],
   saveTemplate: ["templates.manage", undefined], deleteTemplate: ["templates.manage", undefined], setDefaultTemplate: ["templates.manage", undefined], resetTemplates: ["templates.manage", undefined],
   saveDemo: ["demos.manage", false], deleteDemo: ["demos.manage", undefined], moveDemo: ["demos.manage", undefined], addDemoCategory: ["demos.manage", undefined],
+  markReviewed: ["leads.edit", 0], unmarkReviewed: ["leads.edit", undefined], flagDuplicate: ["leads.edit", undefined], unflagDuplicate: ["leads.edit", undefined], resolveDuplicate: ["__owner", undefined], clearRelation: ["__owner", undefined],
   assignLeads: ["leads.assign", { ok: false, error: DENIED }, "lead.assigned"], restoreAssignments: ["leads.assign", undefined], applyAssignmentPlan: ["leads.assign", { ok: false, error: DENIED }, "lead.assigned"],
   saveBusinessProfile: ["__owner", undefined], reset: ["__owner", undefined], logBackup: ["__owner", undefined], deleteLegacyQuotations: ["__owner", undefined],
   addEmployee: ["__owner", { ok: false, error: DENIED }], updateEmployee: ["__owner", DENIED], setEmployeeStatus: ["__owner", undefined], saveEmployeeAccess: ["__owner", undefined],
@@ -70,7 +72,7 @@ const GUARDS: Record<string, Guard> = {
 };
 /** Actions never recorded as Team Activity (bulk reset would be noise; settings/templates are not team activity). */
 const UNRECORDED = new Set(["reset", "logBackup"]);
-const snapOf = (s: CRMState): EventSnap => ({ leads: s.leads, followUps: s.followUps, deals: s.deals, payments: s.payments, activities: s.activities, assignments: s.assignments, employees: s.employees, employeeAccess: s.employeeAccess });
+const snapOf = (s: CRMState): EventSnap => ({ leads: s.leads, followUps: s.followUps, deals: s.deals, payments: s.payments, activities: s.activities, assignments: s.assignments, employees: s.employees, employeeAccess: s.employeeAccess, inboxMeta: s.inboxMeta, leadRelations: s.leadRelations });
 let depth = 0;
 function guarded<T extends object>(state: T, get: () => CRMState, set: (p: Partial<CRMState>) => void): T {
   const out = { ...state } as Record<string, unknown>;
@@ -224,6 +226,15 @@ interface CRMState extends Prefs {
   /** Explicit, confirmed historical redistribution. Returns the number of leads assigned. */
   applyRulesToExisting: () => number;
   // Phase 3C — Team Activity + Smart Notifications. One activity source; notifications are derived from it.
+  /** Smart Lead Inbox review state and duplicate decisions, keyed by lead id / pair key. Never edits Lead records. */
+  inboxMeta: Record<string, InboxMeta>;
+  leadRelations: Record<string, LeadRelation>;
+  markReviewed: (ids: string[]) => number;
+  unmarkReviewed: (id: string) => void;
+  flagDuplicate: (id: string, note?: string) => void;
+  unflagDuplicate: (id: string) => void;
+  resolveDuplicate: (a: string, b: string, kind: RelationKind, note?: string) => void;
+  clearRelation: (key: string) => void;
   teamEvents: ActivityEvent[];
   notifyPrefs: NotifyPrefs;
   notifyReads: ReadState;
@@ -299,6 +310,24 @@ export const useCRM = create<CRMState>()(
       };
       return guarded<CRMState>({
       ...initialData,
+      inboxMeta: {},
+      leadRelations: {},
+      markReviewed: (ids) => {
+        const at = new Date().toISOString(); const st = get(); const live = new Set(st.leads.map((l) => l.id));
+        const todo = [...new Set(ids)].filter((id) => live.has(id) && !st.inboxMeta[id]?.reviewedAt);
+        if (todo.length) set((s) => ({ inboxMeta: { ...s.inboxMeta, ...Object.fromEntries(todo.map((id) => [id, { ...s.inboxMeta[id], reviewedAt: at }])) } }));
+        return todo.length;
+      },
+      unmarkReviewed: (id) => set((s) => { const { reviewedAt: _r, ...rest } = s.inboxMeta[id] ?? {}; return { inboxMeta: { ...s.inboxMeta, [id]: rest } }; }),
+      flagDuplicate: (id, note) => set((s) => (s.leads.some((l) => l.id === id) ? { inboxMeta: { ...s.inboxMeta, [id]: { ...s.inboxMeta[id], flaggedAt: new Date().toISOString(), ...(note ? { flagNote: note } : {}) } } } : {})),
+      unflagDuplicate: (id) => set((s) => { const { flaggedAt: _f, flagNote: _n, ...rest } = s.inboxMeta[id] ?? {}; return { inboxMeta: { ...s.inboxMeta, [id]: rest } }; }),
+      resolveDuplicate: (a, b, kind, note) => set((s) => {
+        if (a === b || !s.leads.some((l) => l.id === a) || !s.leads.some((l) => l.id === b)) return {};
+        const key = pairKey(a, b);
+        const clear = (id: string) => { const { flaggedAt: _f, flagNote: _n, ...rest } = s.inboxMeta[id] ?? {}; return rest; };
+        return { leadRelations: { ...s.leadRelations, [key]: { key, a: a < b ? a : b, b: a < b ? b : a, kind, at: new Date().toISOString(), ...(note ? { note } : {}) } }, inboxMeta: { ...s.inboxMeta, [a]: clear(a), [b]: clear(b) } };
+      }),
+      clearRelation: (key) => set((s) => { const { [key]: _x, ...rest } = s.leadRelations; return { leadRelations: rest }; }),
       teamEvents: [],
       notifyPrefs: DEFAULT_NOTIFY_PREFS,
       notifyReads: EMPTY_READS,
@@ -641,14 +670,20 @@ export const useCRM = create<CRMState>()(
     },
     {
       name: "scale-flow-crm-2-demo",
-      version: 3,
+      version: 4,
       storage: createJSONStorage(() => guardedStorage),
       skipHydration: true,
       // v3: billing quotations are moved, unchanged, into a read-only backup. Nothing is converted automatically.
-      migrate: (persisted, version) => migrateQuotations(persisted as Record<string, unknown>, version) as unknown as CRMState,
+      // v4: adds Smart Inbox maps (empty) — existing leads are untouched and start as "Needs review".
+      migrate: (persisted, version) => migrateInbox(migrateQuotations(persisted as Record<string, unknown>, version), version) as unknown as CRMState,
     },
   ),
 );
+
+export function migrateInbox(state: Record<string, unknown>, version: number): Record<string, unknown> {
+  if (!state || version >= 4) return state;
+  return { ...state, inboxMeta: state["inboxMeta"] ?? {}, leadRelations: state["leadRelations"] ?? {} };
+}
 
 /** Move pre-v3 billing quotations into `legacyQuotations` untouched; deals and payments are never read or changed. */
 export function migrateQuotations(state: Record<string, unknown>, version: number): Record<string, unknown> {

@@ -18,6 +18,7 @@ export type EventType =
   | "pipeline.stage_changed" | "deal.won" | "deal.lost" | "deal.created"
   | "payment.recorded" | "payment.updated"
   | "bulk.completed" | "bulk.reversed"
+  | "lead.reviewed" | "lead.duplicate_flagged" | "lead.duplicate_resolved" | "lead.related" | "lead.merged" | "lead.intake_status_changed"
   | "employee.added" | "employee.updated" | "employee.status_changed" | "employee.permissions_changed";
 
 export type EntityType = "lead" | "followup" | "deal" | "payment" | "employee" | "bulk";
@@ -53,6 +54,7 @@ export const OWNER_ACTOR_ID = "owner";
 export interface EventSnap {
   leads: Lead[]; followUps: FollowUp[]; deals: Deal[]; payments: Payment[]; activities: LeadActivity[];
   assignments: Record<string, Assignment>; employees: Employee[]; employeeAccess: Record<string, EmployeeAccess>;
+  inboxMeta?: Record<string, { reviewedAt?: string; flaggedAt?: string }>; leadRelations?: Record<string, { a: string; b: string; kind: string }>;
 }
 export interface DeriveCtx { action: string; operationId: string; at: string; actor: Actor; source?: EventSource }
 
@@ -67,6 +69,7 @@ export const MODULE_OF: Record<EventType, CrmModule> = {
   "pipeline.stage_changed": "pipeline", "deal.won": "pipeline", "deal.lost": "pipeline", "deal.created": "finance",
   "payment.recorded": "finance", "payment.updated": "finance",
   "bulk.completed": "assignments", "bulk.reversed": "assignments",
+  "lead.reviewed": "leads", "lead.duplicate_flagged": "leads", "lead.duplicate_resolved": "leads", "lead.related": "leads", "lead.merged": "leads", "lead.intake_status_changed": "leads",
   "employee.added": "team", "employee.updated": "team", "employee.status_changed": "team", "employee.permissions_changed": "team",
 };
 export const EVENT_LABEL: Record<EventType, string> = {
@@ -77,6 +80,7 @@ export const EVENT_LABEL: Record<EventType, string> = {
   "pipeline.stage_changed": "Stage changed", "deal.won": "Deal won", "deal.lost": "Deal lost", "deal.created": "Deal created",
   "payment.recorded": "Payment recorded", "payment.updated": "Payment updated",
   "bulk.completed": "Bulk operation", "bulk.reversed": "Bulk operation reversed",
+  "lead.reviewed": "Lead reviewed", "lead.duplicate_flagged": "Possible duplicate flagged", "lead.duplicate_resolved": "Duplicate kept separate", "lead.related": "Leads marked related", "lead.merged": "Leads merged", "lead.intake_status_changed": "Inbox status changed",
   "employee.added": "Employee added", "employee.updated": "Employee updated", "employee.status_changed": "Account status changed", "employee.permissions_changed": "Permissions changed",
 };
 export const MODULE_LABEL: Record<CrmModule, string> = { leads: "Leads", calls: "Calls", followups: "Follow-ups", pipeline: "Pipeline", finance: "Finance", assignments: "Assignments", team: "Team" };
@@ -184,6 +188,22 @@ export function deriveEvents(prev: EventSnap, next: EventSnap, ctx: DeriveCtx): 
   for (const id of new Set([...Object.keys(prev.employeeAccess), ...Object.keys(next.employeeAccess)])) {
     const a = prev.employeeAccess[id], b = next.employeeAccess[id];
     if (JSON.stringify(a ? { ...a, updatedAt: 0 } : null) !== JSON.stringify(b ? { ...b, updatedAt: 0 } : null)) push("employee.permissions_changed", id, { entityType: "employee", entityId: id, targetEmployeeId: id, summary: `${who} changed ${empName(id)}'s permissions.` });
+  }
+  // Smart Inbox — reviews (summarised at BULK_THRESHOLD), duplicate flags and Owner decisions.
+  const pm = prev.inboxMeta ?? {}, nm = next.inboxMeta ?? {};
+  const reviewed = Object.keys(nm).filter((id) => nm[id]?.reviewedAt && !pm[id]?.reviewedAt);
+  if (reviewed.length >= BULK_THRESHOLD) push("lead.reviewed", "bulk", { entityType: "bulk", entityId: ctx.operationId, summary: `${who} reviewed ${reviewed.length} leads in the Smart Inbox.`, newValues: { count: reviewed.length, leadIds: reviewed } });
+  else for (const id of reviewed) push("lead.reviewed", id, { entityType: "lead", entityId: id, relatedLeadId: id, summary: `${who} reviewed ${leadName(id)} in the Smart Inbox.` });
+  for (const id of Object.keys(nm)) {
+    if (nm[id]?.reviewedAt || !pm[id]?.reviewedAt) continue;
+    push("lead.intake_status_changed", id, { entityType: "lead", entityId: id, relatedLeadId: id, summary: `${who} moved ${leadName(id)} back to Needs review.`, oldValues: { status: "reviewed" }, newValues: { status: "needs_review" } });
+  }
+  if (ctx.action === "flagDuplicate") for (const id of Object.keys(nm)) if (nm[id]?.flaggedAt && !pm[id]?.flaggedAt) push("lead.duplicate_flagged", id, { entityType: "lead", entityId: id, relatedLeadId: id, summary: `${who} flagged ${leadName(id)} as a possible duplicate.` });
+  const pr = prev.leadRelations ?? {}, nr = next.leadRelations ?? {};
+  for (const [k, r] of Object.entries(nr)) {
+    if (pr[k]?.kind === r.kind) continue;
+    const t: EventType = r.kind === "related" ? "lead.related" : "lead.duplicate_resolved";
+    push(t, k, { entityType: "lead", entityId: r.a, relatedLeadId: r.a, summary: r.kind === "related" ? `${who} marked ${leadName(r.a)} and ${leadName(r.b)} as related records.` : `${who} kept ${leadName(r.a)} and ${leadName(r.b)} as separate leads.`, newValues: { a: r.a, b: r.b, kind: r.kind } });
   }
   return out;
 }
