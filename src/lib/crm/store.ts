@@ -39,6 +39,7 @@ import { demoLeads, demoDeals, demoPayments, demoFollowUps, demoNotes, demoActiv
 import { uid, digits, dayKey } from "./format";
 import { dealOutstanding } from "./finance";
 import { leadEditError } from "./validation";
+import { buildEmployee, employeeError, withStatus, type AccountStatus, type Employee, type EmployeeInput } from "./team";
 import { builtInTemplates, DEFAULT_DEMO_CATEGORIES, quotationTemplateError, safeUrl, type BusinessProfile, type Demo, type LegacyQuotation, type QuotationShare, type QuotationTemplate, type WaTemplate } from "./studio";
 
 export type ThemePref = "light" | "dark" | "system";
@@ -124,6 +125,11 @@ interface CRMState extends Prefs {
   moveDemo: (id: string, dir: -1 | 1) => void;
   addDemoCategory: (name: string) => void;
   saveBusinessProfile: (p: BusinessProfile) => void;
+  // Team Management (Phase 3A) — local employee profiles only, never credentials. Not cleared by reset().
+  employees: Employee[];
+  addEmployee: (input: EmployeeInput) => { ok: true; id: string } | { ok: false; error: string };
+  updateEmployee: (id: string, input: EmployeeInput) => string | null;
+  setEmployeeStatus: (id: string, status: AccountStatus) => void;
 }
 
 export function duplicatePhone(leads: Lead[], phone: string): Lead | undefined {
@@ -418,6 +424,25 @@ export const useCRM = create<CRMState>()(
       }),
       addDemoCategory: (name) => set((s) => (name.trim() && !s.demoCategories.includes(name.trim()) ? { demoCategories: [...s.demoCategories, name.trim()] } : {})),
       saveBusinessProfile: (p) => set({ businessProfile: p }),
+      employees: [],
+      addEmployee: (input) => {
+        const err = employeeError(input, get().employees, get().email);
+        if (err) return { ok: false, error: err };
+        const id = uid("emp");
+        set((s) => ({ employees: [...s.employees, buildEmployee(input, id, new Date().toISOString())] }));
+        return { ok: true, id };
+      },
+      updateEmployee: (id, input) => {
+        const cur = get().employees.find((e) => e.id === id);
+        if (!cur) return "Employee not found.";
+        const err = employeeError(input, get().employees, get().email, id);
+        if (err) return err;
+        const now = new Date().toISOString();
+        const next = { ...buildEmployee(input, id, now), createdAt: cur.createdAt, lastLoginAt: cur.lastLoginAt, invitedAt: cur.invitedAt, activatedAt: cur.activatedAt, deactivatedAt: cur.accountStatus === input.accountStatus ? cur.deactivatedAt : input.accountStatus === "inactive" ? now : null };
+        set((s) => ({ employees: s.employees.map((e) => (e.id === id ? next : e)) }));
+        return null;
+      },
+      setEmployeeStatus: (id, status) => set((s) => ({ employees: s.employees.map((e) => (e.id === id ? withStatus(e, status, new Date().toISOString()) : e)) })),
     };
     },
     {
