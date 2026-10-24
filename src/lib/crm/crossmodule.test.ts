@@ -39,7 +39,7 @@ describe("cross-module consistency", () => {
 
   it("assignment updates workload; inactive employees cannot receive leads", () => {
     const id = newLead();
-    const e = s().addEmployee({ name: "XM Emp", email: "xm@qa.test", roleId: "sales" as never, accountStatus: "active" });
+    const e = s().addEmployee({ name: "XM Emp", email: "xm@qa.test", roleId: "salesperson", accountStatus: "active" });
     if (!e.ok) throw new Error(e.error);
     expect(s().assignLeads([id], e.id, "test").ok).toBe(true);
     expect(workload(s().assignments)[e.id]).toBe(1);
