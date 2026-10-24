@@ -116,7 +116,7 @@ export function financeBreakdown(deals: Deal[], payments: Payment[], w: Window, 
     const m = byM.get(dayKey(p.date).slice(0, 7)); if (m) m.received += p.amount;
     const x = methods.get(p.method) ?? { method: p.method, amount: 0, count: 0 }; x.amount += p.amount; x.count++; methods.set(p.method, x);
   }
-  for (const d of eligible) if (inWindow(dealWonAt(d), w)) { const m = byM.get(dayKey(dealWonAt(d)).slice(0, 7)); if (m) m.won += d.finalAmount; }
+  for (const d of eligible) if (wonIn(d, w)) { const m = byM.get(dayKey(dealWonAt(d)!).slice(0, 7)); if (m) m.won += d.finalAmount; }
   const fullyPaid: string[] = [], partial: string[] = [], awaiting: string[] = [], overdueIds: string[] = [];
   let noTerms = 0;
   for (const d of eligible) {
@@ -371,12 +371,12 @@ export function runReport(r: ReportDef, d: AnalyticsData, now: Date, ctx: { empl
     case "deals": {
       const eligible = d.deals.filter((x) => x.status !== "cancelled" || r.groupBy === "status");
       const srcOf = (x: Deal) => (x.leadId ? leadById.get(x.leadId)?.source ?? "Lead removed" : "Not from a CRM lead");
-      const dealKey = (x: Deal, at?: string): [string, string] => r.groupBy === "status" ? [x.status, x.status.replace("_", " ")] : r.groupBy === "source" ? [srcOf(x), srcOf(x)] : [dayKey(at ?? dealWonAt(x)).slice(0, 7), MONTH_LABEL(dayKey(at ?? dealWonAt(x)).slice(0, 7))];
+      const dealKey = (x: Deal, at?: string): [string, string] => r.groupBy === "status" ? [x.status, x.status.replace("_", " ")] : r.groupBy === "source" ? [srcOf(x), srcOf(x)] : (() => { const t = at ?? dealWonAt(x); return t ? [dayKey(t).slice(0, 7), MONTH_LABEL(dayKey(t).slice(0, 7))] as [string, string] : ["unknown", "Unknown won date"] as [string, string]; })();
       if (r.metric === "received") { const ids = new Set(eligible.filter((x) => x.status !== "cancelled").map((x) => x.id)); for (const p of d.payments) {
         if (p.voided || !ids.has(p.dealId) || !inWindow(p.date, w)) continue; const x = eligible.find((y) => y.id === p.dealId)!;
         const [k, lab] = r.groupBy === "method" ? [p.method, p.method] : dealKey(x, p.date); add(k, lab, p.amount, x.id, "deal");
       } } else for (const x of eligible) {
-        if (r.metric !== "outstanding" && !inWindow(dealWonAt(x), w)) continue;
+        if (r.metric !== "outstanding" && !wonIn(x, w)) { if (!dealWonAt(x)) unknownWon++; continue; }
         const v = r.metric === "count" ? 1 : r.metric === "value" ? (x.status === "cancelled" ? 0 : x.finalAmount) : dealOutstanding(x, d.payments);
         if (!v && r.metric !== "count") continue; const [k, lab] = dealKey(x); add(k, lab, v, x.id, "deal");
       }
