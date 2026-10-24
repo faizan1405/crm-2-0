@@ -3,7 +3,8 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { Lead, Deal, Payment, FollowUp, Note, LeadActivity, BinEntry } from "./types";
-import { mergePatch, QUICK_LABEL, type QuickStatus } from "./leadtools";
+import { editSummary, mergePatch, QUICK_LABEL, type QuickStatus } from "./leadtools";
+let suppressEditHistory = false; // merges record their own single "merged" entry
 import type { ParsedLead } from "./parse";
 import { isPending, activeFollowUp } from "./followups";
 import { isConnectedOutcome, outcomeQuick, type CallOutcome } from "./calllog";
@@ -634,7 +635,7 @@ export const useCRM = create<CRMState>()(
           leads: s.leads.map((l) => (l.id === id ? { ...l, ...patch, ...(patch.status && patch.status !== "lost" ? { lostReason: undefined } : {}), updatedAt: new Date().toISOString() } : l)),
           deals: s.deals.map((d) => d.leadId === id ? { ...d, ...(patch.name !== undefined ? { clientName: patch.name } : {}), ...(patch.company !== undefined ? { company: patch.company } : {}) } : d),
         }));
-        const edited = prev ? editSummary(prev as never, patch as never) : null;
+        const edited = prev && !suppressEditHistory ? editSummary(prev as never, patch as never) : null;
         if (edited) get().addActivity(id, edited, "edit");
         if (patch.status && prev && prev.status !== patch.status) { get().addActivity(id, `Status changed to ${patch.status}`, "status"); autoAssign(id, "stage_entered"); }
         return true;
@@ -660,7 +661,8 @@ export const useCRM = create<CRMState>()(
         const lead = get().leads.find((l) => l.id === id);
         if (!lead) return false;
         const patch = mergePatch(lead, incoming, mode);
-        if (Object.keys(patch).length && !get().updateLead(id, patch)) return false;
+        suppressEditHistory = true; let okM: boolean; try { okM = !Object.keys(patch).length || get().updateLead(id, patch); } finally { suppressEditHistory = false; }
+        if (!okM) return false;
         const fields = Object.keys(patch).filter((k) => k !== "notes");
         get().addActivity(id, fields.length || patch.notes ? `Merged new details (${[...fields, ...(patch.notes ? ["notes"] : [])].join(", ")})` : "Duplicate entry checked — nothing new to merge", "merged");
         return true;
