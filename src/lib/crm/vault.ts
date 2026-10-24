@@ -218,6 +218,32 @@ export async function validateBackup(bytes: Uint8Array): Promise<ValidationRepor
   const deals = read("data/deals.json")?.deals ?? read("data/relationships.json")?.deals ?? null;
   const pays = read("data/payments.json")?.payments as Rec[] | undefined;
   if (pays && deals) { const d = new Set((deals as Rec[]).map((x) => x.id)); const orphan = pays.filter((p) => !d.has(p.dealId!)).length; if (orphan) warnings.push(`${orphan} payment${orphan === 1 ? "" : "s"} reference deals not in this archive.`); }
+  // Attachment references: every included proof must resolve to its own binary entry with matching bytes and checksum.
+  const att = read("data/attachment-metadata.json")?.attachments as (ProofMeta & { path: string | null; sha256: string | null })[] | undefined;
+  const listed = new Set((m.files ?? []).map((f) => f.path));
+  if (m.included?.includes("proofs") && !att) errors.push("Missing file: data/attachment-metadata.json");
+  if (att) {
+    const payIds = pays ? new Set(pays.map((p) => p.id)) : null;
+    const seenAtt = new Set<string>(), seenPath = new Set<string>(), seenPay = new Set<string>();
+    let withFile = 0;
+    for (const a of att) {
+      if (seenAtt.has(a.attachmentId)) errors.push(`Duplicate attachment ID: ${a.attachmentId}`); seenAtt.add(a.attachmentId);
+      if (seenPay.has(a.paymentId)) errors.push(`More than one proof for payment ${a.paymentId}`); seenPay.add(a.paymentId);
+      if (payIds && !payIds.has(a.paymentId)) errors.push(`Proof ${a.attachmentId} points to payment ${a.paymentId}, which isn't in this archive.`);
+      if (!a.path) { if (!m.attachments?.missing?.includes(a.paymentId)) errors.push(`Proof for payment ${a.paymentId} has no file and isn't listed as missing.`); continue; }
+      withFile++;
+      if (seenPath.has(a.path)) errors.push(`Two proofs share the archive path ${a.path}`); seenPath.add(a.path);
+      if (!a.path.startsWith("files/payment-proofs/")) { errors.push(`Invalid attachment path: ${a.path}`); continue; }
+      const b = files[a.path];
+      if (!b) { if (listed.has(a.path)) continue; errors.push(`Missing proof file: ${a.path}`); continue; }
+      if (!listed.has(a.path)) errors.push(`Proof file isn't listed in the manifest: ${a.path}`);
+      if (b.byteLength !== a.fileSize || (await sha256(b)) !== a.sha256) errors.push(`Proof file failed its checksum: ${a.path}`);
+    }
+    if (m.attachments && (m.attachments.included !== withFile || m.attachments.expected !== att.length)) errors.push("Manifest attachment counts don't match the attachment list.");
+  }
+  if (pays && m.counts?.payments !== undefined && m.counts.payments !== pays.length) errors.push("Manifest payment count doesn't match data/payments.json.");
+  if (deals && read("data/deals.json") && m.counts?.deals !== undefined && m.counts.deals !== (deals as Rec[]).length) errors.push("Manifest deal count doesn't match data/deals.json.");
+  if (m.complete && ((m.omitted?.length ?? 0) > 0 || (m.attachments?.missing?.length ?? 0) > 0 || m.type !== "full")) errors.push("Manifest claims a complete backup but lists omitted categories or missing proofs.");
   if (m.attachments?.missing?.length) warnings.push(`${m.attachments.missing.length} proof file(s) were already missing when this backup was made.`);
   if (!m.complete) warnings.push(m.type === "full" ? "Marked incomplete when created." : "Partial export — not a complete CRM backup.");
   return { ok: errors.length === 0, errors, warnings, manifest: m, restoreAvailable: false };
