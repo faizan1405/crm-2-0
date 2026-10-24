@@ -194,3 +194,25 @@ Separate test browser, isolated data: 62 leads "Tst B143 00–61" (company B143C
 **Status:** 390 automated tests pass; typecheck clean; full production build succeeded.
 
 **Still open:** B1.5A.3 payment-proof upload/persistence/failure/privacy + 5-width responsive; B1.5B Data Vault ZIP and attachment bytes; Employee A/B/C acceptance; Owner quotation-package verification; large-dataset performance; reliability/storage failures; security & accessibility; final end-to-end audit.
+
+## Checkpoint B1.5A.3 — Payment proofs, financial history, privacy, responsive
+
+**Code changes**
+- Client history now records "Deal booked: "<name>"" (CRM-lead deals) and "Payment of ₹X voided on "<deal>" (kept in history, excluded from totals)". Voiding an already-voided payment does nothing and adds no second entry. Other-client deals (no lead) add no client history.
+- Privacy defect found and fixed: employee previews without an amounts finance level could read payment amounts in client history. The scoped employee copy (`scopeWorkspace`) now replaces money entries with "Finance update (details hidden — no finance access)".
+- New `financeHistory.test.ts` (5 tests). 395 tests pass; typecheck clean; full production build succeeded.
+
+**Browser (executed: `/tmp/browser/b153/proof.py`, `priv.py`; isolated test browser, synthetic files saying "TEST PAYMENT PROOF - NOT A REAL TRANSACTION")**
+- Deal A ₹40,000 on a CRM lead: exactly 1 "Deal booked" entry.
+- PNG proof (3,126 B, sha256 0fa3ce3f…) attached in the Record payment dialog to the ₹4,000 payment; PDF proof (7,867 B, sha256 2d94c440…) attached via "Add proof" on the ₹16,000 row. Bytes read back from the preview matched size and SHA-256 before and after refresh, each on its own payment.
+- Proofs live only in IndexedDB (`scale-flow-payment-proofs`); no proof fields in payment records.
+- Rejected with messages and nothing staged: empty file, spoofed PNG (PDF bytes), 11 MB PNG. SVG was rejected (nothing staged) but its message was hidden behind an older notification — message not confirmed.
+- Failed replacement (spoofed file) kept the existing proof (same hash); payments unchanged.
+- ₹5,000 voided: 1 "voided" entry; payments 4k, 16k valid + 5k voided.
+- Project created from Deal A: Agreed ₹40,000 / Received ₹20,000 / Remaining ₹20,000, same after refresh; still 3 payments, 1 project, no payment created.
+- Employee preview (salesperson, no finance, assigned to Deal A's lead): /deals and the project pages show "Not in this workspace"; client page shows no proofs, no deal amounts, no payment history text after the fix.
+- Widths 1440/1024/768/390/360: no page overflow in the deal panel, payment dialog or proof preview; Save/Replace/Void reachable (buttons 32–40 px tall); project finance correct at all widths (section tabs scroll inside their own strip at ≤768 as designed).
+
+**Not tested:** storage-full/IndexedDB write failure in the browser (automated test only), interrupted uploads, delivery-doesn't-mark-paid in the browser, historical won-date event re-check after refresh (automated only), notification previews for money events. Void reason isn't captured (no reason field exists). Small touch targets: Void button is 32 px tall — below the 44 px guideline, not changed (no redesign).
+
+**Still open:** B1.5B Data Vault ZIP binary verification; Employee A/B/C acceptance; Owner quotation-package verification; real pointer drag and tag-filter regression; large-dataset performance; storage and recovery audit; security and accessibility; final end-to-end acceptance.

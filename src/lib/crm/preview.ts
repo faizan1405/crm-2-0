@@ -11,6 +11,8 @@ import { scopeCustomization, viewAllowed, type CustomFieldDef, type FieldValues,
 
 interface ScopeInput { leads: Lead[]; followUps: FollowUp[]; activities: LeadActivity[]; deals: Deal[]; payments: Payment[]; quotationShares: QuotationShare[]; assignments: Record<string, Assignment>; customFields?: CustomFieldDef[]; fieldValues?: FieldValues; leadTags?: LeadTags; savedViews?: SavedView[]; projects?: Project[]; projectTasks?: ProjectTask[]; projectMilestones?: ProjectMilestone[]; supportRequests?: SupportRequest[]; projectFields?: CustomFieldDef[]; projectFieldValues?: FieldValues; projectTags?: LeadTags }
 
+export const FINANCE_REDACTED = "Finance update (details hidden — no finance access)";
+
 /** Pure: the working copy an employee would receive from the backend. Owner notes are never included. */
 export function scopeWorkspace(d: ScopeInput, employeeId: string, eff: Effective) {
   const leads = leadsInScope(d.leads, employeeId, eff, d.assignments);
@@ -21,7 +23,8 @@ export function scopeWorkspace(d: ScopeInput, employeeId: string, eff: Effective
   return {
     leads,
     followUps: eff.can("followups.view") ? d.followUps.filter((f) => ids.has(f.leadId)) : [],
-    activities: d.activities.filter((a) => ids.has(a.leadId)),
+    // Money history is redacted for employees without an amounts finance level (backend would do the same).
+    activities: d.activities.filter((a) => ids.has(a.leadId)).map((a) => (a.type === "payment" && !money ? { ...a, text: FINANCE_REDACTED } : a)),
     deals,
     payments: d.payments.filter((p) => dealIds.has(p.dealId)),
     quotationShares: d.quotationShares.filter((s) => ids.has(s.leadId)),
