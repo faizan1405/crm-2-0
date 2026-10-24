@@ -82,7 +82,7 @@ function LeadDetail() {
           </section>
           <section className="surface p-5">
             <h2 className="mb-3 font-semibold">Activity</h2>
-            <form className="mb-4 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (!note.trim()) return; addActivity(id, note.trim()); setNote(""); }}>
+            <form className="mb-4 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (!note.trim()) return; if (addActivity(id, note.trim()) === false) { toast.error("You don't have permission to add client notes."); return; } setNote(""); }}>
               <Input placeholder="Log a note or call outcome…" value={note} onChange={(e) => setNote(e.target.value)} /><Button type="submit" variant="outline">Log</Button>
             </form>
             <ol className="relative grid gap-4 border-l pl-5">

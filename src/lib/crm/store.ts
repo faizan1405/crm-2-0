@@ -66,7 +66,7 @@ const GUARDS: Record<string, Guard> = {
   addLead: ["leads.create", "", "lead.created"],
   updateLead: [((_id: string, patch: object) => (statusOnly(patch) ? ["pipeline.edit", "leads.edit"] : "leads.edit")) as never, false, "lead.updated"],
   deleteLead: ["leads.delete", undefined], wasteLead: ["leads.delete", undefined], restoreLead: ["leads.delete", DENIED], purgeBin: ["leads.delete", undefined], emptyBin: ["leads.delete", undefined],
-  addActivity: ["leads.view", undefined, "client.note_added"], mergeIntoLead: ["leads.edit", false], setQuickStatus: ["leads.edit", undefined],
+  addActivity: [((_id: string, _t: string, type?: string) => (type === undefined || type === "note" ? "leads.edit" : type === "whatsapp" ? "clients.whatsapp" : "leads.view")) as never, false, "client.note_added"], mergeIntoLead: ["leads.edit", false], setQuickStatus: ["leads.edit", undefined],
   addDeal: ["deals.create", undefined], addPayment: ["__finance", false], voidPayment: ["__finance", undefined], setDealWonAt: ["__owner", false],
   addFollowUp: ["followups.create", { ok: false, error: DENIED }, "followup.created"], completeFollowUp: ["followups.edit", undefined, "followup.completed"], rescheduleFollowUp: ["followups.edit", undefined],
   logCall: ["clients.calls", { ok: false, error: DENIED }, "call.logged"], undoCall: ["clients.calls", DENIED],
@@ -174,7 +174,8 @@ interface CRMState extends Prefs, ProjectSlice, ProjectCustomSlice, AnalyticsSli
   emptyBin: (kind: BinEntry["kind"]) => void;
   mergeIntoLead: (id: string, incoming: ParsedLead, mode: "fill" | "overwrite") => boolean;
   setQuickStatus: (id: string, q: QuickStatus | undefined) => void;
-  addActivity: (leadId: string, text: string, type?: LeadActivity["type"]) => void;
+  /** Returns false when the previewed employee may not add this entry (client notes need leads.edit). */
+  addActivity: (leadId: string, text: string, type?: LeadActivity["type"]) => void | false;
   addDeal: (deal: Omit<Deal, "id" | "createdAt" | "wonAt">) => void;
   /** `id` lets callers pre-assign the identifier (e.g. to attach staged proof); rejected if already used. */
   addPayment: (payment: Omit<Payment, "id">, id?: string) => boolean;
