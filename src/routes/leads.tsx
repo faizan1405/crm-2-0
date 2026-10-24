@@ -281,7 +281,7 @@ function Leads() {
         {pages > 1 && <span className="flex items-center gap-1"><Button size="icon" variant="ghost" className="size-7" aria-label="Previous page" disabled={pg === 0} onClick={() => setPage(pg - 1)}><ChevronLeft /></Button><span className="num">{pg * PAGE + 1}–{Math.min(rows.length, pg * PAGE + PAGE)} of {rows.length}</span><Button size="icon" variant="ghost" className="size-7" aria-label="Next page" disabled={pg >= pages - 1} onClick={() => setPage(pg + 1)}><ChevronRight /></Button></span>}
       </div>}
       {/* Spacer so the floating bulk bar never covers the pager or last rows. */}
-      {pickedCount > 0 && <div aria-hidden className="h-48 md:h-24" />}
+      {pickedCount > 0 && <div aria-hidden className="h-48 lg:h-24" />}
       {pickedCount > 0 && <div className="as-bulk" role="region" aria-label="Bulk actions">
         <span className="text-sm font-semibold"><span className="num">{pickedCount}</span> selected<span className="ba-scope block font-normal">{selection.kind === "matching" ? `All matching ${selection.label}${selection.exclude.length ? ` · ${selection.exclude.length} excluded` : ""}` : "Picked individually"}</span></span>
         {can("leads.assign") && <Button size="sm" onClick={() => setBulkAssign(true)}><UserCheck />Assign / distribute</Button>}
