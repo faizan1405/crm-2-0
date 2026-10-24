@@ -30,3 +30,26 @@ describe("financial client history", () => {
     expect(useCRM.getState().activities.length).toBe(before);
   });
 });
+
+import { scopeWorkspace, FINANCE_REDACTED } from "./preview";
+import { resolve } from "./access";
+describe("employee financial privacy in client history", () => {
+  const setup = () => {
+    const d = book();
+    useCRM.getState().addPayment({ dealId: d.id, amount: 4000, date: "2026-10-20", method: "UPI", type: "advance" }, "pp1");
+    const s = useCRM.getState();
+    return { ...s, assignments: { [lead().id]: { employeeId: "e1", assignedAt: "2026-10-20T00:00:00Z", source: "t", manual: true } } };
+  };
+  it("a salesperson with no finance access sees no amounts, deals or payments", () => {
+    const w = scopeWorkspace(setup(), "e1", resolve("salesperson"));
+    const money = w.activities.filter((a) => a.type === "payment");
+    expect(money.length).toBeGreaterThan(0);
+    expect(money.every((a) => a.text === FINANCE_REDACTED)).toBe(true);
+    expect(w.deals).toEqual([]); expect(w.payments).toEqual([]);
+  });
+  it("an employee with amounts-level finance still sees the payment history text", () => {
+    const eff = resolve("salesperson", { overrides: { "deals.view": true } as never, finance: "amounts", updatedAt: "" });
+    const w = scopeWorkspace(setup(), "e1", eff);
+    expect(w.activities.some((a) => a.text.includes("₹4,000"))).toBe(true);
+  });
+});
