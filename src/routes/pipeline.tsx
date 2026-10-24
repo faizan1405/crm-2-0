@@ -50,6 +50,8 @@ function Pipeline() {
   const sel = leads.find((l) => l.id === selected);
   // Wide screens dock the inspector beside the board; smaller screens float it above everything (portal escapes the page's stacking context).
   const wide = useSyncExternalStore((cb) => { const m = window.matchMedia("(min-width: 1280px)"); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); }, () => window.matchMedia("(min-width: 1280px)").matches, () => true);
+  const { can } = useAccess();
+  const canMove = can("pipeline.edit") || can("leads.edit");
   const inspector = sel ? <>
     <button type="button" aria-label="Close inspector" className="pipe-scrim" onClick={() => select(undefined)} />
     <PipeInspector key={sel.id} lead={sel} onClose={() => select(undefined)} canMove={canMove} onStage={(s) => move(sel.id, s)} onFollowUp={() => setFuFor(sel.id)} />
@@ -57,8 +59,6 @@ function Pipeline() {
 
   useEffect(() => { if (!sel) return; const k = (e: KeyboardEvent) => { if (e.key === "Escape" && !document.querySelector("[role=dialog]")) select(undefined); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { can } = useAccess();
-  const canMove = can("pipeline.edit") || can("leads.edit");
   const move = (id: string, status: LeadStatus) => {
     if (!canMove) { toast.error(STAGE_DENIED); return; }
     const lead = leads.find((l) => l.id === id);
