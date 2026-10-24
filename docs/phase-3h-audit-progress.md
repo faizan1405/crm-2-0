@@ -216,3 +216,23 @@ Separate test browser, isolated data: 62 leads "Tst B143 00–61" (company B143C
 **Not tested:** storage-full/IndexedDB write failure in the browser (automated test only), interrupted uploads, delivery-doesn't-mark-paid in the browser, historical won-date event re-check after refresh (automated only), notification previews for money events. Void reason isn't captured (no reason field exists). Small touch targets: Void button is 32 px tall — below the 44 px guideline, not changed (no redesign).
 
 **Still open:** B1.5B Data Vault ZIP binary verification; Employee A/B/C acceptance; Owner quotation-package verification; real pointer drag and tag-filter regression; large-dataset performance; storage and recovery audit; security and accessibility; final end-to-end acceptance.
+
+## Checkpoint B1.5B.1 — Data Vault full backup & attachment-byte verification (2026-10-24)
+
+**Inspection.** Records come from the CRM store snapshot; proof bytes from IndexedDB `scale-flow-payment-proofs` (`meta` + `files`, keyed by paymentId) via `idbProofRepo`. `vault.ts buildBackup` writes one JSON per category plus raw bytes at `files/payment-proofs/<paymentId>__<name>` (fflate `zipSync`), `data/attachment-metadata.json` (attachmentId, paymentId, path, size, SHA-256) and `manifest.json` (format/schema version, createdAt, type, complete, included/omitted, counts, attachment inventory, per-file SHA-256). The UI self-validates every archive before download.
+
+**Fixtures (separate test browser, test-only).** Lead `lead_1`, deal `deal_z1howuc` "B15B1 Deal" ₹40,000; payments ₹4,000 (`payment_mvmbqblxqywkv`, PNG proof `proof_mvmbqbq8dtyx9`, 3,338 B, sha256 f6c4a648…12de), ₹16,000 (`payment_mvmbqd1ain0ac`, PDF proof `proof_mvmbqd61isorg`, 580 B, sha256 a6b4fbbd…e4c2), ₹5,000 voided. Both files read "TEST PAYMENT PROOF - NOT A REAL TRANSACTION", uploaded through Finance studio, both "View proof" present after refresh.
+
+**Browser export (real UI click, real download).** "Complete backup verified and downloaded." ZIP: 25 entries (manifest, summary HTML, 21 data JSON files, 2 proof binaries). Manifest: format v1, schema v7, type full, complete true, omitted [], attachments 2/2, 23 file checksums all re-verified offline.
+- PNG and PDF extracted: byte-for-byte equal to originals, SHA-256 equal, metadata SHA equal. PNG opens (640×240); PDF opens and pdftotext prints the test text.
+- Relationships: attachment → payment → deal "B15B1 Deal" → lead present in archive; IDs and paths unique; payments 7 = counts.payments 7; voided ₹5,000 kept with `voided: true`.
+- Two consecutive backups: all `data/` and `files/` entries identical; leads/deals/payments/activities/follow-ups/projects unchanged.
+- Restore & Verify on the real ZIP: "Backup validated — complete". Tampered PDF bytes: failed with "Proof file failed its checksum".
+- Missing binary (test PDF bytes removed from IndexedDB, metadata kept): "Archive downloaded, but it is NOT complete."; warning names 1 missing file; manifest complete false, missing [payment_mvmbqd1ain0ac]; all 3 test payments still present; Restore & Verify now says "Archive intact, but NOT a complete backup".
+- Employee preview (salesperson, no finance): `/data-vault` → "Not in this workspace", no backup buttons, no Data Vault nav link. Preview notifications list follow-ups only, no ₹. Owner notification text for deal/payment events carries no amounts (deal names only); proof changes create no notifications.
+
+**Defects fixed.** (1) Restore & Verify did not cross-check attachment metadata against binaries — now checks per-proof path/bytes/SHA-256, unlisted proof files, invalid payment references, duplicate attachment IDs/paths/one-proof-per-payment, attachment/payment/deal count consistency and false "complete" claims. (2) A partial archive was shown as "Backup validated" — now "Archive intact, but NOT a complete backup".
+
+**Results.** 402 automated tests pass (7 new in `vault.test.ts`), typecheck clean. Full build: automatic harness build only.
+
+**Not verified here.** Lead → Deal → Project (test deal had no project; covered by earlier Project Desk checkpoint only). Plain Owner-side notification redaction is moot (Owner sees all). Browser storage is not permanent; ZIPs are not encrypted and must be treated as sensitive files. Carried forward: selective/employee backup audit, hostile-archive tests, destructive restore (disabled), Employee A/B/C, quotation packages, large datasets, storage/multi-tab, security & accessibility, final end-to-end, Void reason and mobile Void button.
