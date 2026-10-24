@@ -66,7 +66,7 @@ const GUARDS: Record<string, Guard> = {
   addLead: ["leads.create", "", "lead.created"],
   updateLead: [((_id: string, patch: object) => (statusOnly(patch) ? ["pipeline.edit", "leads.edit"] : "leads.edit")) as never, false, "lead.updated"],
   deleteLead: ["leads.delete", undefined], wasteLead: ["leads.delete", undefined], restoreLead: ["leads.delete", DENIED], purgeBin: ["leads.delete", undefined], emptyBin: ["leads.delete", undefined],
-  addActivity: ["leads.view", undefined, "client.note_added"], mergeIntoLead: ["leads.edit", false], setQuickStatus: ["leads.edit", undefined],
+  addActivity: [((_id: string, _t: string, type?: string) => (type === undefined || type === "note" ? "leads.edit" : type === "whatsapp" ? "clients.whatsapp" : "leads.view")) as never, false, "client.note_added"], mergeIntoLead: ["leads.edit", false], setQuickStatus: ["leads.edit", undefined],
   addDeal: ["deals.create", undefined], addPayment: ["__finance", false], voidPayment: ["__finance", undefined], setDealWonAt: ["__owner", false],
   addFollowUp: ["followups.create", { ok: false, error: DENIED }, "followup.created"], completeFollowUp: ["followups.edit", undefined, "followup.completed"], rescheduleFollowUp: ["followups.edit", undefined],
   logCall: ["clients.calls", { ok: false, error: DENIED }, "call.logged"], undoCall: ["clients.calls", DENIED],
@@ -118,8 +118,11 @@ function guarded<T extends object>(state: T, get: () => CRMState, set: (p: Parti
       const need = typeof perm === "function" ? (perm as (...a: unknown[]) => string | string[])(...args) : perm;
       const ok = Array.isArray(need) ? need.some((p) => allows(pv, p)) : allows(pv, need);
       if (!ok) return denied;
-      const r = fn(...args);
-      if (event && r !== false && !(r && typeof r === "object" && "ok" in r && !(r as { ok: boolean }).ok)) {
+      // Only the outermost preview action is attributed; internal history writes (e.g. logCall → addActivity) are not separate events.
+      const outer = depth === 0; depth++;
+      let r: unknown;
+      try { r = fn(...args); } finally { depth--; }
+      if (outer && event && r !== false && !(r && typeof r === "object" && "ok" in r && !(r as { ok: boolean }).ok)) {
         const type: CrmEventType = name === "updateLead" && statusOnly(args[1] as object) ? "pipeline.stage_changed" : event;
         previewSink.emit({ id: uid("evt"), type, actorId: pv.employeeId, at: new Date().toISOString(), resourceId: typeof r === "string" && r ? r : String(args[0] ?? ""), change: args[1] });
       }
@@ -174,7 +177,8 @@ interface CRMState extends Prefs, ProjectSlice, ProjectCustomSlice, AnalyticsSli
   emptyBin: (kind: BinEntry["kind"]) => void;
   mergeIntoLead: (id: string, incoming: ParsedLead, mode: "fill" | "overwrite") => boolean;
   setQuickStatus: (id: string, q: QuickStatus | undefined) => void;
-  addActivity: (leadId: string, text: string, type?: LeadActivity["type"]) => void;
+  /** Returns false when the previewed employee may not add this entry (client notes need leads.edit). */
+  addActivity: (leadId: string, text: string, type?: LeadActivity["type"]) => void | false;
   addDeal: (deal: Omit<Deal, "id" | "createdAt" | "wonAt">) => void;
   /** `id` lets callers pre-assign the identifier (e.g. to attach staged proof); rejected if already used. */
   addPayment: (payment: Omit<Payment, "id">, id?: string) => boolean;
@@ -675,8 +679,9 @@ export const useCRM = create<CRMState>()(
         set((s) => ({ leads: s.leads.map((l) => (l.id === id ? { ...l, quickStatus: q, updatedAt: new Date().toISOString() } : l)) }));
         get().addActivity(id, q ? `Quick status: ${QUICK_LABEL[q]}` : "Quick status cleared", "quick");
       },
-      addActivity: (leadId, text, type = "note") =>
-        set((s) => ({ activities: [{ id: uid("activity"), leadId, type, text, at: new Date().toISOString() }, ...s.activities] })),
+      addActivity: (leadId, text, type = "note") => {
+        set((s) => ({ activities: [{ id: uid("activity"), leadId, type, text, at: new Date().toISOString() }, ...s.activities] }));
+      },
       addDeal: (deal) => {
         const at = new Date().toISOString(); const id = uid("deal");
         set((s) => ({ deals: [{ ...deal, id, createdAt: at, wonAt: at }, ...s.deals] }));

@@ -313,7 +313,7 @@ function Inspector({ id, onFollowUp, onStage, onRemove, onAssign, quickSel }: { 
   const { leads, deals, payments, activities, followUps, updateLead, addActivity } = useCRM();
   const { can } = useAccess(); const canDel = can("leads.delete"); const canStage = can("pipeline.edit") || can("leads.edit");
   const [note, setNote] = useState("");
-  const saveNote = () => { if (!note.trim()) return; addActivity(id, note.trim(), "note"); setNote(""); toast.success("Note added to history"); };
+  const saveNote = () => { if (!note.trim()) return; if (addActivity(id, note.trim(), "note") === false) { toast.error("You don't have permission to add client notes."); return; } setNote(""); toast.success("Note added to history"); };
   const l = leads.find((x) => x.id === id);
   if (!l) return null;
   const myDeals = deals.filter((d) => d.leadId === l.id);

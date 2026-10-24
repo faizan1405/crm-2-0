@@ -171,7 +171,7 @@ function PipeInspector({ lead: l, canMove, onClose, onStage, onFollowUp }: { lea
   const hist = activities.filter((a) => a.leadId === l.id).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 8);
   const ref = useRef<HTMLElement>(null);
   useEffect(() => { ref.current?.focus({ preventScroll: true }); }, []);
-  const saveNote = () => { if (!note.trim()) return; addActivity(l.id, note.trim(), "note"); setNote(""); setNoting(false); toast.success("Note added to history"); };
+  const saveNote = () => { if (!note.trim()) return; if (addActivity(l.id, note.trim(), "note") === false) { toast.error("You don't have permission to add client notes."); return; } setNote(""); setNoting(false); toast.success("Note added to history"); };
   return (
     <aside ref={ref} tabIndex={-1} aria-label={`${l.name} inspector`} className="pipe-inspector" data-stage={l.status}>
       <div className="pipe-insp-top">

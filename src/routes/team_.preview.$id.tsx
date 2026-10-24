@@ -26,6 +26,7 @@ function Preview() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
   const [missing, setMissing] = useState(false);
+  const [inactive, setInactive] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
     void (async () => {
@@ -34,11 +35,13 @@ function Preview() {
       if (!live) return;
       const e = useCRM.getState().employees.find((x) => x.id === id && x.accountStatus !== "archived");
       if (!e) { setMissing(true); return; }
+      if (e.accountStatus === "inactive") { setInactive(e.name); return; }
       startPreview(e);
       void navigate({ to: "/", replace: true });
     })();
     return () => { live = false; };
   }, [id, navigate]);
+  if (inactive) return <div className="grid min-h-screen place-items-center p-6 text-center"><div><Users className="mx-auto size-6 text-muted-foreground" /><p className="mt-3 text-lg font-semibold">{inactive} is deactivated</p><p className="mt-1 text-sm text-muted-foreground">A deactivated employee has no workspace access. Reactivate them in Team Management to preview again.</p><Button asChild className="mt-4"><Link to="/team">Back to Team</Link></Button></div></div>;
   if (missing) return <div className="grid min-h-screen place-items-center p-6 text-center"><div><Users className="mx-auto size-6 text-muted-foreground" /><p className="mt-3 text-lg font-semibold">Employee not found</p><Button asChild className="mt-4"><Link to="/team">Back to Team</Link></Button></div></div>;
   return <div className="grid min-h-screen place-items-center text-sm text-muted-foreground">Opening employee workspace…</div>;
 }

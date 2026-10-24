@@ -236,3 +236,38 @@ Separate test browser, isolated data: 62 leads "Tst B143 00–61" (company B143C
 **Results.** 402 automated tests pass (7 new in `vault.test.ts`), typecheck clean. Full build: automatic harness build only.
 
 **Not verified here.** Lead → Deal → Project (test deal had no project; covered by earlier Project Desk checkpoint only). Plain Owner-side notification redaction is moot (Owner sees all). Browser storage is not permanent; ZIPs are not encrypted and must be treated as sensitive files. Carried forward: selective/employee backup audit, hostile-archive tests, destructive restore (disabled), Employee A/B/C, quotation packages, large datasets, storage/multi-tab, security & accessibility, final end-to-end, Void reason and mobile Void button.
+
+## Checkpoint B1.5B.2 — Selective & employee backups, archive safety (2026-10-24)
+
+Code changes were lost once during a platform incident and re-applied on 2026-10-24; the browser walkthrough was re-run afterwards.
+
+**Changes.** `vault.ts`: manifest `classification` (complete / selective / employee / incomplete-full) and `employee.leadIds`; Selective archives named `_Selective_` with "partial by design" and unresolved-dependency notes. `validateBackup` checks ZIP headers via the fflate `filter` before decompressing (≤ 512 MB archive, ≤ 5000 entries, ≤ 25 MB per entry, ≤ 600 MB total, ratio > 200:1 on entries > 1 MB refused). It rejects duplicate entry names, `../`, absolute/drive/backslash paths and any name outside `manifest.json | backup-summary.html | data/*.json | files/payment-proofs/*`. It also validates required manifest metadata and flags unlisted files, duplicate manifest paths, missing category files, count mismatches, duplicate record IDs, broken Payment→Deal and Task→Project links (errors), Deal→Lead and Project links (warnings), and employee leads outside the declared scope. `buildBackup` refuses non-Owner actors, and the page refuses generate/verify while preview is active. The notice says backups are not encrypted.
+
+**Browser (isolated, "B152 …" records).** Full backup: Lead→Deal→Project→2 tasks resolve, 1 payment, proof bytes and SHA-256 exact. Selective (Leads/Activity/Follow-ups): only those files, IDs and lead notes kept. Selective (Deals/Payments/Proofs): proof exact. Employee A/B: exact assigned lead IDs only. Restore & Verify labels each type correctly. Truncated, wrong-count, changed-proof, missing-deal, `../` and no-`files` copies are rejected. Verification changed only `backupHistory`. On the re-run, the in-page reassignment step didn't take effect because of the test harness (it called a second copy of the store), so reassignment is backed by the first run plus an automated test.
+
+## Checkpoint B1.6 — Employee workflows, permissions & preview isolation (2026-10-24)
+
+**Setup (isolated test browser, "B16 …" records).** A = Salesperson (A1–A3). B = custom "Viewer" with view-only overrides (B1–B2). C = Salesperson + projects.view/notes/tasks_edit (C1–C2, member of project with 2 tasks assigned to C; linked deal ₹47,321 and payment ₹12,345). Another project for an unassigned lead.
+
+**Defects fixed.**
+- View-only employees could add client notes (`addActivity` was guarded by `leads.view`). Notes now need `leads.edit` and WhatsApp history needs `clients.whatsapp`. Note boxes show "You don't have permission to add client notes." instead of a false "Note added".
+- Preview over-counted activity: internal history writes (logCall → addActivity) emitted extra "client.note_added" events. Only the outermost action is now attributed.
+- A deactivated employee could still be previewed. The preview page now shows "<name> is deactivated" and does not start.
+
+**Employee A — pass.** Sees exactly A1–A3, no deals or Owner notes. Lead-page note saved. Priority edit, Not picked + Connected calls logged (2 call entries, outcomes kept), follow-up created → rescheduled → completed, stage → Qualified, private note saved. Payment refused. Call link `tel:+919000020001`. My Performance shows no ₹ amounts. One event per action, all attributed to A. Not browser-tested this round: WhatsApp composer drafts and sent-confirmation (covered in B1.4.2) and tag picker UI.
+
+**Employee B — pass.** Sees exactly B1–B2. Edit, priority, stage, call, follow-up, note, assignment and tag were all refused at the store guard. The data snapshot was byte-identical before and after, and no events were added. The lead-page note shows the denial message. /deals, /data-vault, /settings, /team and /projects show "Not in this workspace". B cannot see A's private note.
+
+**Employee C — pass.** Only the assigned project is visible. The other project's page doesn't show it. No ₹47,321 / ₹12,345 / ₹34,976 anywhere on the project page. Complete and reopen of an assigned task work. Stage move and archive are refused (no `projects.stage`). Adding tasks is refused (no `tasks_add`).
+
+**Isolation — pass.** After previews of A, B and C with real actions, every Owner store key and the saved localStorage state were identical to the baseline.
+
+**Owner control — pass.** Revoking A's `leads.edit`/`pipeline.edit` took effect on the next preview (edit and stage refused). Deactivating B blocked the preview.
+
+**Responsive — pass.** At 1440/1024/768/390/360 in C's preview, /leads, /pipeline, /follow-ups, /my-performance, /notes, the project page and /deals have no sideways scroll, and the Log call dialog fits.
+
+**Automated.** 424 tests pass (`preview.b16.test.ts` covers B denials and no-mutation, A scope, attribution, exit restore, notes privacy, C permission changes, automation off, backup denial). Typecheck clean.
+
+**Limitations.** No real authentication; browser-local data and preview only; no cross-device sync; no server-side authorization; no production performance attribution.
+
+**Still open:** original Owner quotation packages; pointer-driven Pipeline drag; tag-filter clearing; 1k/5k/10k lead performance; storage quota & multi-tab; security & accessibility audit; full end-to-end; real restore and backend features.
