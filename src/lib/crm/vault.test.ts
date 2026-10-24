@@ -94,3 +94,68 @@ describe("Backup validation", () => {
     expect(v.errors[0]).toMatch(/version 9 isn't supported/);
   });
 });
+
+describe("B1.5B.1 attachment-byte integrity", () => {
+  const pdf = new TextEncoder().encode("%PDF-1.4 TEST PAYMENT PROOF — NOT A REAL TRANSACTION");
+  const voided: Snapshot = { ...state, payments: [{ id: "P1", dealId: "D1" }, { id: "P2", dealId: "D2" }, { id: "P3", dealId: "D1", voided: true } as never] };
+  const inputs = [{ meta: meta("P1", png.length), bytes: png }, { meta: { ...meta("P2", pdf.length), originalFileName: "proof.pdf", mimeType: "application/pdf" as const }, bytes: pdf }];
+  const edit = async (fn: (f: Record<string, Uint8Array>) => void) => { const r = await buildBackup({ type: "full", categories: ALL_CATEGORY_IDS }, voided, inputs); const f = unzipSync(r.bytes); fn(f); return validateBackup(zipSync(f)); };
+  const sha = async (b: Uint8Array) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", b as BufferSource)), (x) => x.toString(16).padStart(2, "0")).join("");
+
+  it("stores exact proof bytes resolvable from each payment", async () => {
+    const r = await buildBackup({ type: "full", categories: ALL_CATEGORY_IDS }, voided, inputs);
+    const f = unzipSync(r.bytes);
+    for (const a of read(r.bytes, "data/attachment-metadata.json").attachments) {
+      const src = inputs.find((i) => i.meta.paymentId === a.paymentId)!.bytes;
+      expect(Array.from(f[a.path]!)).toEqual(Array.from(src));
+      expect(a.sha256).toBe(await sha(src));
+    }
+  });
+  it("keeps voided payments and adds no duplicates", async () => {
+    const r = await buildBackup({ type: "full", categories: ALL_CATEGORY_IDS }, voided, inputs);
+    const p = read(r.bytes, "data/payments.json").payments as { id: string; voided?: boolean }[];
+    expect(p.map((x) => x.id)).toEqual(["P1", "P2", "P3"]);
+    expect(p[2]!.voided).toBe(true);
+    expect(r.manifest.counts.payments).toBe(3);
+  });
+  it("detects a proof whose bytes were swapped even if the manifest was rewritten", async () => {
+    const v = await edit((f) => {
+      const k = Object.keys(f).find((x) => x.endsWith("proof.pdf"))!; f[k] = new TextEncoder().encode("%PDF-1.4 TAMPERED PAYMENT PROOF — NOT REAL!!");
+      const m = JSON.parse(strFromU8(f["manifest.json"]!)); m.files = m.files.filter((x: { path: string }) => x.path !== k); f["manifest.json"] = strToU8(JSON.stringify(m));
+    });
+    expect(v.ok).toBe(false);
+    expect(v.errors.join(" ")).toMatch(/checksum|not listed/);
+  });
+  it("detects a proof file removed from the archive", async () => {
+    const v = await edit((f) => { delete f[Object.keys(f).find((x) => x.endsWith("proof.png"))!]; });
+    expect(v.ok).toBe(false);
+    expect(v.errors.join(" ")).toMatch(/proof\.png/);
+  });
+  it("detects invalid payment references and a false complete claim", async () => {
+    const v = await edit((f) => {
+      const a = JSON.parse(strFromU8(f["data/attachment-metadata.json"]!)); a.attachments[0].paymentId = "P404"; f["data/attachment-metadata.json"] = strToU8(JSON.stringify(a));
+      const m = JSON.parse(strFromU8(f["manifest.json"]!)); m.files = m.files.filter((x: { path: string }) => x.path !== "data/attachment-metadata.json"); m.attachments.missing = ["P2"]; f["manifest.json"] = strToU8(JSON.stringify(m));
+    });
+    expect(v.errors.join(" ")).toMatch(/P404/);
+    expect(v.errors.join(" ")).toMatch(/claims a complete backup/);
+  });
+  it("missing binary: archive is partial, names the payment, keeps the record and still validates honestly", async () => {
+    const r = await buildBackup({ type: "full", categories: ALL_CATEGORY_IDS }, voided, [inputs[0]!, { meta: inputs[1]!.meta, bytes: null }]);
+    expect(r.manifest.complete).toBe(false);
+    expect(r.manifest.attachments.missing).toEqual(["P2"]);
+    expect(read(r.bytes, "data/payments.json").payments).toHaveLength(3);
+    const v = await validateBackup(r.bytes);
+    expect(v.ok).toBe(true);
+    expect(v.warnings.join(" ")).toMatch(/missing when this backup was made/);
+    expect(v.warnings.join(" ")).toMatch(/Marked incomplete/);
+  });
+  it("repeat backups have identical record content and validation never mutates input", async () => {
+    const before = JSON.stringify(voided);
+    const a = await buildBackup({ type: "full", categories: ALL_CATEGORY_IDS }, voided, inputs, new Date("2026-10-24T00:00:00Z"));
+    const b = await buildBackup({ type: "full", categories: ALL_CATEGORY_IDS }, voided, inputs, new Date("2026-10-25T00:00:00Z"));
+    const strip = (x: Uint8Array) => Object.fromEntries(Object.entries(unzipSync(x)).filter(([k]) => k.startsWith("data/") || k.startsWith("files/")).map(([k, v]) => [k, strFromU8(v)]));
+    expect(strip(a.bytes)).toEqual(strip(b.bytes));
+    await validateBackup(a.bytes);
+    expect(JSON.stringify(voided)).toBe(before);
+  });
+});
