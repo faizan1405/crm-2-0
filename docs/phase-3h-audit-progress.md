@@ -93,3 +93,40 @@ All runs used a separate test browser with its own storage: 3 test employees (Te
 - **Assignee filter in preview:** assigned-only employees see "Any assignee" + "My leads" only (no Unassigned, no company roster); all-scope roles see active employees with "(me)". Filters only narrow the already-scoped working copy.
 - 3 new tests (`session.b14.test.ts`) → 376 pass. Typecheck clean.
 - **Not yet run:** Parts 2–8 browser walkthroughs (Leads, Calling, WhatsApp, Follow-ups, Pipeline, bulk regression, 5-width pass).
+
+## Checkpoint B1.4.2 — Owner browser walkthroughs (Leads, Calling, WhatsApp, Follow-ups)
+Separate test browser, isolated dataset (`B14 …` records only; three `B14` quotation packages and two `B14` employees created there). Real Owner records untouched. Scripts: `/tmp/browser/b14/`.
+
+**Leads & Prospects — Passed**
+- Required custom field "B14 Service Needed" blocked Save until filled; lead saved with value + tag "B14 Test Tag".
+- Edited phone, email, source (Referral), priority (Hot) and the custom field; all persisted after refresh.
+- Client note logged; shows on the client page and in the inspector history.
+- Prospects inspector shows the lead, custom value, tag and note.
+- Saved View "B14 Tag View" (tag filter) persisted after refresh and returned only the tagged lead.
+- Observation: editing contact details does not add a history entry (only notes, calls, follow-ups, stage changes do).
+
+**Calling — Passed**
+- Call link `tel:9000014015` (matches edited number). Call opens the log; Skip creates nothing (0 call logs).
+- Not picked → 1 call log + 1 history row "Call attempt … Not picked"; contact time not set.
+- Connected → exactly 1 more of each, "Call … Connected"; contact time set (contact established). Both persist after refresh.
+
+**WhatsApp & Quotations — Passed**
+- Follow-up draft personalised ("Hi B14…"), no raw placeholders.
+- All three packages listed (₹25,000 / ₹45,000 / ₹95,000); each draft shows the right name, price and description, no `{…}` left.
+- Edited text kept: switching package after editing asks for confirmation; declining keeps the edits and package.
+- Open in WhatsApp produced one wa.me link to the test number with the edited text; nothing logged, no share recorded.
+- "I sent it — log to history" recorded exactly one WhatsApp row and one quotation share; persisted.
+
+**Follow-ups — Passed**
+- Created 27 Oct 11:00 IST (stored 05:30Z); lead's next follow-up set; shown in Upcoming.
+- Rescheduled to 28 Oct 3:00 pm: still one pending, lead and agenda updated.
+- Completed: none pending, lead's next follow-up cleared, removed from agenda; history shows scheduled → rescheduled → completed; persisted after refresh.
+
+**Recent UX fixes — Passed**
+- Permissions editor: "Permissions · B14 Viewer Kumar Rao" and "apply to B14 Viewer Kumar Rao only".
+- Assigned-only preview: assignee filter offers only "Any assignee" / "My leads"; only the assigned lead visible.
+- Blocked stage change: Prospects stage picker and Pipeline panel pickers disabled with "You don't have permission to change this lead's stage."; the Pipeline card is not draggable, so the drag toast can't be reached by a user (covered by automated test). Owner data identical after exiting preview.
+
+**Defects found:** none. No code changed.
+**Tests:** 376 pass, typecheck clean, full production build successful.
+**Not started (per stop point):** Pipeline, bulk selection, Finance, backend.
