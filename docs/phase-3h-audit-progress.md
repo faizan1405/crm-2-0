@@ -177,3 +177,20 @@ Separate test browser, isolated data: 62 leads "Tst B143 00–61" (company B143C
 **Not yet run (browser):** Parts 1, 2, 4, 5, 6 walkthroughs (Finance UI amounts, real proof upload/refresh/failure, proof privacy in preview, Project Finance, financial history, 5-width responsive). Production build not re-run separately.
 
 **Upcoming (retained):** Data Vault ZIP + binary attachment verification; Employee A/B/C acceptance; Owner quotation package verification; real pointer drag; tag-filter clearing regression; large-dataset performance; reliability/storage failure; security, privacy, accessibility audits; final end-to-end acceptance.
+
+## Checkpoint B1.5A.2 — Legacy won-date UI & Finance browser QA
+
+**UI added:** Finance studio deal panel shows "Record verified won date" only to the Owner (hidden in employee preview), only for non-cancelled deals with no won date. Dialog explains the date is unknown and the creation date is not used, date input capped at today (India time), rejects future/invalid dates, previews impact ("₹X will count as won value in <Month>"), requires a "can be recorded only once" confirmation, saves through `setDealWonAt` (stored at midday IST so the day never shifts). The button disappears afterwards. Deals without a won date show a note: "counted in all-time totals only".
+
+**Browser walkthrough (executed, `/tmp/browser/b15/fin.py`, isolated test browser):**
+- Deal A ₹40,000 created once via UI, `wonAt` recorded; Received ₹0 / Outstanding ₹40,000, same after refresh.
+- Payments ₹4,000 + ₹16,000 → Received ₹20,000 / Outstanding ₹20,000. +₹5,000 → ₹25,000/₹15,000; voided via UI → back to ₹20,000/₹20,000; voided row kept in storage (3 records: 4k, 16k, 5k voided).
+- Deal B ₹30,000 paid ₹30,000 → Outstanding ₹0.
+- Combined Finance header incl. one synthetic legacy deal (₹25,000, ₹5,000 paid, no won date): ₹95,000 booked / ₹55K received / ₹40K outstanding = A+B (₹70,000/₹50,000/₹20,000) + legacy. Analytics period Won value ₹70,000 with "1 with unknown won date excluded"; Reconciliation lists 1 unknown-date deal.
+- Legacy correction: future date rejected with message and Save disabled; 30 Sep 2026 showed impact "September 2026"; Save disabled until confirmation; saved `2026-09-30T06:30Z` (30 Sep IST); amount and payment (₹5,000 on 6 Oct) unchanged; button gone, still gone after refresh; Analytics unknown count → 0.
+
+**Not run in browser:** Project Finance linkage (Part 4), activity-history checks (Part 5; the correction's history entry is covered by an automated test only, synthetic legacy deal had no linked lead). Observation: booking a deal and voiding a payment don't add a client-history entry today (only payments do) — not changed.
+
+**Status:** 390 automated tests pass; typecheck clean; full production build succeeded.
+
+**Still open:** B1.5A.3 payment-proof upload/persistence/failure/privacy + 5-width responsive; B1.5B Data Vault ZIP and attachment bytes; Employee A/B/C acceptance; Owner quotation-package verification; large-dataset performance; reliability/storage failures; security & accessibility; final end-to-end audit.
