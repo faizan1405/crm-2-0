@@ -14,7 +14,7 @@ import { useCRM } from "@/lib/crm/store";
 import { useAccess, STAGE_DENIED } from "@/lib/crm/session";
 import { formatINR, formatINRCompact, formatDateTime, relative } from "@/lib/crm/format";
 import { dealCollected, dealOutstanding } from "@/lib/crm/finance";
-import { cardSignals, isOpen, stageSummary, STALL_DAYS } from "@/lib/crm/pipeline";
+import { canUndoStage, cardSignals, isOpen, stageSummary, STALL_DAYS } from "@/lib/crm/pipeline";
 import { LEAD_STATUSES, STATUS_LABEL, type Lead, type LeadStatus } from "@/lib/crm/types";
 import { cn } from "@/lib/utils";
 
