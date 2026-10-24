@@ -42,7 +42,7 @@ export interface Lead {
   updatedAt: string;
 }
 
-export type ActivityType = "created" | "merged" | "waste" | "restored" | "quick" | "call" | "whatsapp" | "email" | "meeting" | "note" | "status" | "payment" | "followup";
+export type ActivityType = "created" | "merged" | "waste" | "restored" | "quick" | "call" | "whatsapp" | "email" | "meeting" | "note" | "status" | "payment" | "followup" | "edit";
 
 export interface LeadActivity {
   id: string;

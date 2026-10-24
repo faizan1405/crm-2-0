@@ -634,6 +634,8 @@ export const useCRM = create<CRMState>()(
           leads: s.leads.map((l) => (l.id === id ? { ...l, ...patch, ...(patch.status && patch.status !== "lost" ? { lostReason: undefined } : {}), updatedAt: new Date().toISOString() } : l)),
           deals: s.deals.map((d) => d.leadId === id ? { ...d, ...(patch.name !== undefined ? { clientName: patch.name } : {}), ...(patch.company !== undefined ? { company: patch.company } : {}) } : d),
         }));
+        const edited = prev ? editSummary(prev as never, patch as never) : null;
+        if (edited) get().addActivity(id, edited, "edit");
         if (patch.status && prev && prev.status !== patch.status) { get().addActivity(id, `Status changed to ${patch.status}`, "status"); autoAssign(id, "stage_entered"); }
         return true;
       },
