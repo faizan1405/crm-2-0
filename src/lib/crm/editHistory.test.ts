@@ -16,7 +16,7 @@ describe("contact-detail edit history", () => {
   });
   it("no event when values are unchanged", () => {
     const l = s().leads[0]!;
-    s().updateLead(l.id, { phone: l.phone, email: l.email, company: l.company });
+    s().updateLead(l.id, { phone: l.phone, email: l.email ?? "", company: l.company ?? "" });
     expect(edits(l.id)).toHaveLength(0);
   });
   it("source change is recorded", () => expect(editSummary({ source: "Website" }, { source: "Meta Ads" })).toBe("Contact details updated: lead source changed"));
