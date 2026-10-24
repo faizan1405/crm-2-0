@@ -130,3 +130,38 @@ Separate test browser, isolated dataset (`B14 …` records only; three `B14` quo
 **Defects found:** none. No code changed.
 **Tests:** 376 pass, typecheck clean, full production build successful.
 **Not started (per stop point):** Pipeline, bulk selection, Finance, backend.
+
+## Checkpoint B1.4.3 — Pipeline, bulk assignment, contact-edit history, responsive
+Separate test browser, isolated data: 62 leads "Tst B143 00–61" (company B143Co), employees B143 A/B/C (active) + B143 Gone (inactive). Scripts: `/tmp/browser/b143/` (bulk.py, assign.py, fp.py, vo.py, resp.py). Real Owner data untouched.
+
+**Pipeline — Passed (after 1 fix)**
+- Drag New → Contacted via real DOM drag events on the card/column handlers: moved; exactly 1 stage event ("Status changed to contacted"). Note: Playwright's mouse-simulated drag did not fire HTML5 drag events; per-card stage select also verified.
+- Undo restored New (2nd stage event recorded, no extra).
+- **Defect fixed:** an older Pipeline Undo could overwrite a newer stage change. Now Undo runs only if the lead is unchanged since that move (pure `canUndoStage`); otherwise "Undo skipped, newer change kept". Browser: Qualified → Proposal, old Undo clicked → stayed Proposal.
+- Lost requires a reason; "Budget too low" persisted after refresh. Stages persisted after refresh.
+- Inspector shows the same stage; changing it in the inspector (→ Won) is reflected in Prospects.
+- View-only employee preview (pipeline.edit + leads.edit denied): 21 cards, 0 draggable, all 21 stage selects disabled.
+
+**Bulk selection — Passed (after 1 fix)**
+- Select page = 50; Select all matching = 62; exclude 1 = 61 ("1 excluded"); page 2 shows all 12 checked; excluded lead stays unchecked after paging.
+- Assignment preview says "Assign 61 leads … minus 1 excluded"; after confirm, the assignment map contains exactly the 61 ids, excluded and unrelated leads absent.
+- **Defect fixed:** the floating bulk bar covered the pager (Next page unclickable) at all widths, and was off-centre on desktop and squeezed beside the sidebar at 768px. Added a bottom spacer + scroll padding, centred it with `translate`, and widened it on tablets.
+- Filter-change safety: Search, Stage tab, Source, Priority, Quick status, Assignee, Created date, Follow-up due each cleared the selection with "Selection cleared because the filters changed"; Saved View change shows "…because the view changed". Leads and assignments identical afterwards. Tag filter not browser-tested: no tags existed in the isolated dataset (covered by automated scope-key test).
+
+**Distribution — Passed**
+- One employee: 61 → A, exact ids. Undo → no assignments.
+- Equal A/B/C over 61: 21/20/20, exact ids.
+- Balanced A+B over 62 (with reassignment confirmation): 31/31, all 62 once.
+- Custom 30/20/11 blocked ("Counts add up to 61, but 62 leads are selected"); 30/20/12 applied.
+- Reassign 61 → C (49 changed; 12 already C); excluded lead kept its assignee.
+- Inactive "B143 Gone" disabled in both one-employee and distribute lists.
+- Undo conflict: after reassigning lead 10 to B, the older Undo restored the other 60 and kept lead 10 with B ("Undo restored 60; 1 kept because they changed again since"). Lead records unchanged, no duplicates.
+
+**Contact-detail history — Implemented**
+- Saving a lead with a changed phone, email, company or lead source adds exactly one history entry, e.g. "Contact details updated: phone, email changed". Values are not copied into history (privacy). No entry for unchanged values, unsaved typing, stage-only changes or merges (merges keep their own single entry). Uses the existing lead history + Team Activity `lead.updated` event (no new system); preview edits stay in the preview copy.
+
+**Responsive — Passed at 1440 / 1024 / 768 / 390 / 360** (35/35 checks): bulk bar visible, Next page clickable with the bar open, no horizontal overflow on Leads or Pipeline, assignment dialog custom inputs and Confirm reachable, Pipeline stage select and inspector stage/close reachable. Dialog grid items made shrinkable to avoid clipping on phones.
+
+**Tests:** 383 automated tests pass (+7: 4 contact-history, 3 stage-undo conflict). Typecheck clean. Full production build successful. Browser: 73 checks passed.
+
+**Still open:** actual Owner quotation packages not verified in the isolated browser; legacy Won deals without a verified won date; Finance with real payment-proof files; full Data Vault attachment check; Employee A/B/C full acceptance; tag-filter selection clearing in browser; performance, reliability, security and accessibility audits.

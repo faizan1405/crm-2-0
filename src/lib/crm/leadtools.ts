@@ -66,3 +66,13 @@ export function reviewBulk(text: string, leads: Lead[]): BulkRow[] {
     return { ...base, state: "new" };
   });
 }
+
+/** Saved contact-detail edits worth recording in history. Values are never copied into the summary (privacy). */
+export const TRACKED_EDIT_FIELDS = { phone: "phone", email: "email", company: "company", source: "lead source" } as const;
+export function editSummary(prev: Partial<Record<string, unknown>>, patch: Partial<Record<string, unknown>>): string | null {
+  const norm = (v: unknown) => (v === undefined || v === null ? "" : String(v).trim());
+  const changed = (Object.keys(TRACKED_EDIT_FIELDS) as (keyof typeof TRACKED_EDIT_FIELDS)[])
+    .filter((k) => k in patch && norm(patch[k]) !== norm(prev[k]))
+    .map((k) => TRACKED_EDIT_FIELDS[k]);
+  return changed.length ? `Contact details updated: ${changed.join(", ")} changed` : null;
+}

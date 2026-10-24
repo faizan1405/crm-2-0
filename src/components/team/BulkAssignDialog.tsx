@@ -62,7 +62,7 @@ export function BulkAssignDialog({ open, leadIds, scope, onClose, onDone }: { op
     </button>;
   };
 
-  return <Dialog open={open} onOpenChange={(o) => !o && close()}><DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-xl">
+  return <Dialog open={open} onOpenChange={(o) => !o && close()}><DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-xl [&>*]:min-w-0 [&_.grid>*]:min-w-0">
     <DialogHeader><DialogTitle>Assign {total} lead{total === 1 ? "" : "s"}</DialogTitle><DialogDescription>{scope}. Changes who is responsible only — lead details, notes, follow-ups and history stay attached to each lead.</DialogDescription></DialogHeader>
 
     <div className="ba-break" aria-label="Current assignees">{Object.entries(breakdown).sort((a, b) => b[1] - a[1]).map(([k, n]) => <span key={k} className="ba-pill"><b className="num">{n}</b> {name(k)}</span>)}</div>

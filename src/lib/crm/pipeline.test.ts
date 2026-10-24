@@ -32,3 +32,11 @@ describe("pipeline signals", () => {
     expect(s).toMatchObject({ count: 2, value: 45000 });
   });
 });
+
+import { canUndoStage } from "./pipeline";
+describe("stage undo conflict", () => {
+  const applied = { status: "qualified" as const, updatedAt: "2026-10-24T09:00:00.000Z" };
+  it("allows undo when nothing changed since the move", () => expect(canUndoStage({ ...applied }, applied)).toBe(true));
+  it("blocks an older undo after a newer stage change", () => expect(canUndoStage({ status: "proposal", updatedAt: "2026-10-24T09:01:00.000Z" }, applied)).toBe(false));
+  it("blocks an older undo after a newer edit in the same stage", () => expect(canUndoStage({ status: "qualified", updatedAt: "2026-10-24T09:02:00.000Z" }, applied)).toBe(false));
+});
