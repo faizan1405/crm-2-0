@@ -33,3 +33,7 @@ export function stageSummary(leads: Lead[], status: LeadStatus, activities: Lead
   return { count: col.length, value: col.reduce((s, l) => s + (l.quotedAmount ?? 0), 0), overdue: sig.filter((s) => s.overdue).length, stalled: sig.filter((s) => s.stalled).length };
 }
 export const isOpen = (s: LeadStatus) => s !== "won" && s !== "lost";
+
+/** An older stage Undo may only run if the lead is still exactly as that move left it (no newer edit since). */
+export const canUndoStage = (current: Pick<Lead, "status" | "updatedAt"> | undefined, applied: Pick<Lead, "status" | "updatedAt">) =>
+  !!current && current.status === applied.status && current.updatedAt === applied.updatedAt;

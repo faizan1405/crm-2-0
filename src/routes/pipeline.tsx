@@ -70,8 +70,9 @@ function Pipeline() {
   const commit = (lead: Lead, patch: Partial<Lead>) => {
     const before = { status: lead.status, lostReason: lead.lostReason };
     if (!updateLead(lead.id, patch)) { toast.error("Couldn't move this lead — nothing changed"); return; }
+    const applied = useCRM.getState().leads.find((l) => l.id === lead.id);
     setPulse(lead.id); setTimeout(() => setPulse((p) => (p === lead.id ? null : p)), 900);
-    toast.success(`${lead.name} → ${STATUS_LABEL[patch.status!]}`, { action: { label: "Undo", onClick: () => { updateLead(lead.id, before); toast(`${lead.name} back in ${STATUS_LABEL[before.status]}`); } } });
+    toast.success(`${lead.name} → ${STATUS_LABEL[patch.status!]}`, { action: { label: "Undo", onClick: () => { const cur = useCRM.getState().leads.find((l) => l.id === lead.id); if (!applied || !canUndoStage(cur, applied)) { toast.warning(`${lead.name} changed since this move — Undo skipped, newer change kept`); return; } updateLead(lead.id, before); toast(`${lead.name} back in ${STATUS_LABEL[before.status]}`); } } });
   };
   const open = leads.filter((l) => isOpen(l.status));
   const openSig = open.map((l) => cardSignals(l, activities, followUps, now));
