@@ -77,24 +77,28 @@ export function indexActivity(activities: LeadActivity[]): ActivityIndex {
 }
 
 // ---------------------------------------------------------------- Executive & finance
-/** Won date used for period reporting: recorded wonAt, else creation date (legacy records). Counted once per Deal. */
-export const dealWonAt = (d: Deal): string => d.wonAt ?? d.createdAt;
-export interface FinanceKpis { wonValue: number; wonCount: number; received: number; paymentCount: number; outstanding: number; overdue: number; overdueKnown: boolean; wonIds: string[]; paymentIds: string[] }
+/** Won date used for period reporting: only a recorded wonAt. Legacy deals without one have an unknown won date — never their creation date. */
+export const dealWonAt = (d: Deal): string | undefined => d.wonAt || undefined;
+const wonIn = (d: Deal, w: Window) => { const at = dealWonAt(d); return !!at && inWindow(at, w); };
+export interface FinanceKpis { wonValue: number; wonCount: number; received: number; paymentCount: number; outstanding: number; overdue: number; overdueKnown: boolean; wonIds: string[]; paymentIds: string[]; unknownWonIds: string[]; unknownWonValue: number }
 /**
- * Won Deal Value = final amount of non-cancelled Deals booked (created) in the window.
+ * Won Deal Value = final amount of non-cancelled Deals whose recorded won date is in the window (all-time: every non-cancelled Deal).
+ * Deals with no recorded won date are reported separately as "unknown won date" and never placed in a period.
  * Payments Received = valid (non-voided) payments dated in the window, for non-cancelled Deals.
  * Outstanding = current unpaid balance of every non-cancelled Deal (a snapshot "as of today", not a period value).
  */
 export function financeKpis(deals: Deal[], payments: Payment[], w: Window | null, now: Date): FinanceKpis {
   const eligible = deals.filter((d) => d.status !== "cancelled");
   const ids = new Set(eligible.map((d) => d.id));
-  const won = w ? eligible.filter((d) => inWindow(dealWonAt(d), w)) : eligible;
+  const won = w ? eligible.filter((d) => wonIn(d, w)) : eligible;
+  const unknown = eligible.filter((d) => !dealWonAt(d));
   const pays = payments.filter((p) => !p.voided && ids.has(p.dealId) && (!w || inWindow(p.date, w)));
   const fin = financeSummary(deals, payments, now);
   return {
     wonValue: won.reduce((s, d) => s + d.finalAmount, 0), wonCount: won.length, wonIds: won.map((d) => d.id),
     received: pays.reduce((s, p) => s + p.amount, 0), paymentCount: pays.length, paymentIds: pays.map((p) => p.id),
     outstanding: fin.outstanding, overdue: fin.overdue, overdueKnown: eligible.some((d) => !!d.dueDate),
+    unknownWonIds: unknown.map((d) => d.id), unknownWonValue: unknown.reduce((s, d) => s + d.finalAmount, 0),
   };
 }
 export interface FinanceBreakdown {
