@@ -165,3 +165,15 @@ Separate test browser, isolated data: 62 leads "Tst B143 00–61" (company B143C
 **Tests:** 383 automated tests pass (+7: 4 contact-history, 3 stage-undo conflict). Typecheck clean. Full production build successful. Browser: 73 checks passed.
 
 **Still open:** actual Owner quotation packages not verified in the isolated browser; legacy Won deals without a verified won date; Finance with real payment-proof files; full Data Vault attachment check; Employee A/B/C full acceptance; tag-filter selection clearing in browser; performance, reliability, security and accessibility audits.
+
+## Checkpoint B1.5A — Finance & historical won dates (partial)
+
+**Done (code + automated tests):**
+- Historical won-date fix: deals without a recorded `wonAt` now have an *unknown* won date. They stay in all-time totals but are never placed in a month (KPIs, monthly breakdown, saved reports — month grouping shows "Unknown won date" bucket, windowed reports warn). Analytics shows the count/value of unknown-date deals in KPI hints and Reconciliation. Definitions updated.
+- Owner-only `setDealWonAt` store action: records a verified won date once (never overwrites, rejects future/invalid dates), writes a lead history entry. No UI entry point yet.
+- New `wonDate.test.ts` (5 tests): unknown date, all-time vs period, ₹40k/₹30k deals with ₹4k+₹16k+₹30k valid and ₹5k voided → ₹70,000 / ₹50,000 / ₹20,000, verified correction, invalid dates. Old fallback test rewritten to the new rule.
+- 388 automated tests pass; typecheck clean.
+
+**Not yet run (browser):** Parts 1, 2, 4, 5, 6 walkthroughs (Finance UI amounts, real proof upload/refresh/failure, proof privacy in preview, Project Finance, financial history, 5-width responsive). Production build not re-run separately.
+
+**Upcoming (retained):** Data Vault ZIP + binary attachment verification; Employee A/B/C acceptance; Owner quotation package verification; real pointer drag; tag-filter clearing regression; large-dataset performance; reliability/storage failure; security, privacy, accessibility audits; final end-to-end acceptance.

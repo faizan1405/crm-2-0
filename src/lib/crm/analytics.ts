@@ -77,24 +77,28 @@ export function indexActivity(activities: LeadActivity[]): ActivityIndex {
 }
 
 // ---------------------------------------------------------------- Executive & finance
-/** Won date used for period reporting: recorded wonAt, else creation date (legacy records). Counted once per Deal. */
-export const dealWonAt = (d: Deal): string => d.wonAt ?? d.createdAt;
-export interface FinanceKpis { wonValue: number; wonCount: number; received: number; paymentCount: number; outstanding: number; overdue: number; overdueKnown: boolean; wonIds: string[]; paymentIds: string[] }
+/** Won date used for period reporting: only a recorded wonAt. Legacy deals without one have an unknown won date — never their creation date. */
+export const dealWonAt = (d: Deal): string | undefined => d.wonAt || undefined;
+const wonIn = (d: Deal, w: Window) => { const at = dealWonAt(d); return !!at && inWindow(at, w); };
+export interface FinanceKpis { wonValue: number; wonCount: number; received: number; paymentCount: number; outstanding: number; overdue: number; overdueKnown: boolean; wonIds: string[]; paymentIds: string[]; unknownWonIds: string[]; unknownWonValue: number }
 /**
- * Won Deal Value = final amount of non-cancelled Deals booked (created) in the window.
+ * Won Deal Value = final amount of non-cancelled Deals whose recorded won date is in the window (all-time: every non-cancelled Deal).
+ * Deals with no recorded won date are reported separately as "unknown won date" and never placed in a period.
  * Payments Received = valid (non-voided) payments dated in the window, for non-cancelled Deals.
  * Outstanding = current unpaid balance of every non-cancelled Deal (a snapshot "as of today", not a period value).
  */
 export function financeKpis(deals: Deal[], payments: Payment[], w: Window | null, now: Date): FinanceKpis {
   const eligible = deals.filter((d) => d.status !== "cancelled");
   const ids = new Set(eligible.map((d) => d.id));
-  const won = w ? eligible.filter((d) => inWindow(dealWonAt(d), w)) : eligible;
+  const won = w ? eligible.filter((d) => wonIn(d, w)) : eligible;
+  const unknown = eligible.filter((d) => !dealWonAt(d));
   const pays = payments.filter((p) => !p.voided && ids.has(p.dealId) && (!w || inWindow(p.date, w)));
   const fin = financeSummary(deals, payments, now);
   return {
     wonValue: won.reduce((s, d) => s + d.finalAmount, 0), wonCount: won.length, wonIds: won.map((d) => d.id),
     received: pays.reduce((s, p) => s + p.amount, 0), paymentCount: pays.length, paymentIds: pays.map((p) => p.id),
     outstanding: fin.outstanding, overdue: fin.overdue, overdueKnown: eligible.some((d) => !!d.dueDate),
+    unknownWonIds: unknown.map((d) => d.id), unknownWonValue: unknown.reduce((s, d) => s + d.finalAmount, 0),
   };
 }
 export interface FinanceBreakdown {
@@ -112,7 +116,7 @@ export function financeBreakdown(deals: Deal[], payments: Payment[], w: Window, 
     const m = byM.get(dayKey(p.date).slice(0, 7)); if (m) m.received += p.amount;
     const x = methods.get(p.method) ?? { method: p.method, amount: 0, count: 0 }; x.amount += p.amount; x.count++; methods.set(p.method, x);
   }
-  for (const d of eligible) if (inWindow(dealWonAt(d), w)) { const m = byM.get(dayKey(dealWonAt(d)).slice(0, 7)); if (m) m.won += d.finalAmount; }
+  for (const d of eligible) if (wonIn(d, w)) { const m = byM.get(dayKey(dealWonAt(d)!).slice(0, 7)); if (m) m.won += d.finalAmount; }
   const fullyPaid: string[] = [], partial: string[] = [], awaiting: string[] = [], overdueIds: string[] = [];
   let noTerms = 0;
   for (const d of eligible) {
@@ -367,15 +371,17 @@ export function runReport(r: ReportDef, d: AnalyticsData, now: Date, ctx: { empl
     case "deals": {
       const eligible = d.deals.filter((x) => x.status !== "cancelled" || r.groupBy === "status");
       const srcOf = (x: Deal) => (x.leadId ? leadById.get(x.leadId)?.source ?? "Lead removed" : "Not from a CRM lead");
-      const dealKey = (x: Deal, at?: string): [string, string] => r.groupBy === "status" ? [x.status, x.status.replace("_", " ")] : r.groupBy === "source" ? [srcOf(x), srcOf(x)] : [dayKey(at ?? dealWonAt(x)).slice(0, 7), MONTH_LABEL(dayKey(at ?? dealWonAt(x)).slice(0, 7))];
+      const dealKey = (x: Deal, at?: string): [string, string] => r.groupBy === "status" ? [x.status, x.status.replace("_", " ")] : r.groupBy === "source" ? [srcOf(x), srcOf(x)] : (() => { const t = at ?? dealWonAt(x); return t ? [dayKey(t).slice(0, 7), MONTH_LABEL(dayKey(t).slice(0, 7))] as [string, string] : ["unknown", "Unknown won date"] as [string, string]; })();
+      let unknownWon = 0;
       if (r.metric === "received") { const ids = new Set(eligible.filter((x) => x.status !== "cancelled").map((x) => x.id)); for (const p of d.payments) {
         if (p.voided || !ids.has(p.dealId) || !inWindow(p.date, w)) continue; const x = eligible.find((y) => y.id === p.dealId)!;
         const [k, lab] = r.groupBy === "method" ? [p.method, p.method] : dealKey(x, p.date); add(k, lab, p.amount, x.id, "deal");
       } } else for (const x of eligible) {
-        if (r.metric !== "outstanding" && !inWindow(dealWonAt(x), w)) continue;
+        if (r.metric !== "outstanding" && !wonIn(x, w)) { if (!dealWonAt(x)) unknownWon++; continue; }
         const v = r.metric === "count" ? 1 : r.metric === "value" ? (x.status === "cancelled" ? 0 : x.finalAmount) : dealOutstanding(x, d.payments);
         if (!v && r.metric !== "count") continue; const [k, lab] = dealKey(x); add(k, lab, v, x.id, "deal");
       }
+      if (unknownWon) warnings.push(`${unknownWon} older deal${unknownWon === 1 ? " has" : "s have"} no recorded won date and ${unknownWon === 1 ? "is" : "are"} not placed in any period.`);
       if (r.metric === "outstanding") warnings.push("Outstanding is today's balance for every active deal; the date range does not apply.");
       break;
     }
@@ -411,8 +417,8 @@ export const DEFINITIONS: Record<string, string> = {
   newLeads: "Leads created in the selected range (business day, India time). Source: Leads. Waste-bin leads are excluded.",
   awaitingContact: "Open leads with no saved call outcome yet. Opening the dialer or WhatsApp does not count as contact.",
   qualified: "Leads created in the range that are now Qualified, Proposal Sent or Won.",
-  wonDeals: "Deals won (recorded won date; older deals use their creation date) in Deals & Payments during the range, excluding cancelled deals. A won deal does not prove payment.",
-  wonValue: "Final amount of deals booked in the range, excluding cancelled deals. This is not money received.",
+  wonDeals: "Deals whose recorded won date falls in the range, excluding cancelled deals. Older deals with no recorded won date are listed separately as unknown, never by creation date. A won deal does not prove payment.",
+  wonValue: "Final amount of deals with a recorded won date in the range, excluding cancelled deals. Deals with an unknown won date count in all-time totals only. This is not money received.",
   received: "Sum of valid payments dated in the range for non-cancelled deals. Voided payments are excluded. Matches Deals & Payments.",
   outstanding: "Unpaid balance across all active deals as of today (final amount − valid payments, never below zero). Not a period value.",
   overdue: "Only balances on deals with a recorded due date in the past. Unpaid without a due date is Outstanding, not Overdue.",

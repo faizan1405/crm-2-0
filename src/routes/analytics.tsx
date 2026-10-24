@@ -157,7 +157,7 @@ function Overview({ st, open }: SecProps) {
   return (
     <div className="grid gap-5">
       <div className="as-kpi-row">
-        <Kpi primary label="Won deal value" value={formatINR(cur.fin.wonValue)} def={DEFINITIONS["wonValue"]!} delta={d(cur.fin.wonValue, cur.pfin.wonValue)} deltaMoney hint={`${cur.fin.wonCount} deal${cur.fin.wonCount === 1 ? "" : "s"} booked`} onOpen={() => open({ title: "Deals booked in range", kind: "deal", ids: cur.fin.wonIds })} />
+        <Kpi primary label="Won deal value" value={formatINR(cur.fin.wonValue)} def={DEFINITIONS["wonValue"]!} delta={d(cur.fin.wonValue, cur.pfin.wonValue)} deltaMoney hint={`${cur.fin.wonCount} deal${cur.fin.wonCount === 1 ? "" : "s"} won${cur.fin.unknownWonIds.length ? ` · ${cur.fin.unknownWonIds.length} with unknown won date excluded` : ""}`} onOpen={() => open({ title: "Deals won in range", kind: "deal", ids: cur.fin.wonIds })} />
         <Kpi primary label="Payments received" value={formatINR(cur.fin.received)} tone="success" def={DEFINITIONS["received"]!} delta={d(cur.fin.received, cur.pfin.received)} deltaMoney hint={`${cur.fin.paymentCount} valid payment${cur.fin.paymentCount === 1 ? "" : "s"}`} onOpen={() => open({ title: "Payments received in range", kind: "payment", ids: cur.fin.paymentIds })} />
         <Kpi primary label="Outstanding balance" value={formatINR(cur.fin.outstanding)} tone="warning" def={DEFINITIONS["outstanding"]!} hint="As of today, all active deals" onOpen={() => open({ title: "Deals with an outstanding balance", kind: "deal", ids: s.deals.filter((x) => x.status !== "cancelled" && financeSummary([x], s.payments).outstanding > 0).map((x) => x.id) })} />
       </div>
@@ -165,7 +165,7 @@ function Overview({ st, open }: SecProps) {
         <Kpi label="New leads" value={String(cur.cohort.length)} def={DEFINITIONS["newLeads"]!} delta={d(cur.cohort.length, cur.pc.length)} onOpen={() => (srch.stage || srch.priority || srch.assignee || srch.tag || srch.view ? open({ title: "New leads in range", kind: "lead", ids: cur.cohort.map((l) => l.id) }) : void nav({ to: "/leads", search: { from: w.start, to: w.end, ...(srch.source ? { src: srch.source } : {}) } }))} />
         <Kpi label="Awaiting first contact" value={String(cur.awaiting.length)} tone={cur.awaiting.length ? "warning" : "default"} def={DEFINITIONS["awaitingContact"]!} hint="Open leads, right now" onOpen={() => open({ title: "Open leads with no saved call outcome", kind: "lead", ids: cur.awaiting.map((l) => l.id) })} />
         <Kpi label="Qualified leads" value={String(cur.qualified.length)} def={DEFINITIONS["qualified"]!} delta={d(cur.qualified.length, cur.pqual)} onOpen={() => open({ title: "Qualified or later (created in range)", kind: "lead", ids: cur.qualified.map((l) => l.id) })} />
-        <Kpi label="Deals won" value={String(cur.fin.wonCount)} def={DEFINITIONS["wonDeals"]!} delta={d(cur.fin.wonCount, cur.pfin.wonCount)} onOpen={() => open({ title: "Deals booked in range", kind: "deal", ids: cur.fin.wonIds })} />
+        <Kpi label="Deals won" value={String(cur.fin.wonCount)} def={DEFINITIONS["wonDeals"]!} delta={d(cur.fin.wonCount, cur.pfin.wonCount)} onOpen={() => open({ title: "Deals won in range", kind: "deal", ids: cur.fin.wonIds })} />
         <Kpi label="Leads lost" value={String(cur.lost.length)} def={DEFINITIONS["lost"]!} hint="Created in range, now Lost" onOpen={() => open({ title: "Lost leads (created in range)", kind: "lead", ids: cur.lost.map((l) => l.id) })} />
         <Kpi label="Follow-ups completed" value={String(cur.act.fuCompleted)} def={DEFINITIONS["fuCompleted"]!} delta={d(cur.act.fuCompleted, cur.pact.fuCompleted)} />
         <LinkKpi to="/follow-ups"><Kpi label="Overdue follow-ups" value={String(cur.act.fuOverdue)} tone={cur.act.fuOverdue ? "destructive" : "default"} def={DEFINITIONS["fuOverdue"]!} hint="Open the agenda →" /></LinkKpi>
@@ -211,6 +211,7 @@ function Reconciliation({ st }: { st: Studio }) {
     { label: "Payments received (all time) = Deals & Payments", ok: all.received === fin.collected, value: formatINR(all.received) },
     { label: "Outstanding = Deals & Payments", ok: all.outstanding === fin.outstanding, value: formatINR(all.outstanding) },
     { label: "Won deal value (all time) = Deals & Payments total", ok: all.wonValue === fin.totalValue, value: formatINR(all.wonValue) },
+    { label: `Deals with unknown won date (in all-time totals, not in any period): ${all.unknownWonIds.length}`, ok: true, value: formatINR(all.unknownWonValue) },
     { label: "Active projects = Project Desk", ok: projectStats(s.projects, s.projectTasks, s.supportRequests, st.w, now).active === s.projects.filter(isActive).length, value: String(s.projects.filter(isActive).length) },
     { label: "Lead count = Leads page", ok: true, value: String(s.leads.length) },
     { label: "Pending follow-ups = Follow-ups", ok: true, value: String(s.followUps.filter((f) => !f.completedAt && !f.cancelledAt).length) },
@@ -356,7 +357,7 @@ function FinanceSection({ st, open }: SecProps) {
   return (
     <div className="grid gap-5">
       <div className="as-kpi-row">
-        <Kpi primary label="Won deal value" value={formatINR(k.wonValue)} def={DEFINITIONS["wonValue"]!} hint="By deal booked date" onOpen={() => open({ title: "Deals booked in range", kind: "deal", ids: k.wonIds })} />
+        <Kpi primary label="Won deal value" value={formatINR(k.wonValue)} def={DEFINITIONS["wonValue"]!} hint={k.unknownWonIds.length ? `By recorded won date · ${k.unknownWonIds.length} older deal${k.unknownWonIds.length === 1 ? "" : "s"} with unknown won date not included` : "By recorded won date"} onOpen={() => open({ title: "Deals won in range", kind: "deal", ids: k.wonIds })} />
         <Kpi primary label="Payments received" value={formatINR(k.received)} tone="success" def={DEFINITIONS["received"]!} hint={`By payment date · ${b.voidedExcluded} voided excluded`} onOpen={() => open({ title: "Payments received in range", kind: "payment", ids: k.paymentIds })} />
         <Kpi primary label="Outstanding balance" value={formatINR(k.outstanding)} tone="warning" def={DEFINITIONS["outstanding"]!} hint="As of today" />
       </div>
