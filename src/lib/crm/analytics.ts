@@ -434,3 +434,13 @@ export const DEFINITIONS: Record<string, string> = {
   firstAttempt: "Median hours from lead creation to its first saved call outcome, for leads created in the range that have one.",
   weighted: "Σ quoted amount × your configured stage probability, for open leads only. A scenario estimate, not guaranteed revenue.",
 };
+
+/** Validate an Owner-entered verified won day (YYYY-MM-DD, India business day). Returns an error message or null. */
+export function verifiedWonDayError(day: string, todayKey: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(Date.parse(`${day}T00:00:00Z`))) return "Choose a valid date.";
+  if (day > todayKey) return "A won date can't be in the future.";
+  if (day < "2000-01-01") return "Choose a date after 2000.";
+  return null;
+}
+/** Store a verified India-time won day as midday IST so it never crosses a day boundary. */
+export const verifiedWonIso = (day: string) => `${day}T06:30:00.000Z`;

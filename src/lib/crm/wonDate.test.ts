@@ -46,3 +46,18 @@ describe("historical won-date integrity", () => {
     expect(useCRM.getState().deals[0]!.wonAt).toBeUndefined();
   });
 });
+
+import { verifiedWonDayError, verifiedWonIso } from "./analytics";
+import { dayKey } from "./format";
+describe("verified won-date entry", () => {
+  it("rejects future, malformed and empty days; accepts today and past", () => {
+    expect(verifiedWonDayError("2026-10-25", "2026-10-24")).toMatch(/future/);
+    expect(verifiedWonDayError("", "2026-10-24")).toMatch(/valid/);
+    expect(verifiedWonDayError("2026-10-24", "2026-10-24")).toBeNull();
+    expect(verifiedWonDayError("2025-03-31", "2026-10-24")).toBeNull();
+  });
+  it("a verified day stays on the same India business day (month boundary)", () => {
+    expect(dayKey(verifiedWonIso("2026-09-30"))).toBe("2026-09-30");
+    expect(dayKey(verifiedWonIso("2026-10-01"))).toBe("2026-10-01");
+  });
+});
