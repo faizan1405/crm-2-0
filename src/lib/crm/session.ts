@@ -58,3 +58,15 @@ export function useAccess() {
   const preview = useSession((s) => s.preview);
   return { preview, can: (perm: string) => allows(preview, perm) };
 }
+
+/** Shown whenever a stage change is refused (Pipeline drag, card select, Prospects, inspectors). */
+export const STAGE_DENIED = "You don't have permission to change this lead's stage.";
+export const canChangeStage = (p: PreviewSession | null) => allows(p, "pipeline.edit") || allows(p, "leads.edit");
+
+/** Assignee filter choices. Assigned-only previews see just themselves ("My leads"); filters never widen record scope. */
+export function assigneeChoices<E extends { id: string; name: string; accountStatus?: string }>(p: PreviewSession | null, employees: E[]): { id: string; name: string }[] {
+  const live = employees.filter((e) => e.accountStatus !== "archived");
+  if (!p) return live.map((e) => ({ id: e.id, name: e.name }));
+  if (p.leadScope === "assigned") return [{ id: p.employeeId, name: "My leads" }];
+  return live.map((e) => ({ id: e.id, name: e.id === p.employeeId ? `${e.name} (me)` : e.name }));
+}

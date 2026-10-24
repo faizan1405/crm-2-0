@@ -13,7 +13,7 @@ import { CallButton } from "@/components/crm/CallButton";
 import { Shell, PriorityBadge, Empty, Identity, selectCls } from "@/components/crm/Shell";
 import { AddLeadDialog } from "@/components/crm/AddLeadDialog";
 import { LostReasonDialog, FollowUpDialog } from "@/components/crm/Dialogs";
-import { useAccess } from "@/lib/crm/session";
+import { useAccess, useSession, STAGE_DENIED, assigneeChoices } from "@/lib/crm/session";
 import { useCRM } from "@/lib/crm/store";
 import { formatINR, formatINRCompact, relative, formatDateTime, formatDate, digits } from "@/lib/crm/format";
 import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, type LeadStatus, type LeadSource, type LeadPriority } from "@/lib/crm/types";
@@ -169,7 +169,9 @@ function Leads() {
     const tail = [failed && `${failed} not allowed`, missing && `${missing} no longer exist`].filter(Boolean).join(", ");
     (tail ? toast.warning : toast.success)(`${label} · ${n} lead${n === 1 ? "" : "s"} changed${tail ? ` · ${tail}` : ""}`, n ? { action: { label: "Undo", onClick: undo } } : undefined);
   };
-  const changeStatus = (id: string, s: LeadStatus) => (s === "lost" ? setLost(id) : updateLead(id, { status: s }));
+  const canStage = can("pipeline.edit") || can("leads.edit");
+  const preview = useSession((x) => x.preview);
+  const changeStatus = (id: string, s: LeadStatus) => (!canStage ? void toast.error(STAGE_DENIED) : s === "lost" ? setLost(id) : updateLead(id, { status: s }));
   const lostLead = leads.find((l) => l.id === lost);
 
   const sel = rows.find((l) => l.id === selected) ?? rows[0];
@@ -180,7 +182,7 @@ function Leads() {
       <select aria-label="Source filter" className={selectCls} value={source} onChange={(e) => setSource(e.target.value as typeof source)}><option value="all">All sources</option>{LEAD_SOURCES.map((s) => <option key={s}>{s}</option>)}</select>
       <select aria-label="Priority filter" className={selectCls} value={prio} onChange={(e) => setPrio(e.target.value as typeof prio)}><option value="all">All priorities</option><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option></select>
       <select aria-label="Quick status filter" className={selectCls} value={quick} onChange={(e) => setQuick(e.target.value as typeof quick)}><option value="all">Any quick status</option><option value="stale">Stale (7+ days quiet)</option>{QUICK_STATUSES.map((x) => <option key={x} value={x}>{QUICK_LABEL[x]}</option>)}</select>
-      {employees.length > 0 && <select aria-label="Assignee filter" className={selectCls} value={who} onChange={(e) => setWho(e.target.value)}><option value="all">Any assignee</option><option value="__none">Unassigned</option>{employees.filter((e) => e.accountStatus !== "archived").map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select>}
+      {employees.length > 0 && <select aria-label="Assignee filter" className={selectCls} value={who} onChange={(e) => setWho(e.target.value)}><option value="all">Any assignee</option>{preview?.leadScope !== "assigned" && <option value="__none">Unassigned</option>}{assigneeChoices(preview, employees).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select>}
       <select aria-label="Created filter" className={selectCls} value={created} onChange={(e) => setCreated(e.target.value as typeof created)}><option value="all">Any created date</option><option value="7">Created last 7 days</option><option value="30">Created last 30 days</option><option value="90">Created last 90 days</option></select>
       <select aria-label="Follow-up due filter" className={selectCls} value={due} onChange={(e) => setDue(e.target.value as typeof due)}><option value="all">Any follow-up</option><option value="overdue">Follow-up overdue</option><option value="today">Follow-up today</option><option value="week">Due next 7 days</option><option value="none">No follow-up</option></select>
       {crm.tagDefs.length > 0 && <select aria-label="Tag filter" className={selectCls} value={tagF} onChange={(e) => setTagF(e.target.value)}><option value="all">Any tag</option>{crm.tagDefs.map((t) => <option key={t.id} value={t.id}>{t.name}{t.status === "archived" ? " (archived)" : ""}</option>)}</select>}
@@ -265,7 +267,7 @@ function Leads() {
                   <td className="px-3"><PriorityBadge p={l.priority} /></td>
                   <td className="num px-3">{l.aiScore ?? "—"}</td>
                   <td className="num px-3">{formatINR(l.quotedAmount)}</td>
-                  <td className="px-3"><select aria-label="Stage" className={cn(selectCls, "h-8")} value={l.status} onChange={(e) => changeStatus(l.id, e.target.value as LeadStatus)}>{LEAD_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select></td>
+                  <td className="px-3"><select aria-label="Stage" disabled={!canStage} title={canStage ? undefined : STAGE_DENIED} className={cn(selectCls, "h-8")} value={l.status} onChange={(e) => changeStatus(l.id, e.target.value as LeadStatus)}>{LEAD_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select></td>
                   <td className="px-3">{quickSel(l.id, l.quickStatus)}</td>
                   <td className="px-3 text-xs text-muted-foreground">{relative(l.updatedAt)}{staleDays(l, now) !== undefined && <span className="aging is-old ml-1.5">stale</span>}</td>
                   <td className="pr-1">{canDel && <><Button size="icon" variant="ghost" title="Move to Waste" aria-label="Move to Waste" className="rounded-full text-muted-foreground" onClick={() => removeLead(l.id, l.name, "waste")}><Ban className="size-4" /></Button><Button size="icon" variant="ghost" title="Delete lead" aria-label="Delete lead" className="rounded-full text-muted-foreground hover:text-destructive" onClick={() => removeLead(l.id, l.name, "deleted")}><Trash2 className="size-4" /></Button></>}</td>
@@ -307,7 +309,7 @@ function Leads() {
 
 function Inspector({ id, onFollowUp, onStage, onRemove, onAssign, quickSel }: { id: string; onFollowUp: () => void; onAssign: () => void; onStage: (s: LeadStatus) => void; onRemove: (k: "waste" | "deleted") => void; quickSel: React.ReactNode }) {
   const { leads, deals, payments, activities, followUps, updateLead, addActivity } = useCRM();
-  const { can } = useAccess(); const canDel = can("leads.delete");
+  const { can } = useAccess(); const canDel = can("leads.delete"); const canStage = can("pipeline.edit") || can("leads.edit");
   const [note, setNote] = useState("");
   const saveNote = () => { if (!note.trim()) return; addActivity(id, note.trim(), "note"); setNote(""); toast.success("Note added to history"); };
   const l = leads.find((x) => x.id === id);
@@ -329,7 +331,7 @@ function Inspector({ id, onFollowUp, onStage, onRemove, onAssign, quickSel }: { 
         <Button variant="ghost" size="sm" asChild className="ml-auto rounded-full"><Link to="/leads/$id" params={{ id: l.id }}>Full record<ArrowUpRight className="size-3.5" /></Link></Button>
       </div>
       <dl className="mt-7 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-foreground pt-5 sm:grid-cols-3 xl:grid-cols-5">
-        <div><dt className="eyebrow">Stage</dt><dd className="mt-1.5"><select aria-label="Stage" className={cn(selectCls, "h-8 w-full text-xs")} value={l.status} onChange={(e) => onStage(e.target.value as LeadStatus)}>{LEAD_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select></dd></div>
+        <div><dt className="eyebrow">Stage</dt><dd className="mt-1.5"><select aria-label="Stage" disabled={!canStage} title={canStage ? undefined : STAGE_DENIED} className={cn(selectCls, "h-8 w-full text-xs")} value={l.status} onChange={(e) => onStage(e.target.value as LeadStatus)}>{LEAD_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select></dd></div>
         <div><dt className="eyebrow">Priority</dt><dd className="mt-1.5"><select aria-label="Priority" disabled={!can("leads.edit")} className={cn(selectCls, "h-8 w-full text-xs")} value={l.priority} onChange={(e) => { if (updateLead(l.id, { priority: e.target.value as LeadPriority })) toast.success(`Priority set to ${e.target.value}`); }}><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option></select></dd></div>
         <div><dt className="eyebrow">Quick status</dt><dd className="mt-1.5">{quickSel}</dd></div>
         <div><dt className="eyebrow">{l.quotedAmount ? "Quoted" : "Budget"}</dt><dd className="num mt-1.5 text-lg">{formatINR(l.quotedAmount ?? l.budget)}</dd></div>

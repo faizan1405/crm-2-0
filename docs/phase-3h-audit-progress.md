@@ -86,3 +86,10 @@ All runs used a separate test browser with its own storage: 3 test employees (Te
 
 ## Next checkpoint
 - B1 §3–8: Owner workspace audit; Employee A/B/C acceptance tests; admin/security; preview isolation; shared components; responsive/accessibility.
+
+## Checkpoint B1.4 — Part 1 (UX fixes, code + automated tests only)
+- **Stage denial feedback:** every stage picker (Pipeline drag, card select, Pipeline inspector, Prospects row, Prospects inspector, client page) now shows "You don't have permission to change this lead's stage." and does not write, log activity or offer Undo. Pickers are disabled with that text as a tooltip before the user tries.
+- **Full employee name** in the Permissions editor heading and description (wraps on small screens).
+- **Assignee filter in preview:** assigned-only employees see "Any assignee" + "My leads" only (no Unassigned, no company roster); all-scope roles see active employees with "(me)". Filters only narrow the already-scoped working copy.
+- 3 new tests (`session.b14.test.ts`) → 376 pass. Typecheck clean.
+- **Not yet run:** Parts 2–8 browser walkthroughs (Leads, Calling, WhatsApp, Follow-ups, Pipeline, bulk regression, 5-width pass).

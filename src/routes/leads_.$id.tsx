@@ -13,7 +13,7 @@ import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, FOLLOWUP_LABEL, type Lead, t
 import { QUICK_STATUSES, QUICK_LABEL, staleDays, type QuickStatus } from "@/lib/crm/leadtools";
 import { useNavigate } from "@tanstack/react-router";
 import { SuggestionList } from "@/components/crm/Suggestions";
-import { useAccess } from "@/lib/crm/session";
+import { useAccess, STAGE_DENIED } from "@/lib/crm/session";
 import { leadEditError } from "@/lib/crm/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,7 +49,8 @@ function LeadDetail() {
   const acts = activities.filter((a) => a.leadId === id);
   const fus = followUps.filter((f) => f.leadId === id).sort((a, b) => a.dueAt.localeCompare(b.dueAt));
   const leadDeals = deals.filter((d) => d.leadId === id);
-  const setStatus = (s: LeadStatus) => (s === "lost" ? setLost(true) : updateLead(id, { status: s }));
+  const canStage = can("pipeline.edit") || can("leads.edit");
+  const setStatus = (s: LeadStatus) => (!canStage ? void toast.error(STAGE_DENIED) : s === "lost" ? setLost(true) : updateLead(id, { status: s }));
 
   return (
     <Shell title={lead.name} subtitle={[lead.company, STATUS_LABEL[lead.status]].filter(Boolean).join(" · ")}
@@ -94,7 +95,7 @@ function LeadDetail() {
         <div className="grid content-start gap-5">
           <section className="surface p-5">
             <div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">Stage</h2><PriorityBadge p={lead.priority} /></div>
-            <select aria-label="Stage" className={`${selectCls} w-full`} value={lead.status} onChange={(e) => setStatus(e.target.value as LeadStatus)}>{LEAD_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select>
+            <select aria-label="Stage" disabled={!canStage} title={canStage ? undefined : STAGE_DENIED} className={`${selectCls} w-full`} value={lead.status} onChange={(e) => setStatus(e.target.value as LeadStatus)}>{LEAD_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select>
             <h3 className="mt-4 mb-2 text-xs font-semibold text-muted-foreground">Quick status <span className="font-normal">(does not change stage)</span></h3>
             <div className="flex flex-wrap gap-1.5">{QUICK_STATUSES.map((q) => <button key={q} type="button" aria-pressed={lead.quickStatus === q} onClick={() => setQuickStatus(id, lead.quickStatus === q ? undefined : (q as QuickStatus))} className={`rounded-full border px-2.5 py-1 text-xs ${lead.quickStatus === q ? "border-primary bg-primary-soft text-primary" : "text-muted-foreground"}`}>{QUICK_LABEL[q]}</button>)}</div>
             {staleDays(lead, new Date()) !== undefined && <p className="mt-3 rounded-lg bg-warning/15 p-2 text-xs text-warning">Stale — no contact for {staleDays(lead, new Date())} days and no upcoming follow-up.</p>}

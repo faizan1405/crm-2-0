@@ -11,7 +11,7 @@ import { CallButton } from "@/components/crm/CallButton";
 import { openCallLog } from "@/components/crm/PostCallDialog";
 import { WhatsAppButton } from "@/components/crm/WhatsAppComposer";
 import { useCRM } from "@/lib/crm/store";
-import { useAccess } from "@/lib/crm/session";
+import { useAccess, STAGE_DENIED } from "@/lib/crm/session";
 import { formatINR, formatINRCompact, formatDateTime, relative } from "@/lib/crm/format";
 import { dealCollected, dealOutstanding } from "@/lib/crm/finance";
 import { cardSignals, isOpen, stageSummary, STALL_DAYS } from "@/lib/crm/pipeline";
@@ -50,17 +50,17 @@ function Pipeline() {
   const sel = leads.find((l) => l.id === selected);
   // Wide screens dock the inspector beside the board; smaller screens float it above everything (portal escapes the page's stacking context).
   const wide = useSyncExternalStore((cb) => { const m = window.matchMedia("(min-width: 1280px)"); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); }, () => window.matchMedia("(min-width: 1280px)").matches, () => true);
+  const { can } = useAccess();
+  const canMove = can("pipeline.edit") || can("leads.edit");
   const inspector = sel ? <>
     <button type="button" aria-label="Close inspector" className="pipe-scrim" onClick={() => select(undefined)} />
-    <PipeInspector key={sel.id} lead={sel} onClose={() => select(undefined)} onStage={(s) => move(sel.id, s)} onFollowUp={() => setFuFor(sel.id)} />
+    <PipeInspector key={sel.id} lead={sel} onClose={() => select(undefined)} canMove={canMove} onStage={(s) => move(sel.id, s)} onFollowUp={() => setFuFor(sel.id)} />
   </> : null;
 
   useEffect(() => { if (!sel) return; const k = (e: KeyboardEvent) => { if (e.key === "Escape" && !document.querySelector("[role=dialog]")) select(undefined); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { can } = useAccess();
-  const canMove = can("pipeline.edit") || can("leads.edit");
   const move = (id: string, status: LeadStatus) => {
-    if (!canMove) { toast.error("Moving stages isn't allowed for this employee"); return; }
+    if (!canMove) { toast.error(STAGE_DENIED); return; }
     const lead = leads.find((l) => l.id === id);
     if (!lead || lead.status === status) return;
     if (status === "lost") { setPendingLost(id); return; }
@@ -140,7 +140,7 @@ function Pipeline() {
                       {l.lostReason && s === "lost" && <div className="mt-2 text-[11px] text-destructive">Reason · {l.lostReason}</div>}
                       <div className="pipe-hover" onClick={(e) => e.stopPropagation()}>
                         <span className="text-[11px] text-muted-foreground">{l.lastContact ? `Spoke ${relative(l.lastContact)}` : "No contact yet"}</span>
-                        <select aria-label={`Move ${l.name}`} disabled={!canMove} className="pipe-move" value={l.status} onClick={(e) => e.stopPropagation()} onChange={(e) => move(l.id, e.target.value as LeadStatus)}>
+                        <select aria-label={`Move ${l.name}`} disabled={!canMove} title={canMove ? undefined : STAGE_DENIED} className="pipe-move" value={l.status} onClick={(e) => e.stopPropagation()} onChange={(e) => move(l.id, e.target.value as LeadStatus)}>
                           {LEAD_STATUSES.map((x) => <option key={x} value={x}>{STATUS_LABEL[x]}</option>)}
                         </select>
                       </div>
@@ -160,7 +160,7 @@ function Pipeline() {
   );
 }
 
-function PipeInspector({ lead: l, onClose, onStage, onFollowUp }: { lead: Lead; onClose: () => void; onStage: (s: LeadStatus) => void; onFollowUp: () => void }) {
+function PipeInspector({ lead: l, canMove, onClose, onStage, onFollowUp }: { lead: Lead; canMove: boolean; onClose: () => void; onStage: (s: LeadStatus) => void; onFollowUp: () => void }) {
   const { deals, payments, activities, followUps, addActivity } = useCRM();
   const [note, setNote] = useState("");
   const [noting, setNoting] = useState(false);
@@ -191,7 +191,7 @@ function PipeInspector({ lead: l, onClose, onStage, onFollowUp }: { lead: Lead; 
       </div>
       {noting && <div className="grid gap-2"><Textarea aria-label="New note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What happened? Saved to this client's history." autoFocus /><div className="flex justify-end gap-2"><Button size="sm" variant="ghost" onClick={() => setNoting(false)}>Cancel</Button><Button size="sm" onClick={saveNote} disabled={!note.trim()}>Save note</Button></div></div>}
       <dl className="pipe-facts">
-        <div><dt className="eyebrow">Stage</dt><dd><select aria-label="Stage" className={cn(selectCls, "h-8 w-full text-xs")} value={l.status} onChange={(e) => onStage(e.target.value as LeadStatus)}>{LEAD_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select></dd></div>
+        <div><dt className="eyebrow">Stage</dt><dd><select aria-label="Stage" disabled={!canMove} title={canMove ? undefined : STAGE_DENIED} className={cn(selectCls, "h-8 w-full text-xs")} value={l.status} onChange={(e) => onStage(e.target.value as LeadStatus)}>{LEAD_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select></dd></div>
         <div><dt className="eyebrow">{l.quotedAmount ? "Quoted" : "Budget"}</dt><dd className="num text-lg">{l.quotedAmount || l.budget ? formatINR(l.quotedAmount ?? l.budget) : "—"}</dd></div>
         <div><dt className="eyebrow">In stage</dt><dd className="text-sm">{sig.days === null ? "Not recorded" : `${sig.days} day${sig.days === 1 ? "" : "s"}`}{sig.stalled && <span className="pipe-flag ml-1.5" data-kind="stalled">Stalled</span>}</dd></div>
         <div><dt className="eyebrow">Last contact</dt><dd className="text-sm">{l.lastContact ? relative(l.lastContact) : "Never"}</dd></div>
