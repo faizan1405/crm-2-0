@@ -676,8 +676,9 @@ export const useCRM = create<CRMState>()(
         set((s) => ({ leads: s.leads.map((l) => (l.id === id ? { ...l, quickStatus: q, updatedAt: new Date().toISOString() } : l)) }));
         get().addActivity(id, q ? `Quick status: ${QUICK_LABEL[q]}` : "Quick status cleared", "quick");
       },
-      addActivity: (leadId, text, type = "note") =>
-        set((s) => ({ activities: [{ id: uid("activity"), leadId, type, text, at: new Date().toISOString() }, ...s.activities] })),
+      addActivity: (leadId, text, type = "note") => {
+        set((s) => ({ activities: [{ id: uid("activity"), leadId, type, text, at: new Date().toISOString() }, ...s.activities] }));
+      },
       addDeal: (deal) => {
         const at = new Date().toISOString(); const id = uid("deal");
         set((s) => ({ deals: [{ ...deal, id, createdAt: at, wonAt: at }, ...s.deals] }));
