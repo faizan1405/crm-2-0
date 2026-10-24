@@ -101,3 +101,13 @@ describe("rule editor", () => {
     expect(s().assignmentRules[0]!.conditions).toEqual({ source: "Meta Ads", priority: "hot" });
   });
 });
+
+import { selectionScopeKey as sk } from "./bulk";
+describe("selection scope key", () => {
+  it("changes when any filter changes", () => {
+    const a = { q: "", status: "all", src: "Instagram" };
+    expect(sk(a)).toBe(sk({ src: "Instagram", status: "all", q: "" }));
+    expect(sk(a)).not.toBe(sk({ ...a, status: "new" }));
+    expect(sk(a)).not.toBe(sk({ ...a, q: "x" }));
+  });
+});

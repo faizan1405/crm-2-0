@@ -94,3 +94,7 @@ export const workload = (assignments: Record<string, Assignment>): Record<string
 
 export type SkipReason = "missing" | "changed" | "inactive";
 export const SKIP_LABEL: Record<SkipReason, string> = { missing: "lead no longer exists", changed: "assignee changed since you previewed", inactive: "employee can't receive leads" };
+
+/** Stable key for every filter that defines which leads a selection may cover. A change means the old selection must be cleared. */
+export const selectionScopeKey = (f: Record<string, string | undefined>): string =>
+  Object.keys(f).sort().map((k) => `${k}=${f[k] ?? ""}`).join("&");

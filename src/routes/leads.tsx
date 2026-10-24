@@ -22,7 +22,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { AssignDialog, AssigneeTag } from "@/components/team/AssignDialog";
 import { UserCheck, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { BulkAssignDialog } from "@/components/team/BulkAssignDialog";
-import { EMPTY_SELECTION, addPage, isSelected, selectMatching, selectedIds, selectionCount, toggle, type Selection } from "@/lib/crm/bulk";
+import { EMPTY_SELECTION, selectionScopeKey, addPage, isSelected, selectMatching, selectedIds, selectionCount, toggle, type Selection } from "@/lib/crm/bulk";
 import { dayKey } from "@/lib/crm/format";
 import { parseLeadsSearch, matchesCreatedRange, countByStage } from "@/lib/crm/leadsSearch";
 import { Input } from "@/components/ui/input";
@@ -88,7 +88,7 @@ function Leads() {
   const [selected, setSelected] = useState<string | null>(null);
   const navigate = useNavigate();
   const [fu, setFu] = useState<string | null>(null);
-  // Owner-only bulk assignment; selection survives filter changes and never alters lead data.
+  // Owner-only bulk assignment; any filter change that alters the selection scope clears it (never silently re-targets).
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION), [assignFor, setAssignFor] = useState<string[] | null>(null), [bulkAssign, setBulkAssign] = useState(false);
   const picked = useMemo(() => selectedIds(selection), [selection]);
   const pickedCount = selectionCount(selection);
@@ -102,6 +102,9 @@ function Leads() {
   // Changing the view changes the dataset — a broad selection from the old view is cleared, never re-applied.
   const [lastView, setLastView] = useState(viewId);
   useEffect(() => { if (viewId === lastView) return; setLastView(viewId); if (selectionCount(selection) > 0) { setSelection(EMPTY_SELECTION); toast.info("Selection cleared because the view changed"); } setStatus("all"); setSource("all"); setPrio("all"); setQuick("all"); setWho("all"); setCreated("all"); setDue("all"); setTagF("all"); if (activeView) setSort(activeView.sort as Sort); }, [viewId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const scopeKey = selectionScopeKey({ q, status, source, prio, who, tagF, created, due, quick, from: cFrom, to: cTo, src: cSrc, view: viewId });
+  const [lastScope, setLastScope] = useState(scopeKey);
+  useEffect(() => { if (scopeKey === lastScope) return; setLastScope(scopeKey); if (selectionCount(selection) > 0) { setSelection(EMPTY_SELECTION); if (viewId === lastView) toast.info("Selection cleared because the filters changed"); } }, [scopeKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const openView = (id?: string) => void navigate({ to: "/leads", search: id ? { view: id } : {} });
 
   function dueMatch(leadId: string) {
