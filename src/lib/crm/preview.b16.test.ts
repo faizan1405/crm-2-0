@@ -15,7 +15,7 @@ beforeEach(() => {
   exitPreview(); localStorage.clear(); s().reset();
   useCRM.setState({ employees: [], employeeAccess: {}, assignments: {}, notes: [{ id: "owner-note", title: "Owner secret", body: "private", pinned: false, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z" }] });
   for (const [k, role] of [["A", "salesperson"], ["B", "custom"], ["C", "salesperson"]] as const) {
-    const r = s().addEmployee({ name: `B16 Emp ${k}`, email: `b16${k.toLowerCase()}@example.com`, roleId: role, accountStatus: "active" });
+    const r = s().addEmployee({ name: `B16 Emp ${k}`, email: `b16${k.toLowerCase()}@example.com`, roleId: role, ...(role === "custom" ? { customRoleLabel: "Viewer" } : {}), accountStatus: "active" });
     if (!r.ok) throw new Error(r.error); ids[k] = r.id;
   }
   const at = "2026-10-24T00:00:00Z";
