@@ -16,7 +16,7 @@ import type { Project, ProjectTask } from "./projects";
 const NOW = new Date("2026-10-23T12:00:00+05:30");
 const W = { start: "2026-10-01", end: "2026-10-31" };
 const lead = (id: string, p: Partial<Lead> = {}): Lead => ({ id, name: id, phone: "9999999999", source: "Meta Ads", status: "new", priority: "warm", pinned: false, createdAt: "2026-10-10T06:00:00Z", updatedAt: "2026-10-10T06:00:00Z", ...p });
-const deal = (id: string, amount: number, p: Partial<Deal> = {}): Deal => ({ id, clientType: "crm", clientName: id, name: id, quotedAmount: amount, finalAmount: amount, status: "active", milestones: [], createdAt: "2026-10-05T06:00:00Z", ...p });
+const deal = (id: string, amount: number, p: Partial<Deal> = {}): Deal => ({ id, clientType: "crm", clientName: id, name: id, quotedAmount: amount, finalAmount: amount, status: "active", milestones: [], createdAt: "2026-10-05T06:00:00Z", wonAt: p.createdAt ?? "2026-10-05T06:00:00Z", ...p });
 const pay = (id: string, dealId: string, amount: number, p: Partial<Payment> = {}): Payment => ({ id, dealId, amount, date: "2026-10-12", method: "UPI", type: "advance", ...p });
 const act = (leadId: string, type: LeadActivity["type"], at: string, p: Partial<LeadActivity> = {}): LeadActivity => ({ id: `${leadId}-${type}-${at}`, leadId, type, text: "", at, ...p });
 const base = (p: Partial<AnalyticsData> = {}): AnalyticsData => ({ leads: [], activities: [], followUps: [], deals: [], payments: [], assignments: {}, projects: [], projectTasks: [], supportRequests: [], leadTags: {}, tagDefs: [], customFields: [], fieldValues: {}, ...p });
@@ -240,8 +240,10 @@ describe("won date semantics (Phase 3H)", () => {
     expect(financeKpis([d], [], W, NOW).wonValue).toBe(50000);
     expect(financeKpis([d], [], { start: "2026-09-01", end: "2026-09-30" }, NOW).wonValue).toBe(0);
   });
-  it("legacy deals without a won date fall back to creation date", () => {
-    expect(financeKpis([deal("L", 10000)], [], W, NOW).wonValue).toBe(10000);
+  it("legacy deals without a won date are not placed in their creation period", () => {
+    const { wonAt: _w, ...legacy } = deal("L", 10000);
+    expect(financeKpis([legacy], [], W, NOW).wonValue).toBe(0);
+    expect(financeKpis([legacy], [], null, NOW).wonValue).toBe(10000);
   });
   it("new deals record wonAt at booking", () => {
     useCRM.getState().addDeal({ clientType: "crm", clientName: "QA", name: "QA won", quotedAmount: 1, finalAmount: 1, status: "active", milestones: [] });
