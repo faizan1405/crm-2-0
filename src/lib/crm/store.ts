@@ -67,7 +67,7 @@ const GUARDS: Record<string, Guard> = {
   updateLead: [((_id: string, patch: object) => (statusOnly(patch) ? ["pipeline.edit", "leads.edit"] : "leads.edit")) as never, false, "lead.updated"],
   deleteLead: ["leads.delete", undefined], wasteLead: ["leads.delete", undefined], restoreLead: ["leads.delete", DENIED], purgeBin: ["leads.delete", undefined], emptyBin: ["leads.delete", undefined],
   addActivity: ["leads.view", undefined, "client.note_added"], mergeIntoLead: ["leads.edit", false], setQuickStatus: ["leads.edit", undefined],
-  addDeal: ["deals.create", undefined], addPayment: ["__finance", false], voidPayment: ["__finance", undefined],
+  addDeal: ["deals.create", undefined], addPayment: ["__finance", false], voidPayment: ["__finance", undefined], setDealWonAt: ["__owner", false],
   addFollowUp: ["followups.create", { ok: false, error: DENIED }, "followup.created"], completeFollowUp: ["followups.edit", undefined, "followup.completed"], rescheduleFollowUp: ["followups.edit", undefined],
   logCall: ["clients.calls", { ok: false, error: DENIED }, "call.logged"], undoCall: ["clients.calls", DENIED],
   saveNote: ["notes.own", undefined], deleteNote: ["notes.own", undefined],
@@ -179,6 +179,8 @@ interface CRMState extends Prefs, ProjectSlice, ProjectCustomSlice, AnalyticsSli
   /** `id` lets callers pre-assign the identifier (e.g. to attach staged proof); rejected if already used. */
   addPayment: (payment: Omit<Payment, "id">, id?: string) => boolean;
   voidPayment: (id: string) => void;
+  /** Owner-only: record a verified won date for an older deal that has none. Never overwrites an existing won date. */
+  setDealWonAt: (id: string, iso: string) => boolean;
   /** One active follow-up per lead: returns a conflict unless replaceId names the active one. Same opId never saves twice. */
   addFollowUp: (followUp: Omit<FollowUp, "id">, opts?: { replaceId?: string }) => FollowUpResult;
   callOps: CallOp[];
@@ -686,6 +688,15 @@ export const useCRM = create<CRMState>()(
         return true;
       },
       voidPayment: (id) => set((s) => ({ payments: s.payments.map((p) => (p.id === id ? { ...p, voided: true } : p)) })),
+      setDealWonAt: (id, iso) => {
+        const deal = get().deals.find((d) => d.id === id);
+        const t = Date.parse(iso);
+        if (!deal || deal.wonAt || !Number.isFinite(t) || t > Date.now()) return false;
+        const wonAt = new Date(t).toISOString();
+        set((s) => ({ deals: s.deals.map((d) => (d.id === id ? { ...d, wonAt } : d)) }));
+        if (deal.leadId) get().addActivity(deal.leadId, `Verified won date recorded for "${deal.name}": ${wonAt.slice(0, 10)}`, "edit");
+        return true;
+      },
       addFollowUp: (f, opts) => {
         if (f.opId) { const dup = get().followUps.find((x) => x.opId === f.opId); if (dup) return { ok: true, id: dup.id }; }
         if (!get().leads.some((l) => l.id === f.leadId)) return { ok: false, error: "Lead not found" };
