@@ -6,7 +6,8 @@ import { Shell, Empty, selectCls } from "@/components/crm/Shell";
 import { useCRM } from "@/lib/crm/store";
 import { idbProofRepo, friendlyStorageError } from "@/lib/crm/proofRepo";
 import type { ProofMeta } from "@/lib/crm/attachments";
-import { ALL_CATEGORY_IDS, CATEGORIES, EMPLOYEE_CATEGORY_IDS, buildBackup, estimate, recordCount, validateBackup, type BackupPlan, type CategoryId, type ProofInput, type Snapshot, type ValidationReport } from "@/lib/crm/vault";
+import { activePreview } from "@/lib/crm/session";
+import { ALL_CATEGORY_IDS, CATEGORIES, CLASSIFICATION_LABEL, VAULT_DENIED, EMPLOYEE_CATEGORY_IDS, buildBackup, estimate, recordCount, validateBackup, type BackupPlan, type CategoryId, type ProofInput, type Snapshot, type ValidationReport } from "@/lib/crm/vault";
 import { formatDateTime, uid } from "@/lib/crm/format";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -55,14 +56,15 @@ function useGenerate() {
     try {
       const proofs = plan.categories.includes("proofs") ? await loadProofs() : [];
       setBusy("Building archive…");
-      const r = await buildBackup(plan, snapshot(), proofs);
+      if (activePreview()) throw new Error(VAULT_DENIED);
+      const r = await buildBackup({ ...plan, actor: "owner" }, snapshot(), proofs);
       setBusy("Verifying archive…");
       const v = await validateBackup(r.bytes);
       if (!v.ok) throw new Error(`The generated archive failed verification: ${v.errors[0]}`);
       download(r.name, r.bytes);
       const partial = !r.manifest.complete;
       logBackup({ id: uid("bk"), name: r.name, type: plan.type, createdAt: r.manifest.createdAt, categories: r.manifest.included, records: recordCount(r.manifest), attachments: r.manifest.attachments.included, sizeBytes: r.bytes.byteLength, ...(employeeName ? { employeeName } : {}), status: plan.type === "full" && partial ? "partial" : "downloaded", verified: true });
-      const text = plan.type === "full" ? (partial ? "Archive downloaded, but it is NOT complete." : "Complete backup verified and downloaded.") : `${plan.type === "employee" ? "Employee" : "Partial"} backup verified and downloaded.`;
+      const text = plan.type === "full" ? (partial ? "Archive downloaded, but it is NOT complete." : "Complete backup verified and downloaded.") : `${plan.type === "employee" ? "Employee-assigned" : "Selective"} backup verified and downloaded.`;
       setLast({ ok: !(plan.type === "full" && partial), text: `${text} ${r.name} · ${kb(r.bytes.byteLength)}`, warnings: r.manifest.warnings });
       (plan.type === "full" && partial ? toast.warning : toast.success)(text);
     } catch (e) {
@@ -85,7 +87,7 @@ function Vault() {
   const nav = useNavigate({ from: "/data-vault" });
   return (
     <Shell title="Data Vault" subtitle="Owner-only backups of your CRM data and payment proof files.">
-      <div className="tm-notice"><ShieldCheck className="size-4 shrink-0" /><span><b>Owner only.</b> Employees never get backup, export or restore access. In this browser demo that rule is shown in the interface only — real protection comes with the secure backend. Archives are built on this device and downloaded to it; nothing is uploaded.</span></div>
+      <div className="tm-notice"><ShieldCheck className="size-4 shrink-0" /><span><b>Owner only.</b> Employees never get backup, export or restore access. In this browser demo that rule is shown in the interface only — real protection comes with the secure backend. Archives are built on this device and downloaded to it; nothing is uploaded. <b>Backups are not encrypted or password-protected</b> — they contain client and financial data, so store them somewhere safe.</span></div>
       <div className="seg dv-tabs my-4" role="tablist" aria-label="Data Vault sections">
         {TABS.map((t) => <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} aria-pressed={tab === t.id} onClick={() => nav({ search: (s) => ({ ...s, tab: t.id }) })}><t.icon className="size-3.5" />{t.label}</button>)}
       </div>
@@ -189,8 +191,9 @@ function Restore() {
   const [busy, setBusy] = useState(false), [rep, setRep] = useState<(ValidationReport & { file: string }) | null>(null);
   const pick = async (f?: File) => {
     if (!f) return; setBusy(true);
+    if (activePreview()) { setRep({ ok: false, errors: [VAULT_DENIED], warnings: [], restoreAvailable: false, classification: "damaged", file: f.name }); setBusy(false); return; }
     try { setRep({ ...(await validateBackup(new Uint8Array(await f.arrayBuffer()))), file: f.name }); }
-    catch { setRep({ ok: false, errors: ["This file couldn't be read."], warnings: [], restoreAvailable: false, file: f.name }); }
+    catch { setRep({ ok: false, errors: ["This file couldn't be read."], warnings: [], restoreAvailable: false, classification: "damaged", file: f.name }); }
     finally { setBusy(false); if (ref.current) ref.current.value = ""; }
   };
   const m = rep?.manifest;
@@ -199,7 +202,7 @@ function Restore() {
       <input ref={ref} type="file" accept=".zip,application/zip" className="sr-only" aria-label="Backup ZIP file" onChange={(e) => void pick(e.target.files?.[0])} />
       <Button size="lg" variant="outline" disabled={busy} onClick={() => ref.current?.click()}>{busy ? <Loader2 className="animate-spin" /> : <Upload />}Select backup ZIP</Button></section>
     {rep && <section className="card-surface grid gap-3 p-4" aria-live="polite">
-      <div className={cn("dv-result", rep.ok && rep.manifest?.complete ? "is-ok" : "is-bad")}>{rep.ok ? <CheckCircle2 className="size-4" /> : <XCircle className="size-4" />}<p className="font-medium">{!rep.ok ? "Backup failed validation" : rep.manifest?.complete ? "Backup validated — complete" : "Archive intact, but NOT a complete backup"} — {rep.file}</p></div>
+      <div className={cn("dv-result", !rep.ok ? "is-bad" : rep.classification === "incomplete-full" ? "is-warn" : "is-ok")}>{rep.ok ? <CheckCircle2 className="size-4" /> : <XCircle className="size-4" />}<p className="font-medium">{CLASSIFICATION_LABEL[rep.classification]} — {rep.file}</p></div>
       {m && <dl className="tm-dl"><dt>Created</dt><dd>{formatDateTime(m.createdAt)}</dd><dt>Type</dt><dd>{m.type}{m.employee ? ` · ${m.employee.name}` : ""} · {m.complete ? "complete" : "partial"}</dd><dt>Version</dt><dd>format v{m.formatVersion} · schema v{m.schemaVersion}</dd><dt>Files</dt><dd>{m.attachments.included} of {m.attachments.expected} proof files</dd></dl>}
       {m && <ul className="dv-grid">{m.included.map((id) => <li key={id} className="dv-cat flex justify-between text-sm"><span>{CATEGORIES.find((c) => c.id === id)?.label ?? id}</span><span className="num">{m.counts[id] ?? 0}</span></li>)}</ul>}
       {rep.errors.map((e) => <p key={e} className="text-sm text-destructive">{e}</p>)}
