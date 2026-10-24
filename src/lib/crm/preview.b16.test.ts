@@ -65,6 +65,8 @@ describe("B1.6 Employee A salesperson", () => {
     expect(s().activities.filter((a) => a.leadId === id && a.type === "call")).toHaveLength(1);
     s().saveNote({ id: "a-note", title: "A private", body: "x", pinned: false, createdAt: "2026-10-24T00:00:00Z", updatedAt: "2026-10-24T00:00:00Z" });
     expect(useSession.getState().events.every((e) => e.actorId === ids["A"])).toBe(true);
+    // One user action = one attributed event; internal history writes are not extra "note added" events.
+    expect(useSession.getState().events.map((e) => e.type)).toEqual(["lead.updated", "client.note_added", "call.logged"]);
     expect(s().teamEvents.some((e) => (e as { actor?: { id: string } }).actor?.id === ids["A"])).toBe(false);
     exitPreview();
     expect(data()).toBe(owner);
