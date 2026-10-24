@@ -852,8 +852,8 @@ button.ph-chip:hover { background: var(--primary-soft); color: var(--primary); }
 .pm-dialog { max-height: 90dvh; display: flex; flex-direction: column; }
 .pm-scopes { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @media (max-width: 560px) { .pm-scopes { grid-template-columns: 1fr; } }
-.pm-list { display: grid; gap: 6px; overflow-y: auto; min-height: 0; padding-right: 2px; }
-.pm-mod { border: 1px solid var(--border); border-radius: 12px; background: var(--card); }
+.pm-list { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 6px; overflow-y: auto; min-height: 0; padding-right: 2px; }
+.pm-mod { min-width: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--card); }
 .pm-mod[data-open="true"] { border-color: var(--foreground); }
 .pm-mod[data-open="true"] .pm-head svg:last-child { transform: rotate(180deg); }
 .pm-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; }
