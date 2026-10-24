@@ -677,7 +677,11 @@ export const useCRM = create<CRMState>()(
       },
       addActivity: (leadId, text, type = "note") =>
         set((s) => ({ activities: [{ id: uid("activity"), leadId, type, text, at: new Date().toISOString() }, ...s.activities] })),
-      addDeal: (deal) => set((s) => { const at = new Date().toISOString(); return { deals: [{ ...deal, id: uid("deal"), createdAt: at, wonAt: at }, ...s.deals] }; }),
+      addDeal: (deal) => {
+        const at = new Date().toISOString(); const id = uid("deal");
+        set((s) => ({ deals: [{ ...deal, id, createdAt: at, wonAt: at }, ...s.deals] }));
+        if (deal.leadId) get().addActivity(deal.leadId, `Deal booked: "${deal.name}"`, "payment");
+      },
       addPayment: (payment, id) => {
         if (id && get().payments.some((p) => p.id === id)) return false;
         const target = get().deals.find((d) => d.id === payment.dealId);
@@ -687,7 +691,13 @@ export const useCRM = create<CRMState>()(
         if (deal?.leadId) get().addActivity(deal.leadId, `Payment of ₹${payment.amount.toLocaleString("en-IN")} recorded`, "payment");
         return true;
       },
-      voidPayment: (id) => set((s) => ({ payments: s.payments.map((p) => (p.id === id ? { ...p, voided: true } : p)) })),
+      voidPayment: (id) => {
+        const pay = get().payments.find((p) => p.id === id);
+        if (!pay || pay.voided) return; // already voided → no second event
+        set((s) => ({ payments: s.payments.map((p) => (p.id === id ? { ...p, voided: true } : p)) }));
+        const deal = get().deals.find((d) => d.id === pay.dealId);
+        if (deal?.leadId) get().addActivity(deal.leadId, `Payment of ₹${pay.amount.toLocaleString("en-IN")} voided on "${deal.name}" (kept in history, excluded from totals)`, "payment");
+      },
       setDealWonAt: (id, iso) => {
         const deal = get().deals.find((d) => d.id === id);
         const t = Date.parse(iso);
