@@ -372,6 +372,7 @@ export function runReport(r: ReportDef, d: AnalyticsData, now: Date, ctx: { empl
       const eligible = d.deals.filter((x) => x.status !== "cancelled" || r.groupBy === "status");
       const srcOf = (x: Deal) => (x.leadId ? leadById.get(x.leadId)?.source ?? "Lead removed" : "Not from a CRM lead");
       const dealKey = (x: Deal, at?: string): [string, string] => r.groupBy === "status" ? [x.status, x.status.replace("_", " ")] : r.groupBy === "source" ? [srcOf(x), srcOf(x)] : (() => { const t = at ?? dealWonAt(x); return t ? [dayKey(t).slice(0, 7), MONTH_LABEL(dayKey(t).slice(0, 7))] as [string, string] : ["unknown", "Unknown won date"] as [string, string]; })();
+      let unknownWon = 0;
       if (r.metric === "received") { const ids = new Set(eligible.filter((x) => x.status !== "cancelled").map((x) => x.id)); for (const p of d.payments) {
         if (p.voided || !ids.has(p.dealId) || !inWindow(p.date, w)) continue; const x = eligible.find((y) => y.id === p.dealId)!;
         const [k, lab] = r.groupBy === "method" ? [p.method, p.method] : dealKey(x, p.date); add(k, lab, p.amount, x.id, "deal");
@@ -380,6 +381,7 @@ export function runReport(r: ReportDef, d: AnalyticsData, now: Date, ctx: { empl
         const v = r.metric === "count" ? 1 : r.metric === "value" ? (x.status === "cancelled" ? 0 : x.finalAmount) : dealOutstanding(x, d.payments);
         if (!v && r.metric !== "count") continue; const [k, lab] = dealKey(x); add(k, lab, v, x.id, "deal");
       }
+      if (unknownWon) warnings.push(`${unknownWon} older deal${unknownWon === 1 ? " has" : "s have"} no recorded won date and ${unknownWon === 1 ? "is" : "are"} not placed in any period.`);
       if (r.metric === "outstanding") warnings.push("Outstanding is today's balance for every active deal; the date range does not apply.");
       break;
     }
