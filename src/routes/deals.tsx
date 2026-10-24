@@ -16,7 +16,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { cn } from "@/lib/utils";
 import { ProofField, PaymentProofPreview, saveProof, useProofPicker, type StagedProof } from "@/components/crm/PaymentProof";
 import { useProofIndex } from "@/lib/crm/proofRepo";
-import { Paperclip } from "lucide-react";
+import { Paperclip, CalendarCheck } from "lucide-react";
+import { useSession } from "@/lib/crm/session";
+import { verifiedWonDayError, verifiedWonIso } from "@/lib/crm/analytics";
 
 export const Route = createFileRoute("/deals")({
   head: () => ({
@@ -94,7 +96,8 @@ function DealInspector({ deal: d, onPay, onPick }: { deal: Deal; onPay: () => vo
         </dl>
         <div className="balance-track mt-6"><div style={{ width: `${pct * 100}%` }} /></div>
         <div className="num mt-2 flex justify-between text-[11px] text-muted-foreground"><span>{Math.round(pct * 100)}% collected</span>{d.quotedAmount !== d.finalAmount && <span>{d.finalAmount > d.quotedAmount ? "+" : "−"}{formatINR(Math.abs(d.finalAmount - d.quotedAmount))} vs quote</span>}</div>
-        <div className="mt-6 flex flex-wrap gap-2">{out > 0 && d.status !== "cancelled" && <Button onClick={onPay} className="rounded-full"><Plus className="size-4" />Record payment</Button>}<ProjectHandoff deal={d} /></div>
+        <div className="mt-6 flex flex-wrap gap-2">{out > 0 && d.status !== "cancelled" && <Button onClick={onPay} className="rounded-full"><Plus className="size-4" />Record payment</Button>}<ProjectHandoff deal={d} /><VerifyWonDate deal={d} /></div>
+        {!d.wonAt && <p className="mt-3 text-xs text-muted-foreground">Won date unknown (older record) — counted in all-time totals only, not in any month.</p>}
       </div>
       <div className="receipt-edge" aria-hidden />
       <div className="bg-secondary p-6 sm:p-8">
@@ -103,6 +106,38 @@ function DealInspector({ deal: d, onPay, onPick }: { deal: Deal; onPay: () => vo
         {others.length > 0 && <div className="mt-8 border-t pt-5"><div className="eyebrow mb-3">Other deals for {d.clientName}</div><div className="grid gap-2">{others.map((o) => <button key={o.id} type="button" onClick={() => onPick(o.id)} className="flex items-center justify-between rounded-xl border bg-card px-3 py-2.5 text-left text-sm hover:border-input"><span className="truncate">{o.name}</span><span className="num">{formatINRCompact(o.finalAmount)}</span></button>)}</div></div>}
       </div>
     </aside>
+  );
+}
+
+/** Owner-only, one-time: record a verified won date for an older deal that has none. */
+function VerifyWonDate({ deal }: { deal: Deal }) {
+  const preview = useSession((s) => s.preview);
+  const setDealWonAt = useCRM((s) => s.setDealWonAt);
+  const [open, setOpen] = useState(false); const [day, setDay] = useState(""); const [confirm, setConfirm] = useState(false);
+  if (preview || deal.wonAt || deal.status === "cancelled") return null;
+  const today = dayKey(new Date());
+  const err = day ? verifiedWonDayError(day, today) : null;
+  const month = day && !err ? new Date(`${day}T06:30:00Z`).toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "Asia/Kolkata" }) : "";
+  const close = () => { setOpen(false); setDay(""); setConfirm(false); };
+  const save = () => {
+    if (!day || err) return;
+    if (setDealWonAt(deal.id, verifiedWonIso(day))) { toast.success("Verified won date recorded"); close(); }
+    else toast.error("Couldn't record the won date — it may already be set.");
+  };
+  return (
+    <>
+      <Button variant="outline" className="rounded-full" onClick={() => setOpen(true)}><CalendarCheck className="size-4" />Record verified won date</Button>
+      <Dialog open={open} onOpenChange={(o) => !o && close()}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Record verified won date · {deal.name}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">This older deal has no recorded won date, so it counts in all-time totals but not in any month. Enter the date you have verified it was actually won (India time). The creation date ({formatDate(deal.createdAt)}) is not used.</p>
+          <div className="grid gap-1.5"><Label htmlFor="won-day">Verified won date</Label><Input id="won-day" type="date" max={today} value={day} onChange={(e) => { setDay(e.target.value); setConfirm(false); }} aria-invalid={!!err} />{err && <p role="alert" className="text-xs text-destructive">{err}</p>}</div>
+          {month && <div className="rounded-xl border bg-secondary p-3 text-sm">Reporting impact: {formatINR(deal.finalAmount)} will count as won value in <b>{month}</b>. Payments and the deal amount do not change.</div>}
+          {month && <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} />I understand this can be recorded only once and can't be changed afterwards.</label>}
+          <DialogFooter><Button variant="ghost" onClick={close}>Cancel</Button><Button disabled={!day || !!err || !confirm} onClick={save}>Record won date</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
