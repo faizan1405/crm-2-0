@@ -135,11 +135,12 @@ function guarded<T extends object>(state: T, get: () => CRMState, set: (p: Parti
 /** localStorage that is never written while a preview runs — the Owner's saved data stays exactly as it was.
  *  Write failures (e.g. QuotaExceededError) never throw here: they are recorded so `atomic` can roll the action back. */
 let writeFailure: unknown = null;
+let rollingBack = false;
 const guardedStorage = {
   getItem: (k: string) => localStorage.getItem(k),
   setItem: (k: string, v: string) => {
     if (activePreview()) return;
-    try { localStorage.setItem(k, v); recordSave(true, strBytes(v)); }
+    try { localStorage.setItem(k, v); if (!rollingBack) recordSave(true, strBytes(v)); }
     catch (e) { writeFailure = e; recordSave(false, strBytes(v), e); }
   },
   removeItem: (k: string) => { if (!activePreview()) localStorage.removeItem(k); },
@@ -161,7 +162,7 @@ function atomic<T extends object>(state: T, get: () => CRMState, set: (s: CRMSta
       try { r = (fn as (...a: unknown[]) => unknown)(...args); } finally { atomicDepth--; }
       if (writeFailure === null) return r;
       const cause = writeFailure; writeFailure = null;
-      set(before, true); writeFailure = null; // restore memory to the last durable state
+      rollingBack = true; try { set(before, true); } finally { rollingBack = false; writeFailure = null; } // restore memory to the last durable state
       const err = new PersistError(cause);
       if (BACKGROUND.has(name)) return r && typeof r === "object" && "created" in r ? { created: 0, resolved: 0 } : undefined;
       notifyPersistFailure(err);
