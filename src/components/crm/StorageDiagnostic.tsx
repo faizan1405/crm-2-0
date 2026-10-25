@@ -10,7 +10,7 @@ import { idbProofRepo } from "@/lib/crm/proofRepo";
 
 const STORE_KEY = "scale-flow-crm-2-demo";
 
-interface Snapshot { total: number; keys: KeySize[]; cats: { name: string; bytes: number }[]; proofs: { count: number; bytes: number } | null; estimate: { usage?: number; quota?: number } | null }
+interface Snapshot { total: number; keys: KeySize[]; cats: { name: string; bytes: number }[]; proofs: { count: number; bytes: number } | null; estimate: { usage?: number | undefined; quota?: number | undefined } | null }
 
 async function take(): Promise<Snapshot> {
   const m = measureStorage(localStorage);
