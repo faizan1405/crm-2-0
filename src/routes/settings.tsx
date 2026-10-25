@@ -45,7 +45,7 @@ function Settings() {
   const s = useCRM();
   const { section } = Route.useSearch();
   const [sec, setSec] = useState<Sec>(SECTIONS.some((x) => x.id === section) ? (section as Sec) : "profile");
-  const pv = useSession();
+  const pv = useSession((x) => x.preview);
   const [owner, setOwner] = useState(s.owner);
   const [business, setBusiness] = useState(s.business);
   const [email, setEmail] = useState(s.email);
