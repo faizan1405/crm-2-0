@@ -64,7 +64,7 @@ export function FollowUpDialog({ open, onOpenChange, leadId, initial, reschedule
             <div className="grid gap-1.5"><Label htmlFor="fu-lead">Lead</Label>
               <select id="fu-lead" className={selectCls} value={lead} onChange={(e) => { setLead(e.target.value); setConflict(null); }}>
                 <option value="">Select a lead…</option>
-                {leads.map((l) => <option key={l.id} value={l.id}>{l.name}{l.company ? ` · ${l.company}` : ""}</option>)}
+                {open && leads.map((l) => <option key={l.id} value={l.id}>{l.name}{l.company ? ` · ${l.company}` : ""}</option>)}
               </select>
             </div>
           )}
