@@ -34,15 +34,24 @@ export function isToday(d: string) {
   return dayKey(d) === dayKey(new Date());
 }
 
+// Intl.DateTimeFormat construction is expensive; reuse one formatter per option set (output unchanged).
+const FMT_CACHE = new Map<string, Intl.DateTimeFormat>();
+function fmt(o: Intl.DateTimeFormatOptions) {
+  const k = JSON.stringify(o);
+  let f = FMT_CACHE.get(k);
+  if (!f) { f = new Intl.DateTimeFormat("en-IN", o); FMT_CACHE.set(k, f); }
+  return f;
+}
+
 export function formatDate(d?: string, opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" }) {
   if (!d) return "—";
   const o = displayPrefs.longDate && opts.month === "short" && !opts.weekday ? { ...opts, month: "long" as const } : opts;
-  return new Intl.DateTimeFormat("en-IN", { timeZone: TIMEZONE, ...o }).format(new Date(d));
+  return fmt({ timeZone: TIMEZONE, ...o }).format(new Date(d));
 }
 
 export function formatDateTime(d?: string) {
   if (!d) return "—";
-  return new Intl.DateTimeFormat("en-IN", {
+  return fmt({
     timeZone: TIMEZONE,
     day: "numeric",
     month: displayPrefs.longDate ? "long" : "short",
@@ -53,7 +62,7 @@ export function formatDateTime(d?: string) {
 }
 
 export function formatTime(d: string) {
-  return new Intl.DateTimeFormat("en-IN", { timeZone: TIMEZONE, hour: "numeric", minute: "2-digit", hour12: displayPrefs.hour12 }).format(
+  return fmt({ timeZone: TIMEZONE, hour: "numeric", minute: "2-digit", hour12: displayPrefs.hour12 }).format(
     new Date(d),
   );
 }
