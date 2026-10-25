@@ -8,6 +8,7 @@ let suppressEditHistory = false; // merges record their own single "merged" entr
 import type { ParsedLead } from "./parse";
 import { isPending, activeFollowUp } from "./followups";
 import { isConnectedOutcome, outcomeQuick, type CallOutcome } from "./calllog";
+import { PersistError, recordSave, strBytes, notifyPersistFailure } from "./persistStatus";
 
 export type FollowUpResult = { ok: true; id: string } | { ok: false; conflict?: FollowUp; error?: string };
 export interface CallLogInput {
@@ -131,12 +132,44 @@ function guarded<T extends object>(state: T, get: () => CRMState, set: (p: Parti
   }
   return out as T;
 }
-/** localStorage that is never written while a preview runs — the Owner's saved data stays exactly as it was. */
+/** localStorage that is never written while a preview runs — the Owner's saved data stays exactly as it was.
+ *  Write failures (e.g. QuotaExceededError) never throw here: they are recorded so `atomic` can roll the action back. */
+let writeFailure: unknown = null;
 const guardedStorage = {
   getItem: (k: string) => localStorage.getItem(k),
-  setItem: (k: string, v: string) => { if (!activePreview()) localStorage.setItem(k, v); },
+  setItem: (k: string, v: string) => {
+    if (activePreview()) return;
+    try { localStorage.setItem(k, v); recordSave(true, strBytes(v)); }
+    catch (e) { writeFailure = e; recordSave(false, strBytes(v), e); }
+  },
   removeItem: (k: string) => { if (!activePreview()) localStorage.removeItem(k); },
 };
+/** Background actions: on a failed save they roll back silently (status is still recorded) instead of throwing into timers/effects. */
+const BACKGROUND = new Set(["runAutomations", "recordGoalAlerts", "setViewPref", "setPerfPrefs", "logBackup"]);
+let atomicDepth = 0;
+/** Every action is all-or-nothing for durability: if any write during the outermost action failed, the in-memory
+ *  state is restored to exactly what was last saved and a PersistError is thrown, so callers never report success
+ *  and retries cannot duplicate records or events. */
+function atomic<T extends object>(state: T, get: () => CRMState, set: (s: CRMState, replace: true) => void): T {
+  const out = { ...state } as Record<string, unknown>;
+  for (const [name, fn] of Object.entries(state)) {
+    if (typeof fn !== "function") continue;
+    out[name] = (...args: unknown[]) => {
+      if (atomicDepth > 0 || activePreview()) return (fn as (...a: unknown[]) => unknown)(...args);
+      const before = get(); writeFailure = null; atomicDepth++;
+      let r: unknown;
+      try { r = (fn as (...a: unknown[]) => unknown)(...args); } finally { atomicDepth--; }
+      if (writeFailure === null) return r;
+      const cause = writeFailure; writeFailure = null;
+      set(before, true); writeFailure = null; // restore memory to the last durable state
+      const err = new PersistError(cause);
+      if (BACKGROUND.has(name)) return r && typeof r === "object" && "created" in r ? { created: 0, resolved: 0 } : undefined;
+      notifyPersistFailure(err);
+      throw err;
+    };
+  }
+  return out as T;
+}
 
 export type ThemePref = "light" | "dark" | "system";
 export interface Prefs {
@@ -417,7 +450,7 @@ export const useCRM = create<CRMState>()(
         const { next, events } = applyAssign(st.assignments, [leadId], o.winner.targetEmployeeId, new Date().toISOString(), `Rule: ${o.winner.name}`, false, () => uid("asg"));
         set((s) => ({ assignments: next, assignmentEvents: [...events, ...s.assignmentEvents].slice(0, 500), firedRules: [key, ...s.firedRules].slice(0, 2000) }));
       };
-      return guarded<CRMState>({
+      return atomic(guarded<CRMState>({
       ...initialData,
       inboxMeta: {},
       leadRelations: {},
@@ -974,7 +1007,7 @@ export const useCRM = create<CRMState>()(
         return n;
       },
       setEmployeeStatus: (id, status) => set((s) => ({ employees: s.employees.map((e) => (e.id === id ? withStatus(e, status, new Date().toISOString()) : e)) })),
-    }, get, set);
+    }, get, set), get, set as never);
     },
     {
       name: "scale-flow-crm-2-demo",
