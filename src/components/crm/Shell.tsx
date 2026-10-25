@@ -2,7 +2,8 @@ import { WhatsAppComposer } from "@/components/crm/WhatsAppComposer";
 import { isPending } from "@/lib/crm/followups";
 import { PostCallDialog, openCallLog } from "@/components/crm/PostCallDialog";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { startAutomationRunner } from "@/lib/crm/automationRunner";
 import {
   LayoutDashboard, Users, KanbanSquare, CalendarClock, Wallet, StickyNote, Moon, Sun,
