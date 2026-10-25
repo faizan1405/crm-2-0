@@ -107,8 +107,9 @@ function Leads() {
   useEffect(() => { if (scopeKey === lastScope) return; setLastScope(scopeKey); if (selectionCount(selection) > 0) { setSelection(EMPTY_SELECTION); if (viewId === lastView) toast.info("Selection cleared because the filters changed"); } }, [scopeKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const openView = (id?: string) => void navigate({ to: "/leads", search: id ? { view: id } : {} });
 
+  const pendingBy = useMemo(() => { const m = new Map<string, typeof followUps>(); for (const x of followUps) if (isPending(x)) { const a = m.get(x.leadId); if (a) a.push(x); else m.set(x.leadId, [x]); } return m; }, [followUps]);
   function dueMatch(leadId: string) {
-    const f = followUps.filter((x) => x.leadId === leadId && isPending(x));
+    const f = pendingBy.get(leadId) ?? [];
     if (due === "none") return f.length === 0;
     const t = now.getTime(), today = dayKey(now);
     if (due === "overdue") return f.some((x) => new Date(x.dueAt).getTime() < t);

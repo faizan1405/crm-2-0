@@ -35,3 +35,4 @@
 - Custom fields, tags and Saved Views are pure in `customize.ts` (values keyed by stable field ids, never on Lead; views are versioned JSON filters run by `runView`); archived fields keep values and dependent views/automations warn instead of changing meaning.
 - Project Desk: pure `projects.ts` + slices; reuses `customize.ts`/`automation.ts`.
 - Analytics: pure `analytics.ts`; stores definitions only; money via `finance.ts`.
+- Large-data hot paths use per-array WeakMap indexes or memoized maps (e.g. `pipeline.ts` signal indexes, cached Intl formatters); never scan all records per row — keeps 5k-lead screens responsive with identical results.

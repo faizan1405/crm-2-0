@@ -271,3 +271,82 @@ Code changes were lost once during a platform incident and re-applied on 2026-10
 **Limitations.** No real authentication; browser-local data and preview only; no cross-device sync; no server-side authorization; no production performance attribution.
 
 **Still open:** original Owner quotation packages; pointer-driven Pipeline drag; tag-filter clearing; 1k/5k/10k lead performance; storage quota & multi-tab; security & accessibility audit; full end-to-end; real restore and backend features.
+
+---
+
+## Checkpoint D1 — Large-data performance & project persistence (2026-10-25)
+
+### Part 1 — Persistence
+- Source re-read: `vault.ts` has classification (complete/selective/employee/incomplete-full/damaged), attachment/manifest checks; `store.ts` keeps `addActivity` note → `leads.edit`, WhatsApp → `clients.whatsapp`, and the depth-guarded single-event preview wrapper.
+- Git history visible (latest commit "Fixed backup data corruption"). Commits are made by Lovable automatically; no manual tag/checkpoint was created by the agent, so no separately named recoverable checkpoint is claimed. Restore points are available through Lovable's version history.
+- Uncertainty: the earlier platform incident showed edits can be lost before they are committed; verify the next session sees D1 changes (`pipeline.perf.test.ts` exists).
+
+### Method
+- Synthetic generator `/tmp/browser/d1/gen.py` (seeded, stable ids `perf_lead_00000…`, 5 PERF employees, 4 tags, 1 select custom field, ~1/2 leads with follow-ups, ~1/4 with call history, 9 sources, 6 stages, 3 priorities, 180-day spread).
+- Loaded only into fresh, throwaway headless Chromium profiles (no Owner browser data exists there; nothing written to a real device).
+- Timing = action → DOM condition met → 2 animation frames, via Playwright; "longtask" = summed main-thread tasks >50 ms. Median of 3 runs. **Vite dev server (development React)** — production builds are typically faster; absolute numbers are upper bounds.
+- Heap: `performance.memory` ≈ 115–134 MB in all runs (coarse Chromium value).
+
+### Bottlenecks found (CPU profile, 5,000 leads, 4 Source-filter changes)
+1. `formatDateTime` 6.7 s self time: Shell built the closed Notifications list on every render — new `Intl.DateTimeFormat` per overdue follow-up plus `leads.find` per row (O(follow-ups × leads)).
+2. Shell subscribed to the whole store, re-rendering on every change; closed Schedule-follow-up dialog built an `<option>` for every lead; AssignDialog counted workload per employee by full scans.
+3. Pipeline: `cardSignals`/`stageSince` scanned all activities and follow-ups per card (O(leads × records)); `relative()` created a formatter per call.
+4. Prospects Follow-up-due filter scanned all follow-ups per lead.
+
+### Optimizations (business meaning unchanged)
+- `format.ts`: cached Intl formatters (same options → same output).
+- `Shell.tsx`: shallow store selector; attention list memoized; notification rows, global-search and call-picker results only built while open; name lookup via Map.
+- `Dialogs.tsx`: lead options only rendered while the dialog is open. `AssignDialog.tsx`: memoized `workload`.
+- `pipeline.ts`: per-array WeakMap indexes (last stage change, earliest pending follow-up) — identical results; covered by `pipeline.perf.test.ts` (3 tests: equality with full scan, pending/earliest rule, no stale cache).
+- `leads.tsx`: pending follow-ups grouped per lead once.
+
+### Measurements (median ms, 1440px, dev build)
+| Operation | 1k before | 1k after | 5k after | 10k |
+|---|---|---|---|---|
+| Open Prospects | 1040 | 1223 | 940 | not run* |
+| Search | 607 | 95 | 113 | * |
+| Source filter | 876 | 530 | 499 | * |
+| Assignee filter | 442 | 227 | 192 | * |
+| Tag filter | 746 | 390 | 280 | * |
+| Follow-up due filter | 454 | 158 | 172 | * |
+| Created filter | 492 | 110 | 253 | * |
+| Next page | 330 | 204 | 395 | * |
+| Open inspector | 583 | 163 | 212 | * |
+| Select page | 328 | 322 | 169 | * |
+| Select all matching | 526 | 227 | 148 | * |
+| Open bulk assign | 291 | 229 | 292 | * |
+| Equal / balanced preview | 94 / 110 | 110 / 112 | 96 / 95 | * |
+| Open Pipeline | 2855 | 2176 | 6801 (12804 before Pipeline fix) | * |
+| Open Smart Inbox | 2277 | 1454 | 2534 | * |
+| Open Analytics | 1233 | 850 | 1130 | * |
+| Open Automation | 968 | 587 | 592 | * |
+| Open Project Desk | 709 | 567 | 493 | * |
+
+\* **10,000 leads could not be loaded**: the dataset is ≈7.7 MB and the browser refused it (`QuotaExceededError` on localStorage, ~5 MB limit). 5,000 leads used 3.9 MB. This is a real product limit of browser-local storage, not a test failure — it must be solved by the backend (or IndexedDB). What the app does when a save exceeds quota during normal use is still untested (storage-quota item stays open).
+5k "before" was measured for Pipeline only (12.8 s); other 5k before-values were not captured.
+
+### Remaining bottlenecks
+- Pipeline at 5k still ≈6.8 s to open (≈3.8 s main-thread): it renders every card (~5,000 DOM tickets). Fix needs a design decision (e.g. "show more" per column / virtualization) — not done to avoid changing approved UI.
+- Smart Inbox open ≈2.5 s at 5k; Source filter ≈0.5 s.
+
+### Data integrity under load (browser, 5,000 leads, `integ.py`)
+- Source = Referral → 591 matching; Select all matching then 1 exclusion → bar "590 selected · 1 excluded".
+- Equal distribution to 2 employees → 295 / 295, 0 leads outside the filter changed, 5,000 leads / 5,000 unique ids (no duplicates). Toast "493 leads distributed" (rest already with those employees).
+- Undo restored the assignment map exactly (deep-equal).
+- Select all matching count equalled dataset size at 1k and 5k. Inbox/analytics/workload consistency rely on existing automated tests; not re-counted in the browser.
+
+### Responsive (5,000 leads)
+| Width | Prospects open | Pipeline open | Analytics open | Overflow |
+|---|---|---|---|---|
+| 1440 | 1679 | 4288 | 1832 | 0 |
+| 768 | 1881 | 4405 | 1639 | 0 |
+| 390 | 1772 | 4387 | 1688 | 0 |
+| 360 | 1885 | 5267 | 1601 | 0 |
+Scrolling stayed responsive (wheel step ≈110–500 ms incl. 100 ms wait); Pipeline is the visible freeze on phones.
+
+### Results
+- Automated tests: **427 passed** (424 + 3 new). Typecheck clean. `vite build` exit 0.
+- Benchmarks: 1k ✅, 5k ✅, 10k ❌ blocked by browser storage quota.
+
+### Still open
+Storage quota & multi-tab reliability · Owner quotation package content · physical Pipeline drag · tag-filter selection clearing browser test · extended security/privacy audit · keyboard accessibility · final end-to-end acceptance · real restore with the secure backend · Pipeline large-column rendering.

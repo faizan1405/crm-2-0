@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Crown, Check } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
 import { assignable, type Assignment } from "@/lib/crm/access";
 import { roleLabel, STATUS_LABEL } from "@/lib/crm/team";
 import { initials } from "@/lib/crm/format";
+import { workload } from "@/lib/crm/bulk";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -14,7 +15,8 @@ export function AssignDialog({ open, leadIds, source, onClose, onDone }: { open:
   const { employees, assignments, assignLeads, restoreAssignments, leads } = useCRM();
   const current = leadIds.length === 1 ? assignments[leadIds[0]!]?.employeeId ?? null : undefined;
   const [pick, setPick] = useState<string | null | undefined>(undefined);
-  const count = (id: string) => Object.values(assignments).filter((a) => a.employeeId === id).length;
+  const load = useMemo(() => (open ? workload(assignments) : {}), [open, assignments]);
+  const count = (id: string) => load[id] ?? 0;
   const list = employees.filter((e) => e.accountStatus !== "archived");
   const confirm = () => {
     if (pick === undefined) return;
