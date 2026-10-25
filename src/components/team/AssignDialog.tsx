@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Crown, Check } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
 import { assignable, type Assignment } from "@/lib/crm/access";
 import { roleLabel, STATUS_LABEL } from "@/lib/crm/team";
 import { initials } from "@/lib/crm/format";
+import { workload } from "@/lib/crm/bulk";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
