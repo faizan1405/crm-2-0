@@ -14,7 +14,8 @@ export function AssignDialog({ open, leadIds, source, onClose, onDone }: { open:
   const { employees, assignments, assignLeads, restoreAssignments, leads } = useCRM();
   const current = leadIds.length === 1 ? assignments[leadIds[0]!]?.employeeId ?? null : undefined;
   const [pick, setPick] = useState<string | null | undefined>(undefined);
-  const count = (id: string) => Object.values(assignments).filter((a) => a.employeeId === id).length;
+  const load = useMemo(() => (open ? workload(assignments) : {}), [open, assignments]);
+  const count = (id: string) => load[id] ?? 0;
   const list = employees.filter((e) => e.accountStatus !== "archived");
   const confirm = () => {
     if (pick === undefined) return;
