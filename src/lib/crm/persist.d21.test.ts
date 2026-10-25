@@ -51,15 +51,17 @@ describe("D2.1 storage-failure safety", () => {
     expect(saved().payments).toHaveLength(1);
   });
   it("failed Project task update leaves the saved project task unchanged", () => {
-    const r = useCRM.getState().createProject({ name: "D21 Project", status: "active" } as never);
-    if (!("ok" in r) || !r.ok) throw new Error("project not created");
-    const t = useCRM.getState().addProjectTask?.(r.id, { title: "D21 task" } as never);
-    const task = useCRM.getState().projectTasks.find((x) => x.projectId === r.id);
-    if (!task) { expect(t).toBeUndefined(); return; }
+    const proj = useCRM.getState().projects[0];
+    if (!proj) throw new Error("demo has no project");
+    const r = useCRM.getState().addTask(proj.id, { title: "D21 task" } as never);
+    if (!r.ok) throw new Error("task not created");
     failing = true;
-    expect(isPersistError(tryRun(() => useCRM.getState().setTaskStatus?.(task.id, "done" as never)))).toBe(true);
-    expect(useCRM.getState().projectTasks.find((x) => x.id === task.id)?.status).toBe(task.status);
-    expect(saved().projectTasks.find((x: { id: string }) => x.id === task.id)?.status).toBe(task.status);
+    expect(isPersistError(tryRun(() => useCRM.getState().setTaskDone(r.id, true)))).toBe(true);
+    expect(useCRM.getState().projectTasks.find((x) => x.id === r.id)?.status).toBe("open");
+    expect(saved().projectTasks.find((x: { id: string }) => x.id === r.id)?.status).toBe("open");
+    failing = false;
+    expect(useCRM.getState().setTaskDone(r.id, true)).toBe(true);
+    expect(saved().projectTasks.find((x: { id: string }) => x.id === r.id)?.status).not.toBe("open");
   });
   it("failed Note autosave reports error, keeps the pending content and keeps the old saved note", () => {
     const note = useCRM.getState().notes[0]!;
