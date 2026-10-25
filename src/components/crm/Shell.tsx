@@ -119,7 +119,7 @@ export function Shell({ title, subtitle, actions, children }: { title: string; s
     const off = onPersistFailure((e) => toast.error(e.quota ? "Browser storage is full" : "Changes not saved", {
       id: "persist-failure", duration: 12000,
       description: `${e.message} Nothing was recorded — your entry is still on screen, so you can try saving again.`,
-      ...(preview ? {} : { action: { label: "Storage info", onClick: () => void navigate({ to: "/settings", search: { section: "data" } as never }) } }),
+      ...(preview ? {} : { action: { label: "Storage info", onClick: () => void navigate({ to: "/settings", search: { section: "data" } }) } }),
     }));
     const swallow = (ev: ErrorEvent | PromiseRejectionEvent) => { if (isPersistError("reason" in ev ? ev.reason : ev.error)) ev.preventDefault(); };
     window.addEventListener("error", swallow); window.addEventListener("unhandledrejection", swallow);
