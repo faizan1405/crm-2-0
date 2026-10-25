@@ -3,6 +3,7 @@ import { useCRM } from "./store";
 import { financeSummary } from "./finance";
 import { getPersistStatus, isPersistError, categorySizes, measureStorage, resetPersistStatus } from "./persistStatus";
 import { createAutosaver } from "./autosave";
+import { draftFromDeal, starterTemplates } from "./projects";
 
 const KEY = "scale-flow-crm-2-demo";
 const quota = () => { const e = new Error("full"); e.name = "QuotaExceededError"; return e; };
@@ -51,9 +52,10 @@ describe("D2.1 storage-failure safety", () => {
     expect(saved().payments).toHaveLength(1);
   });
   it("failed Project task update leaves the saved project task unchanged", () => {
-    const proj = useCRM.getState().projects[0];
-    if (!proj) throw new Error("demo has no project");
-    const r = useCRM.getState().addTask(proj.id, { title: "D21 task" } as never);
+    const deal = useCRM.getState().deals[0]!;
+    const p = useCRM.getState().createProject(draftFromDeal({ deal, template: starterTemplates("2026-10-01T00:00:00Z")[0]! }));
+    if (!p.ok) throw new Error(p.error);
+    const r = useCRM.getState().addTask(p.id, { title: "D21 task" } as never);
     if (!r.ok) throw new Error("task not created");
     failing = true;
     expect(isPersistError(tryRun(() => useCRM.getState().setTaskDone(r.id, true)))).toBe(true);
