@@ -5,6 +5,8 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { startAutomationRunner } from "@/lib/crm/automationRunner";
+import { onPersistFailure, isPersistError } from "@/lib/crm/persistStatus";
+import { toast } from "sonner";
 import {
   LayoutDashboard, Users, KanbanSquare, CalendarClock, Wallet, StickyNote, Moon, Sun,
   BarChart3, Sunrise, Settings, MoreHorizontal, Plus, Search, Bell, ArrowUpRight, PhoneCall, Menu, ChevronRight, PanelLeftClose, PanelLeftOpen, Presentation, ShieldCheck, Activity,
@@ -111,7 +113,18 @@ export function Shell({ title, subtitle, actions, children }: { title: string; s
   const leave = () => { const id = preview?.employeeId; exitPreview(); void navigate({ to: "/team", search: id ? { employee: id } : {} }); };
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); setCollapsed(localStorage.getItem(COLLAPSE_KEY) === "1"); }, []);
-  const toggleCollapse = () => setCollapsed(c => { localStorage.setItem(COLLAPSE_KEY, c ? "0" : "1"); return !c; });
+  const toggleCollapse = () => setCollapsed(c => { try { localStorage.setItem(COLLAPSE_KEY, c ? "0" : "1"); } catch { /* layout preference only */ } return !c; });
+  // Failed saves: one clear message; the action was rolled back, so forms stay open with their content for a retry.
+  useEffect(() => {
+    const off = onPersistFailure((e) => toast.error(e.quota ? "Browser storage is full" : "Changes not saved", {
+      id: "persist-failure", duration: 12000,
+      description: `${e.message} Nothing was recorded — your entry is still on screen, so you can try saving again.`,
+      ...(preview ? {} : { action: { label: "Storage info", onClick: () => void navigate({ to: "/settings", search: { section: "data" } }) } }),
+    }));
+    const swallow = (ev: ErrorEvent | PromiseRejectionEvent) => { if (isPersistError("reason" in ev ? ev.reason : ev.error)) ev.preventDefault(); };
+    window.addEventListener("error", swallow); window.addEventListener("unhandledrejection", swallow);
+    return () => { off(); window.removeEventListener("error", swallow); window.removeEventListener("unhandledrejection", swallow); };
+  }, [preview, navigate]);
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setSearch(true); } };
     window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);

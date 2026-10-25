@@ -4,6 +4,7 @@
 import { useCRM } from "./store";
 import { activePreview } from "./session";
 import { evaluateGoalAlerts } from "./performance";
+import { savesFailing } from "./persistStatus";
 
 let started = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -13,7 +14,7 @@ function runSoon(delay = 1500) {
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => {
     const s = useCRM.getState();
-    if (activePreview()) return;
+    if (activePreview() || savesFailing()) return; // never loop while browser storage is refusing writes
     // Goal alerts: evaluated app-wide (not only on Team Performance); stable ids dedupe repeats.
     try { const alerts = evaluateGoalAlerts(s, new Date()); if (alerts.length) s.recordGoalAlerts(alerts); } catch { /* never block automations */ }
     if (!s.automationSettings.autoEvaluate || !s.automationRules.some((r) => r.status === "enabled")) return;

@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { useSession } from "@/lib/crm/session";
+import { StorageDiagnostic } from "@/components/crm/StorageDiagnostic";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -22,6 +24,7 @@ export const Route = createFileRoute("/settings")({
       { property: "og:description", content: "Profile, appearance, preferences and demo data." },
     ],
   }),
+  validateSearch: (s: Record<string, unknown>): { section?: string } => (typeof s["section"] === "string" ? { section: s["section"] } : {}),
   component: Settings,
 });
 
@@ -40,7 +43,9 @@ const Pending = () => <span className="rounded-full bg-neutral-soft px-2 py-0.5 
 
 function Settings() {
   const s = useCRM();
-  const [sec, setSec] = useState<Sec>("profile");
+  const { section } = Route.useSearch();
+  const [sec, setSec] = useState<Sec>(SECTIONS.some((x) => x.id === section) ? (section as Sec) : "profile");
+  const pv = useSession((x) => x.preview);
   const [owner, setOwner] = useState(s.owner);
   const [business, setBusiness] = useState(s.business);
   const [email, setEmail] = useState(s.email);
@@ -94,6 +99,7 @@ function Settings() {
             <Row label="Sessions"><Button variant="outline" onClick={() => toast.info("Sign-out will work once accounts are connected")}>Log out</Button></Row>
           </>}
           {sec === "data" && <>
+            {!pv && <StorageDiagnostic />}
             <Row label="Backups & export" hint="Owner only · full, custom and employee backups with payment proof files live in Data Vault"><Button asChild variant="outline"><Link to="/data-vault"><Download className="size-4" />Open Data Vault</Link></Button></Row>
             <Row label="Reset demo data" hint="Restores the original sample leads, deals and notes. Preferences are kept."><Button variant="destructive" onClick={() => { if (window.confirm("Reset all demo data?")) { s.reset(); toast.success("Demo data restored"); } }}>Reset demo data</Button></Row>
           </>}
