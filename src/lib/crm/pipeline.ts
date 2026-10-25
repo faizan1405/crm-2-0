@@ -11,8 +11,23 @@ const DAY = 864e5;
  * When the lead entered its current stage: the latest recorded stage change,
  * or creation time for a lead still in "new" that never changed stage. Otherwise unknown.
  */
-export function stageSince(lead: Pick<Lead, "id" | "status" | "createdAt">, activities: Pick<LeadActivity, "leadId" | "type" | "at">[]): string | null {
-  const last = activities.filter((a) => a.leadId === lead.id && a.type === "status").reduce<string | null>((m, a) => (!m || a.at > m ? a.at : m), null);
+// Per-lead lookups built once per (immutable) array and reused by every card — same results as scanning, O(n) instead of O(leads × records).
+type ActLike = Pick<LeadActivity, "leadId" | "type" | "at">;
+const statusIdx = new WeakMap<readonly ActLike[], Map<string, string>>();
+const nextIdx = new WeakMap<readonly FollowUp[], Map<string, FollowUp>>();
+export function lastStageChanges(activities: readonly ActLike[]): Map<string, string> {
+  let m = statusIdx.get(activities);
+  if (!m) { m = new Map(); for (const a of activities) if (a.type === "status") { const cur = m.get(a.leadId); if (!cur || a.at > cur) m.set(a.leadId, a.at); } statusIdx.set(activities, m); }
+  return m;
+}
+/** Earliest pending follow-up per lead (first in list order on equal times, matching a stable sort). */
+export function nextPendingByLead(followUps: readonly FollowUp[]): Map<string, FollowUp> {
+  let m = nextIdx.get(followUps);
+  if (!m) { m = new Map(); for (const f of followUps) if (isPending(f)) { const cur = m.get(f.leadId); if (!cur || f.dueAt.localeCompare(cur.dueAt) < 0) m.set(f.leadId, f); } nextIdx.set(followUps, m); }
+  return m;
+}
+export function stageSince(lead: Pick<Lead, "id" | "status" | "createdAt">, activities: ActLike[]): string | null {
+  const last = lastStageChanges(activities).get(lead.id) ?? null;
   if (last) return last;
   return lead.status === "new" ? lead.createdAt : null;
 }
@@ -22,7 +37,7 @@ export function isStalled(status: LeadStatus, days: number | null) { const t = S
 export interface CardSignals { days: number | null; stalled: boolean; overdue: boolean; nextDue?: string | undefined; highValue: boolean; hot: boolean }
 export function cardSignals(lead: Lead, activities: LeadActivity[], followUps: FollowUp[], now: Date): CardSignals {
   const days = daysIn(stageSince(lead, activities), now);
-  const next = followUps.filter((f) => f.leadId === lead.id && isPending(f)).sort((a, b) => a.dueAt.localeCompare(b.dueAt))[0];
+  const next = nextPendingByLead(followUps).get(lead.id);
   return { days, stalled: isStalled(lead.status, days), overdue: !!next && followUpBucket(next, now) === "overdue", nextDue: next?.dueAt, highValue: (lead.quotedAmount ?? 0) >= HIGH_VALUE, hot: lead.priority === "hot" };
 }
 

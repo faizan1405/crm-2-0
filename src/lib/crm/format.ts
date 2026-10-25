@@ -67,11 +67,11 @@ export function formatTime(d: string) {
   );
 }
 
+const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 export function relative(d?: string) {
   if (!d) return "—";
   const diff = new Date(d).getTime() - Date.now();
   const abs = Math.abs(diff);
-  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
   const m = 60_000,
     h = 60 * m,
     day = 24 * h;
