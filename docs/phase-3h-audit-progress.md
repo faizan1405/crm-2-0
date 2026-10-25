@@ -350,3 +350,27 @@ Scrolling stayed responsive (wheel step ≈110–500 ms incl. 100 ms wait); Pipe
 
 ### Still open
 Storage quota & multi-tab reliability · Owner quotation package content · physical Pipeline drag · tag-filter selection clearing browser test · extended security/privacy audit · keyboard accessibility · final end-to-end acceptance · real restore with the secure backend · Pipeline large-column rendering.
+
+## Checkpoint D2.1 — Browser storage safety (2026-10-25)
+
+**Persistence architecture.** All CRM records (Leads, Deals, Payments, Follow-ups, Projects/Tasks, Notes, saved quotation packages and WhatsApp templates, activity, Team Activity events, automation rules/history, assignments, settings) live in one localStorage key `scale-flow-crm-2-demo`, written as a whole on every change. Payment-proof binaries live only in IndexedDB `scale-flow-payment-proofs` (one metadata row + one file per payment, written in one transaction). The sidebar-collapse flag uses its own small key. Data Vault reads the store state plus the IndexedDB proofs. Preview never writes storage.
+
+**Measured.** Fresh demo store ≈ 42 KB (measured in the test browser). D1 showed 10,000 Leads need ≈ 7.7 MB vs a ≈ 5 MB localStorage limit in Chromium. Chrome's `navigator.storage.estimate()` does not count localStorage, so remaining localStorage space is not measurable; the diagnostic says so.
+
+**Defect found.** Before D2.1 a quota failure was thrown from inside zustand's persist after memory was already updated: the UI could crash or show success, memory and storage disagreed, and a retry could duplicate a Lead/Payment that existed only in memory.
+
+**Correction.** `atomic` wrapper around every store action: snapshot → run → if any write failed, restore memory (and rewrite the last durable state) and throw `PersistError`. No success toast runs, forms/dialogs stay open with their content, no Team Activity event survives, finance totals are unchanged. Background actions (automations, goal alerts, view prefs, backup log) roll back silently; the automation runner pauses while saves are failing. Shell shows one message ("Your browser storage is full. Your latest changes could not be saved. Existing saved data has not been deleted.") with a Storage info link. New Owner-only Storage panel in Settings → Data & backup: last save result, failure count, measured CRM/local storage size, per-category sizes (no values), proof file count/size, browser estimate (labelled approximate). Nothing is ever deleted to free space.
+
+**Limitations.** Atomicity is per action. Bulk add (many Leads in one dialog) saves Lead by Lead, so a failure mid-way keeps the earlier ones (duplicate detection flags them on retry). An unsaved draft lives only in the open tab; closing the tab loses it. Data Vault backups contain only previously saved records. Proof saves are a separate IndexedDB transaction from the payment record.
+
+**Tests.** 6 new automated tests (`persist.d21.test.ts`): Lead, Payment, Project task, Note autosave failure + retry, background rollback, size measurement. **433 tests pass**, typecheck clean.
+
+**Browser (isolated context, simulated QuotaExceededError on the CRM key only — no natural quota failure was produced):**
+- A normal save + refresh: passed.
+- B failed Lead save: clear message, dialog kept the draft, nothing stored or shown; G retry saved exactly one, survived refresh.
+- C failed Payment: dialog stayed open, no stored payment or event; retry stored exactly one.
+- D failed Note: "Not saved — storage error · Retry" badge, editor kept the text, stored note unchanged; Retry saved it, survived refresh.
+- Storage panel showed the failure and sizes.
+- Not browser-run this round: E (project task — automated only), F (proof IndexedDB failure — covered by B1.5A.3 browser run and `proofRepo` tests), H (Data Vault — existing vault tests still pass). No 10,000-Lead claim.
+
+Open: D2.2 multi-tab conflicts, Pipeline progressive rendering, Owner quotation packages, real pointer drag, tag-filter clearing, security/privacy, accessibility/keyboard, final end-to-end, secure backend storage and restore.

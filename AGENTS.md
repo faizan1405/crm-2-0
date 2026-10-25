@@ -36,3 +36,4 @@
 - Project Desk: pure `projects.ts` + slices; reuses `customize.ts`/`automation.ts`.
 - Analytics: pure `analytics.ts`; stores definitions only; money via `finance.ts`.
 - Large-data hot paths use per-array WeakMap indexes or memoized maps (e.g. `pipeline.ts` signal indexes, cached Intl formatters); never scan all records per row — keeps 5k-lead screens responsive with identical results.
+- Every store action is wrapped by `atomic` in `store.ts`: a failed localStorage write (e.g. quota) rolls memory back to the last durable state and throws `PersistError` (background actions roll back silently); status lives in pure `persistStatus.ts` — the UI never reports unsaved work as saved and retries can't duplicate.
