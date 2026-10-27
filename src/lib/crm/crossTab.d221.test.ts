@@ -6,7 +6,7 @@ import { startPreview, exitPreview } from "./preview";
 const KEY = "scale-flow-crm-2-demo";
 const saved = () => JSON.parse(localStorage.getItem(KEY)!);
 /** Simulates Tab A: changes the shared saved blob directly, the way another tab's save would. */
-function otherTabSaves(mut: (s: Record<string, any>) => void) {
+function otherTabSaves(mut: (s: any) => void) {
   const blob = saved(); mut(blob.state); localStorage.setItem(KEY, JSON.stringify(blob));
 }
 const tryRun = (f: () => unknown) => { try { f(); return null; } catch (e) { return e; } };
@@ -15,7 +15,7 @@ beforeEach(() => {
   localStorage.clear(); useCRM.getState().reset();
   // make sure something is saved so both "tabs" share one blob
   useCRM.getState().addActivity(useCRM.getState().leads[0]!.id, "seed", "note");
-  useCRM.getState().addEmployee({ name: "D221 Emp", email: "d221@example.com", roleId: "sales", accountStatus: "active" } as never);
+  useCRM.getState().addEmployee({ name: "D221 Emp", email: "d221@example.com", roleId: "salesperson", accountStatus: "active" } as never);
 });
 
 describe("D2.2.1 multi-tab safety", () => {
