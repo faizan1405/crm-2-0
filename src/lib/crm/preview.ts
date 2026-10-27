@@ -6,7 +6,7 @@ import { roleLabel, type Employee } from "./team";
 import type { Deal, FollowUp, Lead, LeadActivity, Payment } from "./types";
 import type { QuotationShare } from "./studio";
 import { scopeProjectCustomization } from "./projectCustomize";
-import { scopeProjects, type Project, type ProjectMilestone, type ProjectTask, type SupportRequest } from "./projects";
+import { isOnProject, scopeProjects, type Project, type ProjectMilestone, type ProjectTask, type SupportRequest } from "./projects";
 import type { ActivityEvent } from "./activity";
 import type { AssignmentEvent } from "./access";
 import type { Reminder } from "./automation";
@@ -53,7 +53,7 @@ const FINANCE_ENTITY = new Set(["deal", "payment"]);
 
 /** Pure (E1.1): secondary data that would otherwise reach the preview unfiltered — Owner activity, reminders, assignments, goals, analytics. */
 export function scopeSecondary(d: ScopeInput, employeeId: string, ids: Set<string>, money: boolean) {
-  const projectIds = new Set((d.projects ?? []).filter((p) => (p as { assigneeIds?: string[] }).assigneeIds?.includes(employeeId)).map((p) => p.id));
+  const projectIds = new Set((d.projects ?? []).filter((p) => isOnProject(p, employeeId)).map((p) => p.id));
   const goals = goalsFor(d.goals ?? [], employeeId).filter((g) => visibleGoal(g, money));
   const goalIds = new Set(goals.map((g) => g.id));
   return {
@@ -61,7 +61,7 @@ export function scopeSecondary(d: ScopeInput, employeeId: string, ids: Set<strin
     teamEvents: (d.teamEvents ?? [])
       .filter((e) => e.actorUserId === employeeId || e.targetEmployeeId === employeeId || (e.relatedLeadId != null && ids.has(e.relatedLeadId)) || (e.entityType === "project" && projectIds.has(e.entityId)))
       .map((e) => (!money && (FINANCE_ENTITY.has(e.entityType) || e.module === "finance") ? { ...e, oldValues: undefined, newValues: undefined } : e)),
-    reminders: (d.reminders ?? []).filter((r) => (r.leadId && ids.has(r.leadId)) || r.employeeId === employeeId),
+    reminders: (d.reminders ?? []).filter((r) => (r.leadId !== "" && ids.has(r.leadId)) || (r.projectId != null && projectIds.has(r.projectId))),
     assignments: pick(d.assignments, (k) => ids.has(k)),
     assignmentEvents: (d.assignmentEvents ?? []).filter((e) => ids.has(e.leadId) && (e.previousAssigneeId === employeeId || e.newAssigneeId === employeeId)),
     goals, goalRevisions: (d.goalRevisions ?? []).filter((r) => goalIds.has(r.goalId)), goalAlerts: [],
