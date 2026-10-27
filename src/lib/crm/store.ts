@@ -9,7 +9,7 @@ import type { ParsedLead } from "./parse";
 import { isPending, activeFollowUp } from "./followups";
 import { isConnectedOutcome, outcomeQuick, type CallOutcome } from "./calllog";
 import { PersistError, recordSave, strBytes, notifyPersistFailure } from "./persistStatus";
-import { revisionOf, StaleRecordError } from "./crossTab";
+import { revisionOf, StaleRecordError, type VoidResult, type FollowUpResult } from "./crossTab";
 
 export type FollowUpResult = { ok: true; id: string } | { ok: false; conflict?: FollowUp; error?: string };
 export interface CallLogInput {
@@ -240,7 +240,8 @@ interface CRMState extends Prefs, ProjectSlice, ProjectCustomSlice, AnalyticsSli
   addDeal: (deal: Omit<Deal, "id" | "createdAt" | "wonAt">) => void;
   /** `id` lets callers pre-assign the identifier (e.g. to attach staged proof); rejected if already used. */
   addPayment: (payment: Omit<Payment, "id">, id?: string) => boolean;
-  voidPayment: (id: string) => void;
+  /** "already" = it was voided before (e.g. in another tab) — nothing changes, no second event. */
+  voidPayment: (id: string) => VoidResult;
   /** Owner-only: record a verified won date for an older deal that has none. Never overwrites an existing won date. */
   setDealWonAt: (id: string, iso: string) => boolean;
   /** One active follow-up per lead: returns a conflict unless replaceId names the active one. Same opId never saves twice. */
@@ -249,8 +250,9 @@ interface CRMState extends Prefs, ProjectSlice, ProjectCustomSlice, AnalyticsSli
   logCall: (input: CallLogInput) => CallLogResult;
   /** Returns an explanation when undo is not safe, else undefined. */
   undoCall: (opId: string) => string | undefined;
-  completeFollowUp: (id: string) => void;
-  rescheduleFollowUp: (id: string, date: string) => void;
+  /** `baseDue` = due time the user saw; if the follow-up was rescheduled since, throws StaleRecordError (nothing saved). */
+  completeFollowUp: (id: string, baseDue?: string) => FollowUpResult;
+  rescheduleFollowUp: (id: string, date: string, baseDue?: string) => FollowUpResult;
   saveNote: (note: Note) => void;
   deleteNote: (id: string) => void;
   toggleBriefing: (key: string) => void;
@@ -757,10 +759,12 @@ export const useCRM = create<CRMState>()(
       },
       voidPayment: (id) => {
         const pay = get().payments.find((p) => p.id === id);
-        if (!pay || pay.voided) return; // already voided → no second event
+        if (!pay) return "missing";
+        if (pay.voided) return "already"; // already voided (maybe in another tab) → no second event
         set((s) => ({ payments: s.payments.map((p) => (p.id === id ? { ...p, voided: true } : p)) }));
         const deal = get().deals.find((d) => d.id === pay.dealId);
         if (deal?.leadId) get().addActivity(deal.leadId, `Payment of ₹${pay.amount.toLocaleString("en-IN")} voided on "${deal.name}" (kept in history, excluded from totals)`, "payment");
+        return "voided";
       },
       setDealWonAt: (id, iso) => {
         const deal = get().deals.find((d) => d.id === id);
@@ -783,20 +787,27 @@ export const useCRM = create<CRMState>()(
         get().addActivity(f.leadId, active ? `Follow-up replaced (${f.type})` : `Follow-up scheduled (${f.type})`, "followup");
         return { ok: true, id };
       },
-      completeFollowUp: (id) => {
+      completeFollowUp: (id, baseDue) => {
         const f = get().followUps.find((x) => x.id === id);
-        if (!f || !isPending(f)) return;
+        if (!f) return "missing";
+        if (!isPending(f)) return f.completedAt ? "already" : "closed";
+        if (baseDue !== undefined && f.dueAt !== baseDue) throw new StaleRecordError(id, "followup");
         set((s) => ({ followUps: s.followUps.map((x) => (x.id === id ? { ...x, completedAt: new Date().toISOString() } : x)) }));
         get().updateLead(f.leadId, { lastContact: new Date().toISOString() });
         syncNext(f.leadId);
         get().addActivity(f.leadId, `Follow-up completed (${f.type})`, "followup");
+        return "completed";
       },
-      rescheduleFollowUp: (id, dueAt) => {
+      rescheduleFollowUp: (id, dueAt, baseDue) => {
         const f = get().followUps.find((x) => x.id === id);
-        if (!f || !isPending(f) || !Number.isFinite(new Date(dueAt).getTime())) return;
+        if (!f) return "missing";
+        if (!isPending(f)) return f.completedAt ? "already" : "closed";
+        if (baseDue !== undefined && f.dueAt !== baseDue) throw new StaleRecordError(id, "followup");
+        if (!Number.isFinite(new Date(dueAt).getTime())) return "invalid";
         set((s) => ({ followUps: s.followUps.map((x) => (x.id === id ? { ...x, dueAt } : x)) }));
         syncNext(f.leadId);
         get().addActivity(f.leadId, "Follow-up rescheduled", "followup");
+        return "rescheduled";
       },
       logCall: (i) => {
         if (get().callOps.some((o) => o.id === i.opId)) return { ok: true, opId: i.opId };
