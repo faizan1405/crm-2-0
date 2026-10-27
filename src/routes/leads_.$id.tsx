@@ -154,7 +154,7 @@ function EditLead({ lead, onDone }: { lead: Lead; onDone: () => void }) {
   const save = () => {
     if (stale) { setReview(true); toast.error("This lead was updated in another tab. Review the latest changes before saving."); return; }
     if (!mine.length) { onDone(); return; }
-    const error = leadEditError(leads, lead.id, { ...f, budget: Number(f.budget), quotedAmount: Number(f.quotedAmount) } as never);
+    const error = leadEditError(leads, lead.id, { ...f, budget: Number(f["budget"]), quotedAmount: Number(f["quotedAmount"]) } as never);
     if (error) { toast.error(error); return; }
     const patch: Record<string, unknown> = {};
     for (const k of mine) patch[k] = k === "budget" || k === "quotedAmount" ? Number(f[k]) || 0 : f[k];
@@ -190,9 +190,9 @@ function EditLead({ lead, onDone }: { lead: Lead; onDone: () => void }) {
       {inp("name", "Name")}{inp("phone", "Phone")}{inp("email", "Email", "email")}{inp("company", "Company")}
       <div className="sm:col-span-2">{inp("requirement", "Requirement")}</div>
       {inp("budget", "Budget (₹)", "number")}{inp("quotedAmount", "Quoted (₹)", "number")}
-      <div className="grid gap-1.5"><Label>Source</Label><select className={selectCls} value={f.source} onChange={set("source")}>{LEAD_SOURCES.map((s) => <option key={s}>{s}</option>)}</select></div>
-      <div className="grid gap-1.5"><Label>Priority</Label><select aria-label="Priority" className={selectCls} value={f.priority} onChange={set("priority")}><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option></select></div>
-      <div className="grid gap-1.5 sm:col-span-2"><Label>Notes</Label><Textarea value={f.notes} onChange={set("notes")} /></div>
+      <div className="grid gap-1.5"><Label>Source</Label><select className={selectCls} value={f["source"]} onChange={set("source")}>{LEAD_SOURCES.map((s) => <option key={s}>{s}</option>)}</select></div>
+      <div className="grid gap-1.5"><Label>Priority</Label><select aria-label="Priority" className={selectCls} value={f["priority"]} onChange={set("priority")}><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option></select></div>
+      <div className="grid gap-1.5 sm:col-span-2"><Label>Notes</Label><Textarea value={f["notes"]} onChange={set("notes")} /></div>
       <div className="flex justify-end gap-2 sm:col-span-2"><Button variant="ghost" onClick={onDone}>Cancel</Button><Button onClick={save}>Save changes</Button></div>
     </div>
   );
