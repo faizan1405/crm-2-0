@@ -1,3 +1,4 @@
+import { runFollowUp } from "@/components/crm/conflictFeedback";
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { uid, formatDateTime } from "@/lib/crm/format";
@@ -40,16 +41,26 @@ export function FollowUpDialog({ open, onOpenChange, leadId, initial, reschedule
   const [note, setNote] = useState("");
   const [conflict, setConflict] = useState<FollowUp | null>(null);
   const opId = useRef(uid("op"));
+  // Reschedule: the due time the user saw when opening; a different saved time means another tab changed it.
+  const baseDue = useRef<string | undefined>(undefined);
+  const [staleDue, setStaleDue] = useState<string | null>(null);
   useEffect(() => {
     if (!open) return;
-    opId.current = uid("op"); setConflict(null);
+    opId.current = uid("op"); setConflict(null); setStaleDue(null);
+    baseDue.current = rescheduleId ? useCRM.getState().followUps.find((x) => x.id === rescheduleId)?.dueAt : undefined;
     setType(initial?.type ?? "call"); setAt(initial?.at ?? ""); setNote(initial?.note ?? "");
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   const target = leadId ?? lead;
   const done = (msg: string) => { toast.success(msg); setAt(""); setNote(""); setConflict(null); onOpenChange(false); };
   const save = (replaceId?: string) => {
     if (!target || !at) { toast.error("Choose a lead and a date/time"); return; }
-    if (rescheduleId) { rescheduleFollowUp(rescheduleId, businessDateTime(at)); done("Follow-up rescheduled"); return; }
+    if (rescheduleId) {
+      const ok = runFollowUp(() => rescheduleFollowUp(rescheduleId, businessDateTime(at), baseDue.current));
+      if (ok) { setAt(""); setNote(""); setStaleDue(null); onOpenChange(false); return; }
+      const live = useCRM.getState().followUps.find((x) => x.id === rescheduleId);
+      if (live && live.dueAt !== baseDue.current && !live.completedAt && !live.cancelledAt) setStaleDue(live.dueAt); else onOpenChange(false);
+      return;
+    }
     const r = addFollowUp({ leadId: target, type, dueAt: businessDateTime(at), opId: opId.current, ...(note ? { note } : {}) }, replaceId ? { replaceId } : undefined);
     if (r.ok) done(replaceId ? "Follow-up replaced" : "Follow-up scheduled");
     else if (r.conflict) setConflict(r.conflict);
@@ -75,6 +86,7 @@ export function FollowUpDialog({ open, onOpenChange, leadId, initial, reschedule
           {!rescheduleId && <div className="grid gap-1.5"><Label htmlFor="fu-note">Note</Label><Textarea id="fu-note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} /></div>}
           {conflict && at && <FollowUpConflict existing={conflict} requested={{ dueAt: businessDateTime(at), type, note }} onCancel={() => onOpenChange(false)} onKeep={() => done("Kept the existing follow-up")} onReplace={() => save(conflict.id)} />}
         </div>
+        {staleDue && <div role="alert" className="grid gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm"><p className="font-medium">This follow-up was updated in another tab. Review the latest schedule before saving.</p><p className="text-xs text-muted-foreground">Latest saved time: {formatDateTime(staleDue)}. Your new time is kept below; nothing was saved.</p><div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => { baseDue.current = staleDue; setStaleDue(null); }}>Replace with my new time</Button><Button size="sm" variant="ghost" onClick={() => { setStaleDue(null); onOpenChange(false); }}>Keep latest</Button></div></div>}
         {!conflict && <DialogFooter><Button onClick={() => save()}>{rescheduleId ? "Reschedule" : "Schedule"}</Button></DialogFooter>}
       </DialogContent>
     </Dialog>
