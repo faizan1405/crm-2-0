@@ -136,27 +136,49 @@ function guarded<T extends object>(state: T, get: () => CRMState, set: (p: Parti
  *  Write failures (e.g. QuotaExceededError) never throw here: they are recorded so `atomic` can roll the action back. */
 let writeFailure: unknown = null;
 let rollingBack = false;
+/** Multi-tab safety: the exact serialized state this tab last read or wrote. If localStorage holds something else,
+ *  another tab saved since — memory is refreshed from storage before any action commits, so a stale tab never
+ *  writes its older whole-collection snapshot over newer records. */
+let lastKnownRaw: string | null = null;
+let syncing = false;
+const STORE_KEY = "scale-flow-crm-2-demo";
+const STORE_VERSION = 10;
 const guardedStorage = {
-  getItem: (k: string) => localStorage.getItem(k),
+  getItem: (k: string) => { const v = localStorage.getItem(k); if (k === STORE_KEY) lastKnownRaw = v; return v; },
   setItem: (k: string, v: string) => {
-    if (activePreview()) return;
-    try { localStorage.setItem(k, v); if (!rollingBack) recordSave(true, strBytes(v)); }
+    if (activePreview() || syncing) return;
+    try { localStorage.setItem(k, v); if (k === STORE_KEY) lastKnownRaw = v; if (!rollingBack) recordSave(true, strBytes(v)); }
     catch (e) { writeFailure = e; recordSave(false, strBytes(v), e); }
   },
   removeItem: (k: string) => { if (!activePreview()) localStorage.removeItem(k); },
 };
+/** Re-read the shared saved state; if another tab changed it, load it into memory (no write-back). Never during a preview. */
+export function syncFromStorage(): boolean {
+  if (activePreview() || typeof localStorage === "undefined") return false;
+  let raw: string | null;
+  try { raw = localStorage.getItem(STORE_KEY); } catch { return false; }
+  if (!raw || raw === lastKnownRaw) return false;
+  let parsed: { state?: Partial<CRMState>; version?: number };
+  try { parsed = JSON.parse(raw); } catch { return false; }
+  if (!parsed.state || parsed.version !== STORE_VERSION) return false;
+  syncing = true;
+  try { useCRM.setState(parsed.state as CRMState); } finally { syncing = false; }
+  lastKnownRaw = raw;
+  return true;
+}
 /** Background actions: on a failed save they roll back silently (status is still recorded) instead of throwing into timers/effects. */
 const BACKGROUND = new Set(["runAutomations", "recordGoalAlerts", "setViewPref", "setPerfPrefs", "logBackup"]);
 let atomicDepth = 0;
 /** Every action is all-or-nothing for durability: if any write during the outermost action failed, the in-memory
  *  state is restored to exactly what was last saved and a PersistError is thrown, so callers never report success
- *  and retries cannot duplicate records or events. */
+ *  and retries cannot duplicate records or events. Before running, the latest saved state from other tabs is loaded. */
 function atomic<T extends object>(state: T, get: () => CRMState, set: (s: CRMState, replace: true) => void): T {
   const out = { ...state } as Record<string, unknown>;
   for (const [name, fn] of Object.entries(state)) {
     if (typeof fn !== "function") continue;
     out[name] = (...args: unknown[]) => {
       if (atomicDepth > 0 || activePreview()) return (fn as (...a: unknown[]) => unknown)(...args);
+      syncFromStorage();
       const before = get(); writeFailure = null; atomicDepth++;
       let r: unknown;
       try { r = (fn as (...a: unknown[]) => unknown)(...args); } finally { atomicDepth--; }
