@@ -90,3 +90,13 @@ describe("D2.1 storage-failure safety", () => {
     expect(measureStorage({ length: 1, key: () => "ab", getItem: () => "cd" })).toEqual({ total: 8, keys: [{ key: "ab", bytes: 8 }] });
   });
 });
+
+import { recoveredFromFailure } from "./persistStatus";
+describe("D2.1.1 stale failure notice", () => {
+  it("clears the not-saved notice only when a save succeeds right after a failure", () => {
+    expect(recoveredFromFailure(false, true)).toBe(true);
+    expect(recoveredFromFailure(true, true)).toBe(false);
+    expect(recoveredFromFailure(null, true)).toBe(false);
+    expect(recoveredFromFailure(false, false)).toBe(false);
+  });
+});
