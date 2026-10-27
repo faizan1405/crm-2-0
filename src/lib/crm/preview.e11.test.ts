@@ -9,8 +9,8 @@ const d = {
   teamEvents: [ev({ eventId: "mine", relatedLeadId: "L1", newValues: { amount: 73_331 } }), ev({ eventId: "other", relatedLeadId: "L2", newValues: { amount: 91_919 } })],
   reminders: [{ id: "r1", leadId: "L1" }, { id: "r2", leadId: "L2" }] as never,
   assignmentEvents: [{ id: "a1", leadId: "L1", previousAssigneeId: null, newAssigneeId: "A" }, { id: "a2", leadId: "L2", previousAssigneeId: null, newAssigneeId: "B" }] as never,
-  goals: [{ id: "g1", status: "active", scope: "employee", employeeIds: ["A"], metric: "salesValue" }, { id: "g2", status: "active", scope: "employee", employeeIds: ["B"], metric: "callsLogged" }] as never,
-  employeeAccess: { A: {}, B: {} },
+  goals: [{ id: "g1", status: "active", scope: "employee", employeeIds: ["A"], metric: "salesValue" }, { id: "g2", status: "active", scope: "employee", employeeIds: ["B"], metric: "calls" }] as never,
+  employeeAccess: { A: {}, B: {} } as never,
 };
 const ids = new Set(["L1"]);
 
