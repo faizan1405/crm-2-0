@@ -1,5 +1,5 @@
 // Isolated Employee Workspace Preview: snapshot Owner data, swap in a scoped working copy, restore on exit.
-import { useCRM } from "./store";
+import { syncFromStorage, useCRM } from "./store";
 import { useSession, type PreviewSession } from "./session";
 import { resolve, leadsInScope, type Assignment, type Effective } from "./access";
 import { roleLabel, type Employee } from "./team";
@@ -62,4 +62,5 @@ export function exitPreview() {
   snapshot = null;
   if (snap) useCRM.setState(snap);
   useSession.setState({ preview: null, events: [] });
+  syncFromStorage(); // another tab may have saved while the preview ran — show the latest Owner records
 }

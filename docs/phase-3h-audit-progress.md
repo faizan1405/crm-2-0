@@ -374,3 +374,23 @@ Storage quota & multi-tab reliability · Owner quotation package content · phys
 - Not browser-run this round: E (project task — automated only), F (proof IndexedDB failure — covered by B1.5A.3 browser run and `proofRepo` tests), H (Data Vault — existing vault tests still pass). No 10,000-Lead claim.
 
 Open: D2.2 multi-tab conflicts, Pipeline progressive rendering, Owner quotation packages, real pointer drag, tag-filter clearing, security/privacy, accessibility/keyboard, final end-to-end, secure backend storage and restore.
+
+## Checkpoint D2.2.1 — Multi-tab Lead editing (2026-10-27)
+
+**Before.** One localStorage key holds the whole CRM and is rewritten in full on every change. Other tabs were refreshed only by the async `storage` event in Shell (notification, not protection). Risks: (1) the Lead edit form sent *every* field on save, so a tab opened earlier wrote its old phone/email back over a newer save; (2) a tab whose memory hadn't been refreshed yet could write its whole older collection over newer records; (3) after Employee Preview exit, memory held the pre-preview Owner snapshot even if another tab had saved meanwhile. No record revisions were checked.
+
+**Approach.** (a) `atomic` re-reads the saved blob before every outermost Owner action (`syncFromStorage`); if it differs from what this tab last read/wrote, memory is loaded from storage first (without writing back or creating events), so actions apply onto the latest records. (b) Record revision = `updatedAt`; `updateLead(id, patch, base)` throws `StaleRecordError` and writes nothing when the saved Lead changed since `base`. (c) The Lead edit form sends only the fields the user changed; while open it compares its starting revision to the live record and shows "This lead was updated in another tab. Review the latest changes before saving." with Review latest / Keep my draft (bring in newer untouched fields, keep typed ones) / Reload record. Save is blocked until one is chosen. (d) Preview exit re-syncs. Pure helpers in `crossTab.ts`.
+
+**Browser (one test browser, two real tabs, same origin, fresh synthetic dataset):**
+- A same Lead: Tab A saved phone 9876501234; stale Tab B changed priority → conflict notice, nothing saved (stored priority stayed hot), B's draft kept (cold). Review listed "Phone: +91 98765 43010 → 9876501234". Keep my draft → phone 9876501234 + priority cold; save stored both.
+- C unsaved draft: A typed company "Draft Co (unsaved)"; B saved email tabb@example.com → A showed the warning, draft kept, nothing saved by A; Reload record loaded company Bloom Interiors + new email.
+- B different Leads: lead_1 "Lead1 Co" and lead_2 "Lead2 Co" both stored.
+- Rapid alternating (3 rounds × 2 tabs): final values "rapid 2 …" on both Leads.
+- Refresh both tabs: correct values shown; 12 Leads, 12 unique ids; no page errors.
+- Automated only (not browser-run): new Lead while another tab saved, stale-tab assignment, preview isolation across tabs, no events from sync.
+
+**Tests.** 7 new (`crossTab.d221.test.ts`). **440 pass**, typecheck clean, production build OK.
+
+**Limitations.** localStorage has no cross-tab lock and actions are synchronous, so Web Locks can't wrap them; two saves landing in the same instant can still race (last write wins for that instant). Quick single-field controls (priority/stage selects, pin) apply onto the latest record without a conflict prompt — they don't send stale fields. Only the Lead edit form has the draft-conflict UI; tags, custom fields, notes and assignment rely on re-read-before-write. Not real multi-user sync.
+
+Open: D2.2.2 (finance, projects, follow-ups and other workflows across tabs), D2.1.1 browser scenarios (project task failed save, proof replacement failure, Data Vault after failed saves), Pipeline progressive rendering, Owner quotation packages, physical Pipeline drag, tag-filter clearing, security/accessibility, final end-to-end, real backend storage and restore.
