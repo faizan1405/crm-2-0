@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { runGuarded } from "@/components/crm/conflictFeedback";
 import { AlertTriangle, Briefcase, FolderKanban, LayoutGrid, ListChecks, Plus, Search, Settings2 } from "lucide-react";
 import { Shell, Empty, selectCls } from "@/components/crm/Shell";
 import { Button } from "@/components/ui/button";
@@ -179,20 +180,20 @@ function Board() {
   const [q, setQ] = useState(""), [who, setWho] = useState(""), [over, setOver] = useState<string | null>(null);
   const f = useProjectFilter(projects);
   const rows = f.out.filter((p) => (!q || `${p.name} ${p.clientName}`.toLowerCase().includes(q.toLowerCase())) && (!who || p.ownerId === who || p.memberIds.includes(who)));
-  const move = (id: string, stage: ProjectStage) => {
+  const move = (id: string, stage: ProjectStage, from?: ProjectStage) => {
     if (stage === "delivered") { toast.error("Record delivery from the project's Delivery tab — it checks the delivery checklist first."); return; }
-    const r = moveProjectStage(id, stage);
-    if (!r) return;
+    const g = runGuarded(() => moveProjectStage(id, stage, from));
+    const r = g?.value; if (!r) return;
     toast.success(`Moved to ${STAGE_TEXT[stage]}`, { action: { label: "Undo", onClick: () => { if (!undoProjectStage(id, r.from, r.version)) toast.error("Not undone — the project changed since."); } } });
   };
   return <div className="grid gap-3">
     <div className="pd-filters"><label className="relative min-w-[200px] flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search board" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" /></label><select aria-label="Assigned" className={selectCls} value={who} onChange={(e) => setWho(e.target.value)}><option value="">Anyone</option>{people.list.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select><TagFilter tag={f.tag} tags={f.tags} tab="board" /><MoreFilters adv={f.adv} setAdv={f.setAdv} /></div>
     <div className="pd-board scrollbar-thin" role="list" aria-label="Project board">
       {PROJECT_STAGES.map((s) => { const col = rows.filter((p) => p.stage === s); return <section key={s} role="listitem" aria-label={`${STAGE_TEXT[s]}: ${col.length}`} className="pd-col" data-over={over === s || undefined}
-        onDragOver={(e) => { if (canMove) { e.preventDefault(); setOver(s); } }} onDragLeave={() => setOver(null)} onDrop={(e) => { e.preventDefault(); setOver(null); const id = e.dataTransfer.getData("text/project"); if (id) move(id, s); }}>
+        onDragOver={(e) => { if (canMove) { e.preventDefault(); setOver(s); } }} onDragLeave={() => setOver(null)} onDrop={(e) => { e.preventDefault(); setOver(null); const id = e.dataTransfer.getData("text/project"); const from = (e.dataTransfer.getData("text/project-stage") || undefined) as ProjectStage | undefined; if (id) move(id, s, from); }}>
         <header className="pd-col-head"><span>{STAGE_TEXT[s]}</span><b className="num">{col.length}</b></header>
         <div className="grid gap-2">{col.map((p) => <div key={p.id}>
-          <ProjectCard p={p} tasks={projectTasks.filter((t) => t.projectId === p.id)} owner={people.name(p.ownerId)} today={today} draggable={canMove} onDragStart={(e) => e.dataTransfer.setData("text/project", p.id)} />
+          <ProjectCard p={p} tasks={projectTasks.filter((t) => t.projectId === p.id)} owner={people.name(p.ownerId)} today={today} draggable={canMove} onDragStart={(e) => { e.dataTransfer.setData("text/project", p.id); e.dataTransfer.setData("text/project-stage", p.stage); }} />
           {canMove && <select aria-label={`Stage for ${p.name}`} className={cn(selectCls, "mt-1 h-8 w-full text-xs")} value={p.stage} onChange={(e) => move(p.id, e.target.value as ProjectStage)}>{PROJECT_STAGES.map((x) => <option key={x} value={x} disabled={x === "delivered" && !p.delivery}>{STAGE_TEXT[x]}</option>)}</select>}
         </div>)}{col.length === 0 && <p className="px-1 py-4 text-center text-xs text-muted-foreground">Empty</p>}</div>
       </section>; })}
