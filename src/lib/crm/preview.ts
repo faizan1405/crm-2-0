@@ -6,10 +6,15 @@ import { roleLabel, type Employee } from "./team";
 import type { Deal, FollowUp, Lead, LeadActivity, Payment } from "./types";
 import type { QuotationShare } from "./studio";
 import { scopeProjectCustomization } from "./projectCustomize";
-import { scopeProjects, type Project, type ProjectMilestone, type ProjectTask, type SupportRequest } from "./projects";
+import { isOnProject, scopeProjects, type Project, type ProjectMilestone, type ProjectTask, type SupportRequest } from "./projects";
+import type { ActivityEvent } from "./activity";
+import type { AssignmentEvent, EmployeeAccess } from "./access";
+import type { Reminder } from "./automation";
+import { goalsFor, visibleGoal, type GoalDef, type GoalRevision } from "./performance";
+import type { InboxMeta, LeadRelation } from "./inbox";
 import { scopeCustomization, viewAllowed, type CustomFieldDef, type FieldValues, type LeadTags, type SavedView } from "./customize";
 
-interface ScopeInput { leads: Lead[]; followUps: FollowUp[]; activities: LeadActivity[]; deals: Deal[]; payments: Payment[]; quotationShares: QuotationShare[]; assignments: Record<string, Assignment>; customFields?: CustomFieldDef[]; fieldValues?: FieldValues; leadTags?: LeadTags; savedViews?: SavedView[]; projects?: Project[]; projectTasks?: ProjectTask[]; projectMilestones?: ProjectMilestone[]; supportRequests?: SupportRequest[]; projectFields?: CustomFieldDef[]; projectFieldValues?: FieldValues; projectTags?: LeadTags }
+interface ScopeInput { leads: Lead[]; followUps: FollowUp[]; activities: LeadActivity[]; deals: Deal[]; payments: Payment[]; quotationShares: QuotationShare[]; assignments: Record<string, Assignment>; customFields?: CustomFieldDef[]; fieldValues?: FieldValues; leadTags?: LeadTags; savedViews?: SavedView[]; projects?: Project[]; projectTasks?: ProjectTask[]; projectMilestones?: ProjectMilestone[]; supportRequests?: SupportRequest[]; projectFields?: CustomFieldDef[]; projectFieldValues?: FieldValues; projectTags?: LeadTags; teamEvents?: ActivityEvent[]; reminders?: Reminder[]; assignmentEvents?: AssignmentEvent[]; goals?: GoalDef[]; goalRevisions?: GoalRevision[]; inboxMeta?: Record<string, InboxMeta>; leadRelations?: Record<string, LeadRelation>; employeeAccess?: Record<string, EmployeeAccess> }
 
 export const FINANCE_REDACTED = "Finance update (details hidden — no finance access)";
 
@@ -37,8 +42,34 @@ export function scopeWorkspace(d: ScopeInput, employeeId: string, eff: Effective
       const pc = scopeProjectCustomization(d.projectFields ?? [], d.projectFieldValues ?? {}, d.projectTags ?? {}, new Set(sp.projects.map((p) => p.id)), { owner: false, employeeId, canEdit: eff.can("projects.edit") });
       return { ...sp, ...pc };
     })(),
+    ...scopeSecondary(d, employeeId, ids, money),
     automationRules: [], automationRuns: [],
     notes: [], bin: [], callOps: [], briefingDone: [], legacyQuotations: [], backupHistory: [], assignmentRules: [], firedRules: [],
+  };
+}
+
+const pick = <V,>(m: Record<string, V> | undefined, keep: (k: string, v: V) => boolean) => Object.fromEntries(Object.entries(m ?? {}).filter(([k, v]) => keep(k, v)));
+const FINANCE_ENTITY = new Set(["deal", "payment"]);
+
+/** Pure (E1.1): secondary data that would otherwise reach the preview unfiltered — Owner activity, reminders, assignments, goals, analytics. */
+export function scopeSecondary(d: ScopeInput, employeeId: string, ids: Set<string>, money: boolean) {
+  const projectIds = new Set((d.projects ?? []).filter((p) => isOnProject(p, employeeId)).map((p) => p.id));
+  const goals = goalsFor(d.goals ?? [], employeeId).filter((g) => visibleGoal(g, money));
+  const goalIds = new Set(goals.map((g) => g.id));
+  return {
+    // Only events about this employee or their in-scope records; amounts/old values stripped from money events without finance access.
+    teamEvents: (d.teamEvents ?? [])
+      .filter((e) => e.actorUserId === employeeId || e.targetEmployeeId === employeeId || (e.relatedLeadId != null && ids.has(e.relatedLeadId)) || (e.entityType === "project" && projectIds.has(e.entityId)))
+      .map((e): ActivityEvent => { if (money || !(FINANCE_ENTITY.has(e.entityType) || e.module === "finance")) return e; const { oldValues: _o, newValues: _n, ...rest } = e; return rest; }),
+    reminders: (d.reminders ?? []).filter((r) => (r.leadId !== "" && ids.has(r.leadId)) || (r.projectId != null && projectIds.has(r.projectId))),
+    assignments: pick(d.assignments, (k) => ids.has(k)),
+    assignmentEvents: (d.assignmentEvents ?? []).filter((e) => ids.has(e.leadId) && (e.previousAssigneeId === employeeId || e.newAssigneeId === employeeId)),
+    goals, goalRevisions: (d.goalRevisions ?? []).filter((r) => goalIds.has(r.goalId)), goalAlerts: [],
+    inboxMeta: pick(d.inboxMeta, (k) => ids.has(k)),
+    leadRelations: pick(d.leadRelations, (_k, r) => ids.has(r.a) && ids.has(r.b)),
+    employeeAccess: pick(d.employeeAccess, (k) => k === employeeId),
+    // Analytics Studio is Owner-only: no saved reports, forecast history or expected-close dates in the employee copy.
+    savedReports: [], forecastHistory: [], expectedClose: {},
   };
 }
 

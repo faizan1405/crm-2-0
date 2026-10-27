@@ -502,3 +502,23 @@ Still open: Task assignee and due-date cross-tab conflict protection; Pipeline l
 - Not browser-tested: employee package permissions and preview (existing `quotations.manage`/`quotations.use`/`clients.whatsapp` guards and earlier tests); real storage-full during package save (shared `atomic` protection).
 - Tests 473 pass (2 new), typecheck clean, production build OK.
 - Still open: security/privacy; keyboard/accessibility; final end-to-end acceptance; cross-tab atomicity + server-enforced access in the backend; real full-data restore.
+
+## Checkpoint E1.1 — Security, permissions & sensitive-data privacy (partial)
+
+**Method:** compared every store action against the preview `GUARDS` table and every CRM state key against what `scopeWorkspace` replaces in the employee copy.
+
+**Actions:** all business mutations are guarded. Unguarded: `setNotifyPrefs`, `markNotificationRead`, `markAllNotificationsRead`, `ingestEvents`, `toggleBriefing`, `resetBriefing`, `preferences`. These are preference or read-state changes only, and preview writes never reach storage.
+
+**Defect found and fixed (Medium/High — exposure through secondary data):** the employee preview copy still held the Owner's full data for these: `teamEvents` (including payment amounts in `newValues` for every lead), `reminders`, `assignments`, `assignmentEvents`, `goals`/`goalRevisions`/`goalAlerts`, `inboxMeta`, `leadRelations`, `employeeAccess`, `savedReports`, `forecastHistory` and `expectedClose`. The screens didn't show them, but any page or selector reading them could. The new pure `scopeSecondary` in `preview.ts` filters these to the employee's in-scope leads and projects. It strips old/new values from deal and payment events when the employee lacks finance-amount access, keeps only the employee's own visible goals, and empties the Owner-only analytics data.
+
+**Browser (test browser, synthetic data, Employee A Salesperson, finance none):** Owner payment events with ₹73,331 (assigned lead) and ₹91,919 (unassigned lead), plus saved report "QA Secret Report 55511". In preview memory: only the assigned lead's event remained, with no amount; the other event and the report were absent. My Performance showed neither amount. Analytics didn't show the report. The unassigned lead didn't open through `?lead=`. Owner storage was byte-identical afterwards and the Owner's 2 events and 1 report were back. No page errors.
+
+**Automated:** `preview.e11.test.ts` (5 tests).
+
+**Not done in E1.1 yet:** Parts 2, 5, 6 and 7 rerun individually for Employees B and C, deactivated-employee and revoked-permission reruns, proof-preview and Data Vault direct-action reruns in the browser. Earlier B1.6 results cover these, but they were not repeated here.
+
+**Open risks (frontend-only architecture):** Owner data and the employee preview share one browser origin and localStorage. Anyone using this browser can read everything with developer tools. Permissions are UI and store checks, not real authorization. Backups aren't encrypted. Real enforcement requires the future secure backend.
+
+**Results:** 478 tests pass (473 + 5), typecheck clean, production build OK.
+
+Outstanding: Owner quotation-package manual check; E1.2 input/injection checks; E2 accessibility; F final end-to-end; secure backend authorization, atomic transactions, central data, real restore.
