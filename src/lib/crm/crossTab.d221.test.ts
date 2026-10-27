@@ -15,6 +15,7 @@ beforeEach(() => {
   localStorage.clear(); useCRM.getState().reset();
   // make sure something is saved so both "tabs" share one blob
   useCRM.getState().addActivity(useCRM.getState().leads[0]!.id, "seed", "note");
+  useCRM.getState().addEmployee({ name: "D221 Emp", email: "d221@example.com", roleId: "sales", accountStatus: "active" } as never);
 });
 
 describe("D2.2.1 multi-tab safety", () => {
@@ -60,7 +61,7 @@ describe("D2.2.1 multi-tab safety", () => {
     expect(syncFromStorage()).toBe(false); // nothing new
   });
   it("preview never loads or writes Owner storage, and exit shows the other tab's newer save", () => {
-    const emp = useCRM.getState().employees.find((e) => e.status === "active")!;
+    const emp = useCRM.getState().employees[0]!;
     startPreview(emp);
     otherTabSaves((s) => { s.leads[0].company = "Owner Tab"; });
     const raw = localStorage.getItem(KEY);
