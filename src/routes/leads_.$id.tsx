@@ -1,4 +1,5 @@
 import { WhatsAppButton } from "@/components/crm/WhatsAppComposer";
+import { runFollowUp, runVoid } from "@/components/crm/conflictFeedback";
 import { openCallLog } from "@/components/crm/PostCallDialog";
 import { CallButton } from "@/components/crm/CallButton";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -114,7 +115,7 @@ function LeadDetail() {
               {fus.map((f) => (
                 <li key={f.id} className="flex items-center justify-between gap-2 rounded-lg border p-2.5 text-sm">
                   <div><div className={f.completedAt || f.cancelledAt ? "text-muted-foreground line-through" : "font-medium"}>{FOLLOWUP_LABEL[f.type]} · {formatDateTime(f.dueAt)}{f.cancelledAt ? " · replaced" : f.completedAt ? " · done" : ""}</div>{f.note && <div className="text-xs text-muted-foreground">{f.note}</div>}</div>
-                  {!f.completedAt && !f.cancelledAt && <Button size="sm" variant="ghost" aria-label="Complete" onClick={() => { completeFollowUp(f.id); toast.success("Follow-up completed"); }}><Check className="size-4" /></Button>}
+                  {!f.completedAt && !f.cancelledAt && <Button size="sm" variant="ghost" aria-label="Complete" onClick={() => runFollowUp(() => completeFollowUp(f.id, f.dueAt))}><Check className="size-4" /></Button>}
                 </li>
               ))}
             </ul>

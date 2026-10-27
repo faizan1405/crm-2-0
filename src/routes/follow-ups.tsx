@@ -1,4 +1,5 @@
 import { followUpBucket, isPending, activeFollowUp } from "@/lib/crm/followups";
+import { runFollowUp, runVoid } from "@/components/crm/conflictFeedback";
 import { RemindersPanel } from "@/components/automation/RemindersPanel";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -86,9 +87,9 @@ function FollowUps() {
                     <Button size="sm" variant="outline" className="rounded-full" onClick={() => openCallLog(l.id, "Follow-ups")}><NotebookPen className="size-3.5" />Log call</Button>
                     <WhatsAppButton leadId={l.id} name={l.name} source="Follow-ups" label />
                     <Button size="sm" variant="ghost" className="rounded-full" onClick={() => setResched(f)}><CalendarSync className="size-3.5" />Reschedule</Button>
-                    <Button size="sm" variant="ghost" className="rounded-full" disabled={busy === f.id} onClick={() => once(f.id, () => { rescheduleFollowUp(f.id, tomorrowSameTime(f.dueAt)); toast.success(`Moved to tomorrow, ${timeOnly(f.dueAt)}`); })}><SunMedium className="size-3.5" />Tomorrow {timeOnly(f.dueAt)}</Button>
+                    <Button size="sm" variant="ghost" className="rounded-full" disabled={busy === f.id} onClick={() => once(f.id, () => { runFollowUp(() => rescheduleFollowUp(f.id, tomorrowSameTime(f.dueAt), f.dueAt), `Moved to tomorrow, ${timeOnly(f.dueAt)}`); })}><SunMedium className="size-3.5" />Tomorrow {timeOnly(f.dueAt)}</Button>
                     <Button size="sm" variant="ghost" className="rounded-full" onClick={() => setInspect(l.id)}><PanelRightOpen className="size-3.5" />View</Button>
-                    <Button size="sm" className="ml-auto rounded-full" disabled={busy === f.id} onClick={() => once(f.id, () => { completeFollowUp(f.id); toast.success("Follow-up completed"); })}><Check className="size-3.5" />Complete</Button>
+                    <Button size="sm" className="ml-auto rounded-full" disabled={busy === f.id} onClick={() => once(f.id, () => { runFollowUp(() => completeFollowUp(f.id, f.dueAt)); })}><Check className="size-3.5" />Complete</Button>
                   </div>
                 )}
               </article>

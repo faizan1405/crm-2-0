@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { runFollowUp, runVoid } from "@/components/crm/conflictFeedback";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Plus, Wallet, ArrowDownLeft, FolderKanban } from "lucide-react";
@@ -168,7 +169,7 @@ function PaymentRow({ id, proof }: { id: string; proof?: import("@/lib/crm/attac
           : <button type="button" disabled={busy} onClick={picker.open} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"><Paperclip className="size-3" />{busy ? "Saving…" : "Add proof"}</button>}</span>
         {view && proof && <PaymentProofPreview paymentId={id} meta={proof} title={`${formatINR(p.amount)} · ${p.method}`} onClose={() => setView(false)} />}
       </span>
-      <span className="flex items-center gap-2"><span className="num">{formatINR(p.amount)}</span>{!p.voided && <Button size="sm" variant="ghost" className="text-xs text-muted-foreground hover:text-destructive" onClick={() => { if (window.confirm("Void this payment?")) { voidPayment(p.id); toast.success("Payment voided"); } }}>Void</Button>}</span>
+      <span className="flex items-center gap-2"><span className="num">{formatINR(p.amount)}</span>{!p.voided && <Button size="sm" variant="ghost" className="text-xs text-muted-foreground hover:text-destructive" onClick={() => { if (window.confirm("Void this payment?")) { runVoid(() => voidPayment(p.id)); } }}>Void</Button>}</span>
     </li>
   );
 }
@@ -195,7 +196,7 @@ function PaymentDialog({ deal, onClose }: { deal: Deal; onClose: () => void }) {
     if (n > out) { toast.error(`Amount exceeds the ${formatINR(out)} outstanding`); return; }
     const pid = `payment_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
     const saved = addPayment({ dealId: deal.id, amount: n, date, method, type: n === out ? "final" : type, ...(ref ? { reference: ref } : {}) }, pid);
-    if (!saved) { toast.error("Payment could not be recorded; check the balance and date"); return; }
+    if (!saved) { const st = useCRM.getState(); const latest = st.deals.find((d) => d.id === deal.id); toast.error(!latest || n > dealOutstanding(latest, st.payments) ? "This payment was changed in another tab. Reload the latest information before continuing." : "Payment could not be recorded; check the balance and date"); return; }
     toast.success(`${formatINR(n)} recorded for ${deal.clientName}`);
     if (proof) {
       setSaving(true); const ok = await saveProof(pid, proof); setSaving(false);
