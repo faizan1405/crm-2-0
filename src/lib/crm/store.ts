@@ -9,7 +9,7 @@ import type { ParsedLead } from "./parse";
 import { isPending, activeFollowUp } from "./followups";
 import { isConnectedOutcome, outcomeQuick, type CallOutcome } from "./calllog";
 import { PersistError, recordSave, strBytes, notifyPersistFailure } from "./persistStatus";
-import { revisionOf, StaleRecordError, type VoidResult, type FollowUpResult } from "./crossTab";
+import { revisionOf, StaleRecordError, type VoidResult, type FollowUpOutcome } from "./crossTab";
 
 export type FollowUpResult = { ok: true; id: string } | { ok: false; conflict?: FollowUp; error?: string };
 export interface CallLogInput {
@@ -251,8 +251,8 @@ interface CRMState extends Prefs, ProjectSlice, ProjectCustomSlice, AnalyticsSli
   /** Returns an explanation when undo is not safe, else undefined. */
   undoCall: (opId: string) => string | undefined;
   /** `baseDue` = due time the user saw; if the follow-up was rescheduled since, throws StaleRecordError (nothing saved). */
-  completeFollowUp: (id: string, baseDue?: string) => FollowUpResult;
-  rescheduleFollowUp: (id: string, date: string, baseDue?: string) => FollowUpResult;
+  completeFollowUp: (id: string, baseDue?: string) => FollowUpOutcome;
+  rescheduleFollowUp: (id: string, date: string, baseDue?: string) => FollowUpOutcome;
   saveNote: (note: Note) => void;
   deleteNote: (id: string) => void;
   toggleBriefing: (key: string) => void;

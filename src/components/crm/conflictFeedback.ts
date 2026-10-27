@@ -1,9 +1,9 @@
 import { toast } from "sonner";
-import { followUpFeedback, voidFeedback, isStaleError, type FollowUpResult, type VoidResult } from "@/lib/crm/crossTab";
+import { followUpFeedback, voidFeedback, isStaleError, type FollowUpOutcome, type VoidResult } from "@/lib/crm/crossTab";
 import { isPersistError } from "@/lib/crm/persistStatus";
 
 /** Runs a follow-up action and shows exactly one honest message. Returns true only when the change was saved. */
-export function runFollowUp(run: () => FollowUpResult, successText?: string): boolean {
+export function runFollowUp(run: () => FollowUpOutcome, successText?: string): boolean {
   try {
     const fb = followUpFeedback(run());
     if (fb.ok) toast.success(successText ?? fb.text); else toast.warning(fb.text);

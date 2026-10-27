@@ -32,9 +32,9 @@ export function rebaseDraft(start: Form, draft: Form, latest: Form): Form {
 
 export type VoidResult = "voided" | "already" | "missing" | undefined;
 /** undefined = refused (e.g. no permission in Employee Preview). */
-export type FollowUpResult = "completed" | "rescheduled" | "already" | "closed" | "missing" | "invalid" | undefined;
+export type FollowUpOutcome = "completed" | "rescheduled" | "already" | "closed" | "missing" | "invalid" | undefined;
 /** One feedback line per outcome, so the UI never shows success for an action that did not happen. */
-export function followUpFeedback(r: FollowUpResult): { ok: boolean; text: string } {
+export function followUpFeedback(r: FollowUpOutcome): { ok: boolean; text: string } {
   switch (r) {
     case "completed": return { ok: true, text: "Follow-up completed" };
     case "rescheduled": return { ok: true, text: "Follow-up rescheduled" };
