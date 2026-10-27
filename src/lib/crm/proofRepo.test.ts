@@ -66,3 +66,22 @@ describe("payment proof repository", () => {
     expect(friendlyStorageError({ name: "QuotaExceededError" })).toMatch(/storage is full/);
   });
 });
+
+describe("E1.1B proofs during an employee preview", () => {
+  it("never writes or removes files and hides proofs of payments outside the employee copy", async () => {
+    const { useSession } = await import("./session");
+    for (const m of await repo.list()) await repo.remove(m.paymentId);
+    await repo.put("mine", png(1), "a.png", "image/png");
+    await repo.put("other", png(2), "b.png", "image/png");
+    useCRM.setState({ payments: [{ id: "mine", dealId: "d", amount: 1, date: "2026-10-01", method: "UPI", type: "advance" }] });
+    useSession.setState({ preview: { employeeId: "e", name: "E", roleLabel: "S", allowed: [], leadScope: "assigned", finance: "amounts", startedAt: "" } });
+    try {
+      await expect(repo.put("mine", png(9), "x.png", "image/png")).rejects.toThrow(/employee preview/);
+      await expect(repo.remove("mine")).rejects.toThrow(/employee preview/);
+      expect((await repo.list()).map((m) => m.paymentId)).toEqual(["mine"]);
+      expect(await repo.get("other")).toBeNull();
+    } finally { useSession.setState({ preview: null }); }
+    expect((await bytes((await repo.get("mine"))!.blob)).at(-1)).toBe(1);
+    expect((await bytes((await repo.get("other"))!.blob)).at(-1)).toBe(2);
+  });
+});

@@ -158,6 +158,7 @@ function PaymentRow({ id, proof }: { id: string; proof?: import("@/lib/crm/attac
   const p = payments.find((x) => x.id === id);
   const [view, setView] = useState(false);
   const [busy, setBusy] = useState(false);
+  const previewActive = !!useSession((st) => st.preview);
   const picker = useProofPicker(async (s) => { setBusy(true); if (await saveProof(id, s)) toast.success("Proof attached"); setBusy(false); });
   if (!p) return null;
   return (
@@ -166,7 +167,7 @@ function PaymentRow({ id, proof }: { id: string; proof?: import("@/lib/crm/attac
         {picker.input}
         <span className="mt-1 block no-underline" style={{ textDecoration: "none" }}>{proof
           ? <button type="button" onClick={() => setView(true)} className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-medium text-success hover:underline"><Paperclip className="size-3" />View proof</button>
-          : <button type="button" disabled={busy} onClick={picker.open} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"><Paperclip className="size-3" />{busy ? "Saving…" : "Add proof"}</button>}</span>
+          : !previewActive && <button type="button" disabled={busy} onClick={picker.open} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"><Paperclip className="size-3" />{busy ? "Saving…" : "Add proof"}</button>}</span>
         {view && proof && <PaymentProofPreview paymentId={id} meta={proof} title={`${formatINR(p.amount)} · ${p.method}`} onClose={() => setView(false)} />}
       </span>
       <span className="flex items-center gap-2"><span className="num">{formatINR(p.amount)}</span>{!p.voided && <Button size="sm" variant="ghost" className="text-xs text-muted-foreground hover:text-destructive" onClick={() => { if (window.confirm("Void this payment?")) { runVoid(() => voidPayment(p.id)); } }}>Void</Button>}</span>

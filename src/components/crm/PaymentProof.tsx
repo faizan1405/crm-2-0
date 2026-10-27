@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { checkProofFile, formatBytes, proofLabel, type ProofKind, type ProofMeta } from "@/lib/crm/attachments";
 import { idbProofRepo, friendlyStorageError } from "@/lib/crm/proofRepo";
+import { useAccess } from "@/lib/crm/session";
 
 export interface StagedProof { file: File; type: ProofKind }
 
@@ -83,6 +84,8 @@ export function PaymentProofPreview({ paymentId, meta, title, onClose }: { payme
     catch (e) { toast.error(friendlyStorageError(e)); setBusy(false); }
   };
   const isPdf = meta.mimeType === "application/pdf";
+  const { preview, can } = useAccess();
+  const canDownload = can("proofs.download");
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-2xl">
@@ -95,7 +98,7 @@ export function PaymentProofPreview({ paymentId, meta, title, onClose }: { payme
           {state === "loading" && <span className="text-sm text-muted-foreground">Loading…</span>}
           {state === "missing" && <span className="p-6 text-center text-sm text-muted-foreground">This file couldn't be found in this browser. Replace it or remove the proof.</span>}
           {state === "ready" && url && (isPdf
-            ? <div className="grid place-items-center gap-3 p-8 text-center"><FileText className="size-10 text-muted-foreground" /><span className="text-sm">PDF document</span><Button asChild variant="outline" className="rounded-full"><a href={url} download={meta.originalFileName}><Download className="size-4" />Download PDF</a></Button></div>
+            ? <div className="grid place-items-center gap-3 p-8 text-center"><FileText className="size-10 text-muted-foreground" /><span className="text-sm">PDF document</span>{canDownload ? <Button asChild variant="outline" className="rounded-full"><a href={url} download={meta.originalFileName}><Download className="size-4" />Download PDF</a></Button> : <span className="text-xs text-muted-foreground">Downloading isn't allowed for this employee.</span>}</div>
             : <img src={url} alt={`Payment proof for ${title}`} className="max-w-none transition-[width]" style={{ width: `${zoom * 100}%` }} />)}
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -103,13 +106,13 @@ export function PaymentProofPreview({ paymentId, meta, title, onClose }: { payme
             {!isPdf && state === "ready" && <>
               <Button size="icon" variant="ghost" aria-label="Zoom out" disabled={zoom <= 1} onClick={() => setZoom((z) => Math.max(1, z - 0.5))}><ZoomOut className="size-4" /></Button>
               <Button size="icon" variant="ghost" aria-label="Zoom in" disabled={zoom >= 3} onClick={() => setZoom((z) => Math.min(3, z + 0.5))}><ZoomIn className="size-4" /></Button>
-              {url && <Button asChild size="icon" variant="ghost" aria-label="Download"><a href={url} download={meta.originalFileName}><Download className="size-4" /></a></Button>}
+              {url && canDownload && <Button asChild size="icon" variant="ghost" aria-label="Download"><a href={url} download={meta.originalFileName}><Download className="size-4" /></a></Button>}
             </>}
           </div>
-          <div className="flex gap-2">
+          {!preview && <div className="flex gap-2">
             <Button variant="outline" disabled={busy} onClick={picker.open}><RefreshCw className="size-4" />Replace</Button>
             <Button variant="ghost" disabled={busy} className="text-destructive" onClick={remove}><Trash2 className="size-4" />Remove</Button>
-          </div>
+          </div>}
         </div>
         <p className="text-xs text-muted-foreground">Proof is supporting evidence only — it never changes amounts or balances. Saved in this browser only.</p>
       </DialogContent>

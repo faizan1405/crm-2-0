@@ -522,3 +522,17 @@ Still open: Task assignee and due-date cross-tab conflict protection; Pipeline l
 **Results:** 478 tests pass (473 + 5), typecheck clean, production build OK.
 
 Outstanding: Owner quotation-package manual check; E1.2 input/injection checks; E2 accessibility; F final end-to-end; secure backend authorization, atomic transactions, central data, real restore.
+
+## Checkpoint E1.1B — Remaining real-browser security checks (done)
+Real test browser, isolated synthetic data (E11B employees A–D, deals ₹73,331 / ₹91,919 / ₹55,555, two PNG proofs, two projects, one Owner note). Previews started through the real `/team/preview/:id` route; pages opened through the app router.
+- **Employee B view-only — Passed.** Exactly 2 assigned leads; 0 deals/payments/notes/projects in the copy; no amounts in team events; lead edit, client note and tag writes refused; another employee's lead link showed not found; /deals blocked; Owner note absent.
+- **Employee C projects/finance — Passed.** Only "E11B Project C"; 0 deals/payments; other project link and amount hidden; /deals blocked.
+- **Deactivated employee — Passed after fix.** Preview of an inactive employee is blocked ("is deactivated", no session). Defect: a preview opened before the Owner deactivated the employee in another tab still accepted actions in the working copy. Fixed: the store guard re-reads the Owner's saved employee status before every outermost preview action and refuses all actions once inactive/archived. Saved Owner data unchanged.
+- **Revoked permissions — Passed.** After removing C's project permissions and A's deals.view, reopened previews: C saw 0 projects, project note refused, project page blocked; A saw 0 deals/payments and /deals blocked.
+- **Payment-proof access — Passed after fix.** Defect (High): in a preview, Replace/Remove/Add proof wrote straight to the Owner's real proof storage — even for a payment outside the employee's scope — and Download ignored `proofs.download`. Fixed in `idbProofRepo`: writes/removals throw `PROOF_PREVIEW_DENIED` during a preview, and list/get return only proofs of payments in the scoped copy; the UI hides Replace/Remove/Add proof in a preview and shows Download only with `proofs.download`. Rerun: proof dialog showed only zoom + Close, both direct saves refused, proof files byte-identical.
+- **Data Vault — Passed.** /data-vault blocked in preview; direct `buildBackup` as salesperson/custom denied; Owner data unchanged.
+- **Cross-preview isolation — Passed.** A (3 leads, edited one) → switched straight to B: 2 leads, 0 deals; after exit Owner storage and proof files identical.
+- Harness notes: an earlier run read a stale code copy after a live reload and one step ran as Owner without a preview; those results were discarded and the steps rerun correctly.
+- Tests 480 pass (2 new), typecheck clean, production build OK. No page errors.
+- Limits: all checks are in-browser rules, not real security; the backend must enforce the same.
+- Still open: Owner quotation packages; E1.2 input/injection; E2 accessibility; F end-to-end; secure backend.
