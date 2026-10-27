@@ -1,4 +1,5 @@
 import { WhatsAppButton } from "@/components/crm/WhatsAppComposer";
+import { runFollowUp, runVoid } from "@/components/crm/conflictFeedback";
 import { isPending, followUpBucket } from "@/lib/crm/followups";
 import { CallButton } from "@/components/crm/CallButton";
 import { openCallLog } from "@/components/crm/PostCallDialog";
@@ -132,7 +133,7 @@ function Dashboard() {
               {t.leadId && <button type="button" className="cc-act hidden sm:grid" title="Log call" aria-label={`Log call with ${t.title}`} onClick={() => openCallLog(t.leadId!, "Dashboard")}><NotebookPen /></button>}
               {t.phone && t.leadId && <WhatsAppButton leadId={t.leadId} name={t.title} source="Dashboard" className="cc-act hidden sm:grid" />}
               {t.followUpId && <button type="button" className="cc-act" title="Reschedule" aria-label={`Reschedule ${t.title}`} onClick={() => setResched({ leadId: t.leadId!, id: t.followUpId! })}><CalendarSync /></button>}
-              {t.followUpId && <button type="button" className="cc-act" title="Complete follow-up" aria-label={`Complete ${t.title}`} onClick={() => { completeFollowUp(t.followUpId!); toast.success("Follow-up completed"); }}><Check /></button>}
+              {t.followUpId && <button type="button" className="cc-act" title="Complete follow-up" aria-label={`Complete ${t.title}`} onClick={() => runFollowUp(() => completeFollowUp(t.followUpId!, followUps.find((x) => x.id === t.followUpId)?.dueAt))}><Check /></button>}
               {t.kind === "money" && <Link to="/deals" className="cc-act" title="Open Deals & Payments" aria-label={`Open payments for ${t.title}`}><ArrowUpRight /></Link>}
             </div>
           </li>; })}
