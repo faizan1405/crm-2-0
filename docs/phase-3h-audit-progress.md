@@ -473,3 +473,15 @@ Failure injection:
 Quality gates: 459 tests pass (1 new), typecheck clean, production build OK.
 
 Still open: Task assignee and due-date cross-tab conflict protection; Pipeline long-column rendering; real Owner quotation package verification; real mouse Pipeline drag; tag-filter clearing browser regression; security and privacy audit; accessibility and keyboard testing; final end-to-end acceptance; future secure Hostinger persistence, atomic transactions and real restoration.
+
+## Checkpoint D3.1 — Pipeline performance & real drag (done)
+- Bottlenecks found: every lead's card mounted at once (≈5,000 at 5k leads); each stage re-filtered and re-sorted all leads several times per render; every card re-rendered on any click (inspector, move, show more). Remaining cost on a stage change is the full browser-storage save/re-read of the CRM (persistence architecture unchanged by design).
+- Changes: `groupByStage` (one pass), `visibleCards` + `PIPE_BATCH = 40` in `pipeline.ts`; per-stage "Showing X of Y leads · Show N more" at the column bottom; the dragged card and the selected (`?lead=`) card stay mounted even beyond the batch; memoized `Ticket` with stable handlers. Stage counts, values, flags and KPIs still use all leads.
+- Filters/search: the Pipeline page has no filter or search controls today, so Part 3 had nothing to test there; deep-link `?lead=` to card #4995 opened and mounted it correctly.
+- Measured (test browser, dev server, isolated synthetic leads, median of 3): 1,000 leads load 2.2 s → 1.76 s; 5,000 leads 6.8 s → 2.36 s; 240 cards mounted at both sizes. 5k: Show more 0.74 s, inspector 0.62 s, stage change 0.99 s, scroll 0.04 s. 1k: 0.50 / 0.39 / 0.30 / 0.07 s.
+- Integrity at 5,000: stored 5,000 unique ids; on-screen stage counts equal stored totals; Show more ×3 → 160 unique cards, no duplicates; no page errors.
+- Real mouse drag (page.mouse down/move/up, no dispatched events): card moved New → Qualified once, one status history entry, Undo returned it to New.
+- Responsive 1440/1024/768/390/360: no page-level horizontal overflow, Show more visible and usable.
+- Not browser-tested this round: employee without stage permission dragging (covered by existing guard + `canMove`), cross-tab stale stage (existing tests).
+- Tests 463 pass (4 new), typecheck clean, production build OK.
+- Still open: task assignee/due-date multi-tab conflicts; Owner quotation packages; tag-filter clearing; security/privacy; accessibility/keyboard; final Lead→Deal→Payment→Project→Delivery→Support acceptance; future secure Hostinger backend and restore.

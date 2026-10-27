@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { AlertTriangle, ArrowUpRight, CalendarPlus, ChevronLeft, ChevronRight, Clock, Flame, Gem, NotebookPen, PhoneCall, X } from "lucide-react";
@@ -14,7 +14,7 @@ import { useCRM } from "@/lib/crm/store";
 import { useAccess, STAGE_DENIED } from "@/lib/crm/session";
 import { formatINR, formatINRCompact, formatDateTime, relative } from "@/lib/crm/format";
 import { dealCollected, dealOutstanding } from "@/lib/crm/finance";
-import { canUndoStage, cardSignals, isOpen, stageSummary, STALL_DAYS } from "@/lib/crm/pipeline";
+import { canUndoStage, cardSignals, groupByStage, isOpen, PIPE_BATCH, stageSummary, STALL_DAYS, visibleCards, type CardSignals } from "@/lib/crm/pipeline";
 import { LEAD_STATUSES, STATUS_LABEL, type Lead, type LeadStatus } from "@/lib/crm/types";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +45,8 @@ function Pipeline() {
   const [pendingLost, setPendingLost] = useState<string | null>(null);
   const [fuFor, setFuFor] = useState<string | null>(null);
   const [pulse, setPulse] = useState<string | null>(null);
+  const [limits, setLimits] = useState<Partial<Record<LeadStatus, number>>>({});
+  const byStage = useMemo(() => groupByStage(leads, LEAD_STATUSES), [leads]);
   const now = useMemo(() => new Date(), [leads, followUps, activities]); // eslint-disable-line react-hooks/exhaustive-deps
   const select = (id: string | undefined) => navigate({ search: id ? { lead: id } : {}, replace: true, resetScroll: false });
   const sel = leads.find((l) => l.id === selected);
@@ -74,6 +76,15 @@ function Pipeline() {
     setPulse(lead.id); setTimeout(() => setPulse((p) => (p === lead.id ? null : p)), 900);
     toast.success(`${lead.name} → ${STATUS_LABEL[patch.status!]}`, { action: { label: "Undo", onClick: () => { const cur = useCRM.getState().leads.find((l) => l.id === lead.id); if (!applied || !canUndoStage(cur, applied)) { toast.warning(`${lead.name} changed since this move — Undo skipped, newer change kept`); return; } updateLead(lead.id, before); toast(`${lead.name} back in ${STATUS_LABEL[before.status]}`); } } });
   };
+  const latest = useRef({ move, select });
+  latest.current = { move, select };
+  const handlers = useMemo<TicketHandlers>(() => ({
+    dragStart: (id) => { dragAt.current = Date.now(); setDragging(id); },
+    dragEnd: () => { dragAt.current = Date.now(); setDragging(null); setOver(null); },
+    click: (id) => { if (Date.now() - dragAt.current < 250) return; latest.current.select(id); },
+    select: (id) => latest.current.select(id),
+    move: (id, st) => latest.current.move(id, st),
+  }), []);
   const open = leads.filter((l) => isOpen(l.status));
   const openSig = open.map((l) => cardSignals(l, activities, followUps, now));
   const lostLead = leads.find((l) => l.id === pendingLost);
@@ -89,8 +100,8 @@ function Pipeline() {
         <div className="pipe-kpi"><span className="eyebrow">Stalled</span><span className="num pipe-kpi-v">{openSig.filter((s) => s.stalled).length}</span><span className="pipe-kpi-h">Past the stage time limit</span></div>
         <div className="pipe-dist" aria-label="Stage distribution">
           <span className="eyebrow">Stage distribution</span>
-          <div className="pipe-dist-bar">{LEAD_STATUSES.map((s) => { const n = leads.filter((l) => l.status === s).length; return n ? <button key={s} type="button" data-stage={s} style={{ flexGrow: n }} title={`${STATUS_LABEL[s]}: ${n}`} aria-label={`Jump to ${STATUS_LABEL[s]} (${n})`} onClick={() => jump(s)} /> : null; })}</div>
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">{LEAD_STATUSES.map((s) => <span key={s} data-stage={s} className="inline-flex items-center gap-1"><i className="pipe-dot" />{STATUS_LABEL[s]} <b className="num font-medium text-foreground">{leads.filter((l) => l.status === s).length}</b></span>)}</div>
+          <div className="pipe-dist-bar">{LEAD_STATUSES.map((s) => { const n = byStage.get(s)!.length; return n ? <button key={s} type="button" data-stage={s} style={{ flexGrow: n }} title={`${STATUS_LABEL[s]}: ${n}`} aria-label={`Jump to ${STATUS_LABEL[s]} (${n})`} onClick={() => jump(s)} /> : null; })}</div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">{LEAD_STATUSES.map((s) => <span key={s} data-stage={s} className="inline-flex items-center gap-1"><i className="pipe-dot" />{STATUS_LABEL[s]} <b className="num font-medium text-foreground">{byStage.get(s)!.length}</b></span>)}</div>
         </div>
       </section>
 
@@ -102,7 +113,9 @@ function Pipeline() {
       <div className={cn("pipe-wrap", sel && "has-inspector")}>
         <div ref={board} className="theatre pipe-board scrollbar-thin">
           {LEAD_STATUSES.map((s, i) => {
-            const col = leads.filter((l) => l.status === s).sort((a, b) => (b.quotedAmount ?? 0) - (a.quotedAmount ?? 0));
+            const col = byStage.get(s)!;
+            const limit = limits[s] ?? PIPE_BATCH;
+            const { shown, hidden } = visibleCards(col, limit, [dragging, sel?.id]);
             const sum = stageSummary(leads, s, activities, followUps, now);
             return (
               <div key={s} data-col={s} data-stage={s} aria-label={`${STATUS_LABEL[s]} stage`} className={cn("theatre-col pipe-col", over === s && "is-over")}
@@ -117,13 +130,35 @@ function Pipeline() {
                   <div className="theatre-meter"><div style={{ width: `${(sum.count / Math.max(leads.length, 1)) * 100}%` }} /></div>
                 </div>
                 <div className="flex min-h-40 flex-col gap-2.5">
-                  {col.map((l) => { const sig = cardSignals(l, activities, followUps, now); return (
-                    <div key={l.id} role="button" tabIndex={0} draggable={canMove} data-priority={l.priority} aria-pressed={sel?.id === l.id} aria-label={`${l.name}${l.company ? `, ${l.company}` : ""} — open inspector`}
-                      onDragStart={(e) => { e.dataTransfer.setData("text/plain", l.id); e.dataTransfer.effectAllowed = "move"; dragAt.current = Date.now(); setDragging(l.id); }}
-                      onDragEnd={() => { dragAt.current = Date.now(); setDragging(null); setOver(null); }}
-                      onClick={() => { if (Date.now() - dragAt.current < 250) return; select(l.id); }}
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(l.id); } }}
-                      className={cn("ticket pipe-ticket", dragging === l.id && "is-dragging", s === "lost" && "is-lost", sel?.id === l.id && "is-selected", pulse === l.id && "is-moved", sig.overdue && "is-overdue")}>
+                  {shown.map((l) => <Ticket key={l.id} l={l} s={s} sig={cardSignals(l, activities, followUps, now)} canMove={canMove} selected={sel?.id === l.id} isDragging={dragging === l.id} pulsed={pulse === l.id} h={handlers} />)}
+                  {dragging && over === s && !col.some((l) => l.id === dragging) && <div className="pipe-drop" aria-hidden>Drop to move to {STATUS_LABEL[s]}</div>}
+                  {hidden > 0 && <div className="mt-1 flex flex-col items-center gap-1.5 text-center" data-testid="pipe-more"><span className="num text-[11px] text-muted-foreground">Showing {shown.length} of {col.length} leads</span><Button type="button" variant="outline" size="sm" className="rounded-full text-xs" onClick={() => setLimits((m) => ({ ...m, [s]: limit + PIPE_BATCH }))}>Show {Math.min(PIPE_BATCH, hidden)} more</Button></div>}
+                  {col.length === 0 && !(dragging && over === s) && <div className="rounded-xl border border-dashed p-6 text-center text-xs text-muted-foreground">Drop a ticket here</div>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {sel && (wide ? inspector : createPortal(<div className="pipe-layer">{inspector}</div>, document.body))}
+      </div>
+      <LostReasonDialog open={!!pendingLost} {...(lostLead ? { leadName: lostLead.name } : {})} onCancel={() => setPendingLost(null)} onConfirm={(r) => { if (!lostLead) return; commit(lostLead, { status: "lost", lostReason: r }); setPendingLost(null); }} />
+      <FollowUpDialog open={!!fuFor} onOpenChange={(o) => !o && setFuFor(null)} {...(fuFor ? { leadId: fuFor } : {})} />
+    </Shell>
+  );
+}
+
+interface TicketHandlers { dragStart: (id: string) => void; dragEnd: () => void; click: (id: string) => void; select: (id: string) => void; move: (id: string, s: LeadStatus) => void }
+interface TicketProps { l: Lead; s: LeadStatus; sig: CardSignals; canMove: boolean; selected: boolean; isDragging: boolean; pulsed: boolean; h: TicketHandlers }
+const sameSig = (a: CardSignals, b: CardSignals) => a.days === b.days && a.stalled === b.stalled && a.overdue === b.overdue && a.nextDue === b.nextDue && a.highValue === b.highValue && a.hot === b.hot;
+// Memoized so opening the inspector, Show more or a single move re-renders only the cards that changed.
+const Ticket = memo(function Ticket({ l, s, sig, canMove, selected, isDragging, pulsed, h }: TicketProps) {
+  return (
+                    <div role="button" tabIndex={0} draggable={canMove} data-priority={l.priority} aria-pressed={selected} aria-label={`${l.name}${l.company ? `, ${l.company}` : ""} — open inspector`}
+                      onDragStart={(e) => { e.dataTransfer.setData("text/plain", l.id); e.dataTransfer.effectAllowed = "move"; h.dragStart(l.id); }}
+                      onDragEnd={h.dragEnd}
+                      onClick={() => { h.click(l.id); }}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); h.select(l.id); } }}
+                      className={cn("ticket pipe-ticket", isDragging && "is-dragging", s === "lost" && "is-lost", selected && "is-selected", pulsed && "is-moved", sig.overdue && "is-overdue")}>
                       <div className="eyebrow truncate pr-5">{l.company ?? l.source}</div>
                       <div className="mt-1 text-[15px] font-semibold leading-tight">{l.name}</div>
                       {l.requirement && <div className="mt-0.5 truncate text-xs text-muted-foreground">{l.requirement}</div>}
@@ -141,25 +176,13 @@ function Pipeline() {
                       {l.lostReason && s === "lost" && <div className="mt-2 text-[11px] text-destructive">Reason · {l.lostReason}</div>}
                       <div className="pipe-hover" onClick={(e) => e.stopPropagation()}>
                         <span className="text-[11px] text-muted-foreground">{l.lastContact ? `Spoke ${relative(l.lastContact)}` : "No contact yet"}</span>
-                        <select aria-label={`Move ${l.name}`} disabled={!canMove} title={canMove ? undefined : STAGE_DENIED} className="pipe-move" value={l.status} onClick={(e) => e.stopPropagation()} onChange={(e) => move(l.id, e.target.value as LeadStatus)}>
+                        <select aria-label={`Move ${l.name}`} disabled={!canMove} title={canMove ? undefined : STAGE_DENIED} className="pipe-move" value={l.status} onClick={(e) => e.stopPropagation()} onChange={(e) => h.move(l.id, e.target.value as LeadStatus)}>
                           {LEAD_STATUSES.map((x) => <option key={x} value={x}>{STATUS_LABEL[x]}</option>)}
                         </select>
                       </div>
-                    </div>); })}
-                  {dragging && over === s && !col.some((l) => l.id === dragging) && <div className="pipe-drop" aria-hidden>Drop to move to {STATUS_LABEL[s]}</div>}
-                  {col.length === 0 && !(dragging && over === s) && <div className="rounded-xl border border-dashed p-6 text-center text-xs text-muted-foreground">Drop a ticket here</div>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        {sel && (wide ? inspector : createPortal(<div className="pipe-layer">{inspector}</div>, document.body))}
-      </div>
-      <LostReasonDialog open={!!pendingLost} {...(lostLead ? { leadName: lostLead.name } : {})} onCancel={() => setPendingLost(null)} onConfirm={(r) => { if (!lostLead) return; commit(lostLead, { status: "lost", lostReason: r }); setPendingLost(null); }} />
-      <FollowUpDialog open={!!fuFor} onOpenChange={(o) => !o && setFuFor(null)} {...(fuFor ? { leadId: fuFor } : {})} />
-    </Shell>
+                    </div>
   );
-}
+}, (a, b) => a.l === b.l && a.s === b.s && a.canMove === b.canMove && a.selected === b.selected && a.isDragging === b.isDragging && a.pulsed === b.pulsed && a.h === b.h && sameSig(a.sig, b.sig));
 
 function PipeInspector({ lead: l, canMove, onClose, onStage, onFollowUp }: { lead: Lead; canMove: boolean; onClose: () => void; onStage: (s: LeadStatus) => void; onFollowUp: () => void }) {
   const { deals, payments, activities, followUps, addActivity } = useCRM();

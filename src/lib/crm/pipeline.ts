@@ -52,3 +52,19 @@ export const isOpen = (s: LeadStatus) => s !== "won" && s !== "lost";
 /** An older stage Undo may only run if the lead is still exactly as that move left it (no newer edit since). */
 export const canUndoStage = (current: Pick<Lead, "status" | "updatedAt"> | undefined, applied: Pick<Lead, "status" | "updatedAt">) =>
   !!current && current.status === applied.status && current.updatedAt === applied.updatedAt;
+
+/** Cards mounted per stage before "Show more"; only limits rendering, never data or counts. */
+export const PIPE_BATCH = 40;
+/** First `limit` cards of a stage plus any pinned ids (dragged / selected) found beyond it — no duplicates, order kept. */
+export function visibleCards<T extends { id: string }>(col: readonly T[], limit: number, pinned: readonly (string | null | undefined)[] = []): { shown: T[]; hidden: number } {
+  const shown = col.slice(0, Math.max(0, limit));
+  for (const id of pinned) { if (!id) continue; const i = col.findIndex((c) => c.id === id); if (i >= limit && !shown.some((c) => c.id === id)) shown.push(col[i]!); }
+  return { shown, hidden: col.length - shown.length };
+}
+/** Leads grouped by stage (sorted by quoted amount desc) in one pass. */
+export function groupByStage(leads: readonly Lead[], stages: readonly LeadStatus[]): Map<LeadStatus, Lead[]> {
+  const m = new Map<LeadStatus, Lead[]>(stages.map((s) => [s, []]));
+  for (const l of leads) m.get(l.status)?.push(l);
+  for (const col of m.values()) col.sort((a, b) => (b.quotedAmount ?? 0) - (a.quotedAmount ?? 0));
+  return m;
+}
