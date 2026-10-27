@@ -98,6 +98,18 @@ const GUARDS: Record<string, Guard> = {
 const UNRECORDED = new Set(["reset", "logBackup", "recordGoalAlerts", "setPerfPrefs", "setViewPref"]);
 const snapOf = (s: CRMState): EventSnap => ({ leads: s.leads, followUps: s.followUps, deals: s.deals, payments: s.payments, activities: s.activities, assignments: s.assignments, employees: s.employees, employeeAccess: s.employeeAccess, inboxMeta: s.inboxMeta, leadRelations: s.leadRelations, reminders: s.reminders, leadTags: s.leadTags, fieldValues: s.fieldValues, customFields: s.customFields, tagDefs: s.tagDefs, savedViews: s.savedViews, projects: s.projects, projectTasks: s.projectTasks, supportRequests: s.supportRequests, projectTags: s.projectTags, projectFieldValues: s.projectFieldValues, projectFields: s.projectFields, forecastConfig: s.forecastConfig, savedReports: s.savedReports });
 let depth = 0;
+let statusCache: { raw: string | null; id: string; active: boolean } | null = null;
+/** Reads the Owner's latest saved employee status (cached per saved blob). Unreadable storage keeps the status from preview start. */
+function previewEmployeeActive(id: string): boolean {
+  let raw: string | null = null;
+  try { raw = typeof localStorage === "undefined" ? null : localStorage.getItem(STORE_KEY); } catch { return true; }
+  if (!raw) return true;
+  if (statusCache && statusCache.raw === raw && statusCache.id === id) return statusCache.active;
+  let active = true;
+  try { const e = (JSON.parse(raw) as { state?: { employees?: { id: string; accountStatus?: string }[] } }).state?.employees?.find((x) => x.id === id); active = !!e && e.accountStatus !== "inactive" && e.accountStatus !== "archived"; } catch { active = true; }
+  statusCache = { raw, id, active };
+  return active;
+}
 function guarded<T extends object>(state: T, get: () => CRMState, set: (p: Partial<CRMState>) => void): T {
   const out = { ...state } as Record<string, unknown>;
   for (const [name, [perm, denied, event]] of Object.entries(GUARDS)) {
@@ -117,6 +129,8 @@ function guarded<T extends object>(state: T, get: () => CRMState, set: (p: Parti
         if (evts.length) set({ teamEvents: mergeEvents(after.teamEvents, evts) });
         return r;
       }
+      // E1.1B: an open preview loses all write access once the Owner deactivates/archives the employee (e.g. in another tab).
+      if (depth === 0 && !previewEmployeeActive(pv.employeeId)) return denied;
       const need = typeof perm === "function" ? (perm as (...a: unknown[]) => string | string[])(...args) : perm;
       const ok = Array.isArray(need) ? need.some((p) => allows(pv, p)) : allows(pv, need);
       if (!ok) return denied;
