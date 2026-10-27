@@ -19,6 +19,7 @@ import type { CheckList } from "@/lib/crm/projectStore";
 import { ProjectAdditionalInfo, ProjectTagPicker } from "@/components/projects/ProjectCustom";
 import { ProgressBar, StagePill, StatusPill, useCanProject, usePeople, useProjectViewer } from "@/components/projects/ProjectParts";
 import { cn } from "@/lib/utils";
+import { runGuarded } from "@/components/crm/conflictFeedback";
 
 type Tab = "overview" | "tasks" | "requirements" | "finance" | "activity" | "delivery";
 const TABS: Tab[] = ["overview", "tasks", "requirements", "finance", "activity", "delivery"];
@@ -101,10 +102,10 @@ function OverviewTab({ p }: { p: Project }) {
       <Card title="Status">
         <div className="grid gap-3">
           <label className="grid gap-1.5 text-sm"><span className="text-muted-foreground">Commercial / booking status</span><select aria-label="Project status" disabled={!canStage} className={selectCls} value={p.status} onChange={(e) => setProjectStatus(p.id, e.target.value as ProjectStatus)}>{PROJECT_STATUSES.map((s) => <option key={s} value={s}>{STATUS_TEXT[s]}</option>)}</select></label>
-          <label className="grid gap-1.5 text-sm"><span className="text-muted-foreground">Delivery stage</span><select aria-label="Project stage" disabled={!canStage} className={selectCls} value={p.stage} onChange={(e) => { const s = e.target.value as ProjectStage; if (s === "delivered") { toast.error("Record delivery from the Delivery & support tab."); return; } moveProjectStage(p.id, s); }}>{PROJECT_STAGES.map((s) => <option key={s} value={s} disabled={s === "delivered" && !p.delivery}>{STAGE_TEXT[s]}</option>)}</select></label>
+          <label className="grid gap-1.5 text-sm"><span className="text-muted-foreground">Delivery stage</span><select aria-label="Project stage" disabled={!canStage} className={selectCls} value={p.stage} onChange={(e) => { const s = e.target.value as ProjectStage; if (s === "delivered") { toast.error("Record delivery from the Delivery & support tab."); return; } const r = runGuarded(() => moveProjectStage(p.id, s, p.stage)); if (r?.value) toast.success(`Moved to ${STAGE_TEXT[s]}`); }}>{PROJECT_STAGES.map((s) => <option key={s} value={s} disabled={s === "delivered" && !p.delivery}>{STAGE_TEXT[s]}</option>)}</select></label>
           <ProgressBar pct={prog.pct} label={prog.text} />
           <p className="text-xs text-muted-foreground">Progress counts only completed tasks — never the stage.</p>
-          {v.owner && <Button variant="ghost" size="sm" className="justify-self-start" onClick={() => { if (p.archived || window.confirm("Archive this project? Its tasks, delivery and payment links are kept.")) archiveProject(p.id, !p.archived); }}>{p.archived ? "Restore project" : "Archive project"}</Button>}
+          {v.owner && <Button variant="ghost" size="sm" className="justify-self-start" onClick={() => { if (p.archived || window.confirm("Archive this project? Its tasks, delivery and payment links are kept.")) { const want = !p.archived; const r = runGuarded(() => archiveProject(p.id, want)); if (r && !r.value) toast.warning(want ? "This project was already archived in another tab — nothing changed." : "This project was already restored in another tab — nothing changed."); } }}>{p.archived ? "Restore project" : "Archive project"}</Button>}
         </div>
       </Card>
       <Card title="Client">
@@ -150,13 +151,13 @@ function TasksTab({ p }: { p: Project }) {
     <div className="pd-filters mt-3"><Input aria-label="Milestone name" placeholder="New milestone" className="min-w-[200px] flex-1" value={nm.title} onChange={(e) => setNm({ ...nm, title: e.target.value })} /><Input aria-label="Milestone due" type="date" className="w-auto" value={nm.dueDate} onChange={(e) => setNm({ ...nm, dueDate: e.target.value })} /><Button variant="outline" onClick={() => { const e = addMilestone(p.id, nm.title, nm.dueDate || undefined); if (e) toast.error(e); else setNm({ title: "", dueDate: "" }); }}>Add milestone</Button></div></Card>}
     {groups.map((g) => { const list = tasks.filter((t) => (t.milestoneId ?? "") === g.id && (g.id || !ms.some((m) => m.id === t.milestoneId))); if (!g.id && !list.length) return null; const mp = g.id ? milestoneProgress(g as never, tasks) : null;
       return <Card key={g.id || "none"} title={`${g.title}${g.dueDate ? ` · due ${formatDate(g.dueDate)}` : ""}${mp ? ` · ${mp.done}/${mp.total}${mp.complete ? " · complete" : ""}` : ""}`}>
-        {list.length === 0 ? <p className="text-sm text-muted-foreground">No tasks in this milestone yet.</p> : <ul className="grid gap-2">{list.map((t) => <TaskRow key={t.id} t={t} p={p} late={taskOverdue(t, today)} assignee={people.name(t.assigneeId)} people={people.list} canEdit={canEditTask(t, p, v)} canDone={canCompleteTask(t, p, v)} onDone={(d) => setTaskDone(t.id, d)} onMove={(d) => moveTask(t.id, d)} onEdit={(patch) => { const e = updateTask(t.id, patch); if (e) toast.error(e); }} />)}</ul>}
+        {list.length === 0 ? <p className="text-sm text-muted-foreground">No tasks in this milestone yet.</p> : <ul className="grid gap-2">{list.map((t) => <TaskRow key={t.id} t={t} p={p} late={taskOverdue(t, today)} assignee={people.name(t.assigneeId)} people={people.list} canEdit={canEditTask(t, p, v)} canDone={canCompleteTask(t, p, v)} onDone={(d) => { const r = runGuarded(() => setTaskDone(t.id, d)); if (r && !r.value) { const cur = useCRM.getState().projectTasks.find((x) => x.id === t.id); if (cur && (cur.status === "done") === d) toast.warning(d ? "This task was already completed in another tab — nothing changed." : "This task was already reopened in another tab — nothing changed."); else toast.error("You can't change this task."); } }} onMove={(d) => moveTask(t.id, d)} onEdit={(patch) => { const r = runGuarded(() => updateTask(t.id, patch, t.version)); if (!r) return false; if (r.value) { toast.error(r.value); return false; } return true; }} />)}</ul>}
       </Card>; })}
     {tasks.length === 0 && <div className="receipt"><Empty icon={<FolderKanban />} title="No tasks yet" hint="Add the real work for this project. Progress is only measured from completed tasks." /></div>}
   </div>;
 }
 
-function TaskRow({ t, late, assignee, people, canEdit, canDone, onDone, onMove, onEdit }: { t: ProjectTask; p: Project; late: boolean; assignee: string; people: { id: string; name: string }[]; canEdit: boolean; canDone: boolean; onDone: (d: boolean) => void; onMove: (d: -1 | 1) => void; onEdit: (p: { assigneeId?: string | null; dueDate?: string | undefined; notes?: string | undefined }) => void }) {
+function TaskRow({ t, late, assignee, people, canEdit, canDone, onDone, onMove, onEdit }: { t: ProjectTask; p: Project; late: boolean; assignee: string; people: { id: string; name: string }[]; canEdit: boolean; canDone: boolean; onDone: (d: boolean) => void; onMove: (d: -1 | 1) => void; onEdit: (p: { assigneeId?: string | null; dueDate?: string | undefined; notes?: string | undefined }) => boolean }) {
   const [open, setOpen] = useState(false), [notes, setNotes] = useState(t.notes ?? "");
   return <li className="pd-task" data-done={t.status === "done" || undefined}>
     <div className="flex items-start gap-3">
@@ -166,7 +167,7 @@ function TaskRow({ t, late, assignee, people, canEdit, canDone, onDone, onMove, 
     </div>
     {open && <div className="mt-3 grid gap-2 border-t pt-3">
       {canEdit && <div className="pd-filters"><select aria-label="Reassign" className={selectCls} value={t.assigneeId ?? ""} onChange={(e) => onEdit({ assigneeId: e.target.value || null })}><option value="">Unassigned</option>{people.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select><Input aria-label="Change due date" type="date" className="w-auto" value={t.dueDate ?? ""} onChange={(e) => onEdit({ dueDate: e.target.value || undefined })} /></div>}
-      {canEdit ? <div className="flex gap-2"><Textarea aria-label="Task notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" /><Button variant="outline" onClick={() => onEdit({ notes: notes || undefined })}>Save</Button></div> : t.notes && <p className="text-sm">{t.notes}</p>}
+      {canEdit ? <div className="flex gap-2"><Textarea aria-label="Task notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" /><Button variant="outline" onClick={() => { if (onEdit({ notes: notes || undefined })) toast.success("Task notes saved"); }}>Save</Button></div> : t.notes && <p className="text-sm">{t.notes}</p>}
       <ul className="text-[11px] text-muted-foreground">{t.history.slice(-5).reverse().map((h, i) => <li key={i}>{formatDateTime(h.at)} · {h.change}</li>)}</ul>
     </div>}
   </li>;
