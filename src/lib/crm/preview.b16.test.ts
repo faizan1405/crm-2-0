@@ -93,3 +93,18 @@ describe("B1.6 Employee C projects", () => {
     await expect(buildBackup({ type: "full", categories: ALL_CATEGORY_IDS, actor: { roleId: "salesperson" } }, {}, [])).rejects.toThrow();
   });
 });
+
+describe("E1.1B deactivated while a preview is open", () => {
+  it("refuses every further preview action once the Owner's saved record says inactive", () => {
+    startPreview(emp("A"));
+    const id = leadsOf["A"]![0]!;
+    const raw = JSON.parse(localStorage.getItem("scale-flow-crm-2-demo")!);
+    raw.state.employees = raw.state.employees.map((e: { id: string }) => (e.id === ids["A"] ? { ...e, accountStatus: "inactive" } : e));
+    localStorage.setItem("scale-flow-crm-2-demo", JSON.stringify(raw)); // another Owner tab deactivates A
+    const before = data();
+    expect(s().updateLead(id, { priority: "cold" })).toBe(false);
+    expect(s().addActivity(id, "after deactivation")).toBe(false);
+    expect(data()).toBe(before);
+    expect(useSession.getState().events).toEqual([]);
+  });
+});
