@@ -269,7 +269,8 @@ interface CRMState extends Prefs, ProjectSlice, ProjectCustomSlice, AnalyticsSli
   demos: Demo[];
   demoCategories: string[];
   businessProfile: BusinessProfile;
-  saveQuotationTemplate: (t: QuotationTemplate) => string | null;
+  /** `baseUpdatedAt` = version the editor opened; if the saved package changed since, throws StaleRecordError and writes nothing. */
+  saveQuotationTemplate: (t: QuotationTemplate, baseUpdatedAt?: string) => string | null;
   duplicateQuotationTemplate: (id: string) => string | undefined;
   deleteQuotationTemplate: (id: string) => void;
   setQuotationTemplateActive: (id: string, active: boolean) => void;
@@ -895,8 +896,10 @@ export const useCRM = create<CRMState>()(
       demoCategories: DEFAULT_DEMO_CATEGORIES,
       businessProfile: { name: "" },
       // Package templates are global sales messages — never linked to deals, payments or follow-ups.
-      saveQuotationTemplate: (t) => {
+      saveQuotationTemplate: (t, baseUpdatedAt) => {
         if (quotationTemplateError(t)) return null;
+        const cur = get().quotationTemplates.find((x) => x.id === t.id);
+        if (cur && baseUpdatedAt !== undefined && cur.updatedAt !== baseUpdatedAt) throw new StaleRecordError(t.id, "quotation");
         const at = new Date().toISOString();
         const row: QuotationTemplate = { ...t, name: t.name.trim(), currency: "INR", ...(t.priceType === "custom" ? { priceAmount: undefined } : { priceLabel: undefined }), updatedAt: at };
         set((s) => {

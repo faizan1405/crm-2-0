@@ -2,6 +2,8 @@ import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AlertTriangle, Eye, FileText, PenLine } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
+import { isStaleError } from "@/lib/crm/crossTab";
+import { isPersistError } from "@/lib/crm/persistStatus";
 import { emptyQuotationTemplate, formatPackagePrice, priceMismatch, quotationTemplateError, QUOTATION_PLACEHOLDERS, renderQuotation, type QuotationTemplate } from "@/lib/crm/studio";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -15,6 +17,10 @@ export function QuotationTemplateEditor({ initial, previewLeadId, onClose, onSav
   const isNew = !initial || !quotationTemplates.some((x) => x.id === initial.id);
   const start = useMemo(() => initial ?? emptyQuotationTemplate(quotationTemplates.length), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [t, setT] = useState<QuotationTemplate>(start);
+  // The version this editor opened; a save from an outdated tab is refused and the edits stay on screen.
+  const [base, setBase] = useState(start.updatedAt);
+  const [stale, setStale] = useState(false);
+  const latest = quotationTemplates.find((x) => x.id === t.id);
   const [view, setView] = useState<"write" | "preview">("write");
   const [leadId, setLeadId] = useState(previewLeadId ?? leads[0]?.id ?? "");
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -33,7 +39,9 @@ export function QuotationTemplateEditor({ initial, previewLeadId, onClose, onSav
   const useToken = () => { let body = t.messageBody; mismatch.forEach((m) => { body = body.split(m).join("{packagePrice}"); }); set({ messageBody: body }); };
   const save = () => {
     if (err) { toast.error(err); return; }
-    const id = saveQuotationTemplate(t);
+    let id: string | null;
+    try { id = saveQuotationTemplate(t, isNew ? undefined : base); }
+    catch (e) { if (isStaleError(e)) { setStale(true); return; } if (isPersistError(e)) return; throw e; }
     if (!id) { toast.error("Couldn't save this package"); return; }
     toast.success(isNew ? "Package saved — it's available in every WhatsApp message now" : "Package updated everywhere");
     onSaved?.(id); onClose();
@@ -43,6 +51,7 @@ export function QuotationTemplateEditor({ initial, previewLeadId, onClose, onSav
     <Dialog open onOpenChange={(o) => !o && tryClose()}>
       <DialogContent className="max-h-[94dvh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader><DialogTitle className="flex items-center gap-2"><FileText className="size-5" />{isNew ? "Add quotation" : `Edit ${initial?.name}`}</DialogTitle><DialogDescription>Write it once and send it to any client from WhatsApp. This is a sales message, not an invoice.</DialogDescription></DialogHeader>
+        {stale && latest && <div role="alert" className="flex flex-col gap-2 rounded-lg border border-destructive/30 bg-destructive-soft/50 p-3 text-xs"><span className="flex items-center gap-2 font-semibold text-destructive"><AlertTriangle className="size-4 shrink-0" />This package was changed in another tab. Nothing was saved — your edits are still below.</span><span className="text-muted-foreground">Latest saved: “{latest.name}” · {formatPackagePrice(latest)}</span><span className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => { setT(latest); setBase(latest.updatedAt); setStale(false); }}>Load latest (discard my edits)</Button><Button size="sm" variant="outline" onClick={() => { if (window.confirm("Replace the newer saved package with your edits?")) { setBase(latest.updatedAt); setStale(false); } }}>Keep my edits</Button></span></div>}
         <div className="grid gap-4">
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_240px]">
             <label className="q-field"><span>Package name</span><Input autoFocus value={t.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Premium 3D Website" /></label>
