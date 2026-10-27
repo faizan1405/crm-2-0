@@ -54,6 +54,8 @@ export function notifyPersistFailure(e: PersistError) { failListeners.forEach((f
 
 /** True while the most recent write failed — background work pauses instead of retrying in a loop. */
 export const savesFailing = () => status.lastOk === false;
+/** A save succeeded right after a failure: the earlier "not saved" notice is now outdated and should be cleared. */
+export const recoveredFromFailure = (prevOk: boolean | null, nextOk: boolean | null) => prevOk === false && nextOk === true;
 
 // ---- measurement (pure) ----
 export const strBytes = (s: string) => s.length * 2; // localStorage stores UTF-16 code units
