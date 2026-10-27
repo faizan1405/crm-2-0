@@ -15,6 +15,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { SuggestionList } from "@/components/crm/Suggestions";
 import { useAccess, STAGE_DENIED } from "@/lib/crm/session";
 import { leadEditError } from "@/lib/crm/validation";
+import { revisionOf, isStaleError, changedKeys, externalKeys, rebaseDraft } from "@/lib/crm/crossTab";
+import { isPersistError } from "@/lib/crm/persistStatus";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -132,24 +134,64 @@ function LeadDetail() {
   );
 }
 
+const formOf = (l: Lead): Record<string, string> => ({ name: l.name, phone: l.phone, email: l.email ?? "", company: l.company ?? "", requirement: l.requirement ?? "", source: l.source, priority: l.priority, budget: String(l.budget ?? ""), quotedAmount: String(l.quotedAmount ?? ""), notes: l.notes ?? "" });
+const FIELD_LABEL: Record<string, string> = { name: "Name", phone: "Phone", email: "Email", company: "Company", requirement: "Requirement", source: "Source", priority: "Priority", budget: "Budget", quotedAmount: "Quoted", notes: "Notes" };
+
 function EditLead({ lead, onDone }: { lead: Lead; onDone: () => void }) {
   const { updateLead, leads } = useCRM();
-  const [f, setF] = useState({ name: lead.name, phone: lead.phone, email: lead.email ?? "", company: lead.company ?? "", requirement: lead.requirement ?? "", source: lead.source, priority: lead.priority, budget: String(lead.budget ?? ""), quotedAmount: String(lead.quotedAmount ?? ""), notes: lead.notes ?? "" });
-  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  // `lead` is the live saved record (refreshed when another tab saves); the draft never changes on its own.
+  const [start, setStart] = useState(() => formOf(lead));
+  const [baseRev, setBaseRev] = useState(() => revisionOf(lead));
+  const [f, setF] = useState(() => formOf(lead));
+  const [review, setReview] = useState(false);
+  const latest = formOf(lead);
+  const stale = revisionOf(lead) !== baseRev;
+  const theirs = stale ? externalKeys(start, latest) : [];
+  const mine = changedKeys(start, f);
+  const set = (k: string) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  const keepDraft = () => { setF(rebaseDraft(start, f, latest)); setStart(latest); setBaseRev(revisionOf(lead)); setReview(false); toast("Draft kept — the other tab's changes to fields you didn't edit were brought in"); };
+  const reload = () => { setF(latest); setStart(latest); setBaseRev(revisionOf(lead)); setReview(false); toast("Loaded the latest saved lead"); };
   const save = () => {
-    const error = leadEditError(leads, lead.id, { ...f, budget: Number(f.budget), quotedAmount: Number(f.quotedAmount) });
+    if (stale) { setReview(true); toast.error("This lead was updated in another tab. Review the latest changes before saving."); return; }
+    if (!mine.length) { onDone(); return; }
+    const error = leadEditError(leads, lead.id, { ...f, budget: Number(f.budget), quotedAmount: Number(f.quotedAmount) } as never);
     if (error) { toast.error(error); return; }
-    updateLead(lead.id, { name: f.name, phone: f.phone, email: f.email, company: f.company, requirement: f.requirement, source: f.source, priority: f.priority, budget: Number(f.budget) || 0, quotedAmount: Number(f.quotedAmount) || 0, notes: f.notes });
+    const patch: Record<string, unknown> = {};
+    for (const k of mine) patch[k] = k === "budget" || k === "quotedAmount" ? Number(f[k]) || 0 : f[k];
+    try {
+      if (!updateLead(lead.id, patch as Partial<Lead>, baseRev)) { toast.error("Couldn't save — nothing changed"); return; }
+    } catch (e) {
+      if (isStaleError(e)) { setReview(true); toast.error(e.message); return; }
+      if (isPersistError(e)) return; // storage message already shown; draft stays open
+      throw e;
+    }
     toast.success("Lead updated"); onDone();
   };
-  const inp = (k: keyof typeof f, label: string, type = "text") => <div className="grid gap-1.5"><Label htmlFor={`edit-${k}`}>{label}</Label><Input id={`edit-${k}`} type={type} value={f[k]} onChange={set(k)} /></div>;
+  const inp = (k: string, label: string, type = "text") => <div className="grid gap-1.5"><Label htmlFor={`edit-${k}`}>{label}</Label><Input id={`edit-${k}`} type={type} value={f[k]} onChange={set(k)} /></div>;
   return (
     <div className="grid gap-3 sm:grid-cols-2">
+      {stale && (
+        <div role="alert" className="grid gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm sm:col-span-2">
+          <p className="font-medium">This lead was updated in another tab. Review the latest changes before saving.</p>
+          <p className="text-xs text-muted-foreground">Your draft is safe and nothing has been saved.</p>
+          {review && (
+            <ul className="grid gap-1 text-xs" aria-label="Latest changes">
+              {theirs.length === 0 && <li className="text-muted-foreground">Only details outside this form changed (for example a call, stage or tag).</li>}
+              {theirs.map((k) => <li key={k}><span className="font-medium">{FIELD_LABEL[k]}</span>: {start[k] || "—"} → <span className="font-medium">{latest[k] || "—"}</span>{mine.includes(k) ? <span className="text-warning"> · you also edited this (your value: {f[k] || "—"})</span> : null}</li>)}
+            </ul>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => setReview((r) => !r)}>{review ? "Hide latest" : "Review latest"}</Button>
+            <Button size="sm" variant="outline" onClick={keepDraft}>Keep my draft</Button>
+            <Button size="sm" variant="ghost" onClick={reload}>Reload record</Button>
+          </div>
+        </div>
+      )}
       {inp("name", "Name")}{inp("phone", "Phone")}{inp("email", "Email", "email")}{inp("company", "Company")}
       <div className="sm:col-span-2">{inp("requirement", "Requirement")}</div>
       {inp("budget", "Budget (₹)", "number")}{inp("quotedAmount", "Quoted (₹)", "number")}
       <div className="grid gap-1.5"><Label>Source</Label><select className={selectCls} value={f.source} onChange={set("source")}>{LEAD_SOURCES.map((s) => <option key={s}>{s}</option>)}</select></div>
-      <div className="grid gap-1.5"><Label>Priority</Label><select className={selectCls} value={f.priority} onChange={set("priority")}><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option></select></div>
+      <div className="grid gap-1.5"><Label>Priority</Label><select aria-label="Priority" className={selectCls} value={f.priority} onChange={set("priority")}><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option></select></div>
       <div className="grid gap-1.5 sm:col-span-2"><Label>Notes</Label><Textarea value={f.notes} onChange={set("notes")} /></div>
       <div className="flex justify-end gap-2 sm:col-span-2"><Button variant="ghost" onClick={onDone}>Cancel</Button><Button onClick={save}>Save changes</Button></div>
     </div>
