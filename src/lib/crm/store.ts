@@ -9,6 +9,7 @@ import type { ParsedLead } from "./parse";
 import { isPending, activeFollowUp } from "./followups";
 import { isConnectedOutcome, outcomeQuick, type CallOutcome } from "./calllog";
 import { PersistError, recordSave, strBytes, notifyPersistFailure } from "./persistStatus";
+import { revisionOf, StaleRecordError } from "./crossTab";
 
 export type FollowUpResult = { ok: true; id: string } | { ok: false; conflict?: FollowUp; error?: string };
 export interface CallLogInput {
@@ -223,7 +224,8 @@ interface CRMState extends Prefs, ProjectSlice, ProjectCustomSlice, AnalyticsSli
   briefingDone: string[];
   briefingDate: string;
   addLead: (lead: Omit<Lead, "id" | "createdAt" | "updatedAt">) => string;
-  updateLead: (id: string, patch: Partial<Lead>) => boolean;
+  /** `base` = revision the editor started from; if the saved lead changed since, throws StaleRecordError and writes nothing. */
+  updateLead: (id: string, patch: Partial<Lead>, base?: string) => boolean;
   /** Soft delete into Recently Deleted. */
   deleteLead: (id: string) => void;
   wasteLead: (id: string, reason?: string) => void;
@@ -690,9 +692,10 @@ export const useCRM = create<CRMState>()(
         else autoAssign(id, "lead_created");
         return id;
       },
-      updateLead: (id, patch) => {
-        if (leadEditError(get().leads, id, patch)) return false;
+      updateLead: (id, patch, base) => {
         const prev = get().leads.find((l) => l.id === id);
+        if (base !== undefined && prev && revisionOf(prev) !== base) throw new StaleRecordError(id);
+        if (leadEditError(get().leads, id, patch)) return false;
         set((s) => ({
           leads: s.leads.map((l) => (l.id === id ? { ...l, ...patch, ...(patch.status && patch.status !== "lost" ? { lostReason: undefined } : {}), updatedAt: new Date().toISOString() } : l)),
           deals: s.deals.map((d) => d.leadId === id ? { ...d, ...(patch.name !== undefined ? { clientName: patch.name } : {}), ...(patch.company !== undefined ? { company: patch.company } : {}) } : d),
