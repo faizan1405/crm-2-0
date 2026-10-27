@@ -194,7 +194,7 @@ function Board() {
         <header className="pd-col-head"><span>{STAGE_TEXT[s]}</span><b className="num">{col.length}</b></header>
         <div className="grid gap-2">{col.map((p) => <div key={p.id}>
           <ProjectCard p={p} tasks={projectTasks.filter((t) => t.projectId === p.id)} owner={people.name(p.ownerId)} today={today} draggable={canMove} onDragStart={(e) => { e.dataTransfer.setData("text/project", p.id); e.dataTransfer.setData("text/project-stage", p.stage); }} />
-          {canMove && <select aria-label={`Stage for ${p.name}`} className={cn(selectCls, "mt-1 h-8 w-full text-xs")} value={p.stage} onChange={(e) => move(p.id, e.target.value as ProjectStage)}>{PROJECT_STAGES.map((x) => <option key={x} value={x} disabled={x === "delivered" && !p.delivery}>{STAGE_TEXT[x]}</option>)}</select>}
+          {canMove && <select aria-label={`Stage for ${p.name}`} className={cn(selectCls, "mt-1 h-8 w-full text-xs")} value={p.stage} onChange={(e) => move(p.id, e.target.value as ProjectStage, p.stage)}>{PROJECT_STAGES.map((x) => <option key={x} value={x} disabled={x === "delivered" && !p.delivery}>{STAGE_TEXT[x]}</option>)}</select>}
         </div>)}{col.length === 0 && <p className="px-1 py-4 text-center text-xs text-muted-foreground">Empty</p>}</div>
       </section>; })}
     </div>

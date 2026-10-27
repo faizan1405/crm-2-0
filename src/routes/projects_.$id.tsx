@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ArrowDown, ArrowLeft, ArrowUp, Check, ExternalLink, FolderKanban, MessageCircle, Plus, RotateCcw } from "lucide-react";
 import { Shell, Empty, selectCls } from "@/components/crm/Shell";
@@ -151,14 +151,22 @@ function TasksTab({ p }: { p: Project }) {
     <div className="pd-filters mt-3"><Input aria-label="Milestone name" placeholder="New milestone" className="min-w-[200px] flex-1" value={nm.title} onChange={(e) => setNm({ ...nm, title: e.target.value })} /><Input aria-label="Milestone due" type="date" className="w-auto" value={nm.dueDate} onChange={(e) => setNm({ ...nm, dueDate: e.target.value })} /><Button variant="outline" onClick={() => { const e = addMilestone(p.id, nm.title, nm.dueDate || undefined); if (e) toast.error(e); else setNm({ title: "", dueDate: "" }); }}>Add milestone</Button></div></Card>}
     {groups.map((g) => { const list = tasks.filter((t) => (t.milestoneId ?? "") === g.id && (g.id || !ms.some((m) => m.id === t.milestoneId))); if (!g.id && !list.length) return null; const mp = g.id ? milestoneProgress(g as never, tasks) : null;
       return <Card key={g.id || "none"} title={`${g.title}${g.dueDate ? ` · due ${formatDate(g.dueDate)}` : ""}${mp ? ` · ${mp.done}/${mp.total}${mp.complete ? " · complete" : ""}` : ""}`}>
-        {list.length === 0 ? <p className="text-sm text-muted-foreground">No tasks in this milestone yet.</p> : <ul className="grid gap-2">{list.map((t) => <TaskRow key={t.id} t={t} p={p} late={taskOverdue(t, today)} assignee={people.name(t.assigneeId)} people={people.list} canEdit={canEditTask(t, p, v)} canDone={canCompleteTask(t, p, v)} onDone={(d) => { const r = runGuarded(() => setTaskDone(t.id, d)); if (r && !r.value) { const cur = useCRM.getState().projectTasks.find((x) => x.id === t.id); if (cur && (cur.status === "done") === d) toast.warning(d ? "This task was already completed in another tab — nothing changed." : "This task was already reopened in another tab — nothing changed."); else toast.error("You can't change this task."); } }} onMove={(d) => moveTask(t.id, d)} onEdit={(patch) => { const r = runGuarded(() => updateTask(t.id, patch, t.version)); if (!r) return false; if (r.value) { toast.error(r.value); return false; } return true; }} />)}</ul>}
+        {list.length === 0 ? <p className="text-sm text-muted-foreground">No tasks in this milestone yet.</p> : <ul className="grid gap-2">{list.map((t) => <TaskRow key={t.id} t={t} p={p} late={taskOverdue(t, today)} assignee={people.name(t.assigneeId)} people={people.list} canEdit={canEditTask(t, p, v)} canDone={canCompleteTask(t, p, v)} onDone={(d) => { const r = runGuarded(() => setTaskDone(t.id, d)); if (r && !r.value) { const cur = useCRM.getState().projectTasks.find((x) => x.id === t.id); if (cur && (cur.status === "done") === d) toast.warning(d ? "This task was already completed in another tab — nothing changed." : "This task was already reopened in another tab — nothing changed."); else toast.error("You can't change this task."); } }} onMove={(d) => moveTask(t.id, d)} onEdit={(patch, base) => { const r = runGuarded(() => updateTask(t.id, patch, base ?? t.version)); if (!r) return false; if (r.value) { toast.error(r.value); return false; } return true; }} />)}</ul>}
       </Card>; })}
     {tasks.length === 0 && <div className="receipt"><Empty icon={<FolderKanban />} title="No tasks yet" hint="Add the real work for this project. Progress is only measured from completed tasks." /></div>}
   </div>;
 }
 
-function TaskRow({ t, late, assignee, people, canEdit, canDone, onDone, onMove, onEdit }: { t: ProjectTask; p: Project; late: boolean; assignee: string; people: { id: string; name: string }[]; canEdit: boolean; canDone: boolean; onDone: (d: boolean) => void; onMove: (d: -1 | 1) => void; onEdit: (p: { assigneeId?: string | null; dueDate?: string | undefined; notes?: string | undefined }) => boolean }) {
+function TaskRow({ t, late, assignee, people, canEdit, canDone, onDone, onMove, onEdit }: { t: ProjectTask; p: Project; late: boolean; assignee: string; people: { id: string; name: string }[]; canEdit: boolean; canDone: boolean; onDone: (d: boolean) => void; onMove: (d: -1 | 1) => void; onEdit: (p: { assigneeId?: string | null; dueDate?: string | undefined; notes?: string | undefined }, baseVersion?: number) => boolean }) {
   const [open, setOpen] = useState(false), [notes, setNotes] = useState(t.notes ?? "");
+  // The notes draft remembers the task version it started from, so a save from an outdated tab is refused instead of overwriting newer notes.
+  const [base, setBase] = useState({ version: t.version, notes: t.notes ?? "" });
+  const changedElsewhere = t.version !== base.version;
+  const dirty = notes !== base.notes;
+  useEffect(() => { if (changedElsewhere && !dirty) { setNotes(t.notes ?? ""); setBase({ version: t.version, notes: t.notes ?? "" }); } }, [changedElsewhere, dirty, t.version, t.notes]);
+  const conflict = changedElsewhere && dirty && (t.notes ?? "") !== base.notes;
+  const loadLatest = () => { setNotes(t.notes ?? ""); setBase({ version: t.version, notes: t.notes ?? "" }); };
+  const saveNotes = () => { if (onEdit({ notes: notes || undefined }, base.version)) { const cur = useCRM.getState().projectTasks.find((x) => x.id === t.id); setBase({ version: cur?.version ?? t.version, notes }); toast.success("Task notes saved"); } };
   return <li className="pd-task" data-done={t.status === "done" || undefined}>
     <div className="flex items-start gap-3">
       <button type="button" className="pd-check" aria-label={t.status === "done" ? `Reopen ${t.title}` : `Complete ${t.title}`} aria-pressed={t.status === "done"} disabled={!canDone} onClick={() => onDone(t.status !== "done")}>{t.status === "done" ? <Check className="size-3.5" /> : null}</button>
@@ -167,7 +175,7 @@ function TaskRow({ t, late, assignee, people, canEdit, canDone, onDone, onMove, 
     </div>
     {open && <div className="mt-3 grid gap-2 border-t pt-3">
       {canEdit && <div className="pd-filters"><select aria-label="Reassign" className={selectCls} value={t.assigneeId ?? ""} onChange={(e) => onEdit({ assigneeId: e.target.value || null })}><option value="">Unassigned</option>{people.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select><Input aria-label="Change due date" type="date" className="w-auto" value={t.dueDate ?? ""} onChange={(e) => onEdit({ dueDate: e.target.value || undefined })} /></div>}
-      {canEdit ? <div className="flex gap-2"><Textarea aria-label="Task notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" /><Button variant="outline" onClick={() => { if (onEdit({ notes: notes || undefined })) toast.success("Task notes saved"); }}>Save</Button></div> : t.notes && <p className="text-sm">{t.notes}</p>}
+      {canEdit ? <>{conflict && <div className="pd-note" role="alert"><b>These task notes were updated in another tab.</b> Your draft is kept. Latest saved notes: “{t.notes || "(empty)"}”<div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={loadLatest}>Load latest (discard draft)</Button><Button size="sm" variant="outline" onClick={() => setBase({ version: t.version, notes: t.notes ?? "" })}>Keep my draft</Button></div></div>}<div className="flex gap-2"><Textarea aria-label="Task notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" /><Button variant="outline" onClick={saveNotes}>Save</Button></div></> : t.notes && <p className="text-sm">{t.notes}</p>}
       <ul className="text-[11px] text-muted-foreground">{t.history.slice(-5).reverse().map((h, i) => <li key={i}>{formatDateTime(h.at)} · {h.change}</li>)}</ul>
     </div>}
   </li>;
