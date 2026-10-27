@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { isStaleError } from "@/lib/crm/crossTab";
 
 export const Route = createFileRoute("/notes")({
   head: () => ({
@@ -43,12 +44,17 @@ function Notes() {
   const [status, setStatus] = useState<SaveStatus>("idle");
   const selIdRef = useRef(selId);
   selIdRef.current = selId;
+  // Revision of the selected note this editor last loaded or saved; a different saved revision means another tab changed it.
+  const baseRef = useRef<string | undefined>(undefined);
+  const [conflict, setConflict] = useState(false);
 
   const saver = useMemo(() => createAutosaver<Draft>((d) => {
     const cur = useCRM.getState().notes.find((n) => n.id === d.id);
     if (!cur) return; // deleted meanwhile — nothing to save
-    useCRM.getState().saveNote(withDoc(cur, d.title.trim() || "Untitled note", d.doc, new Date().toISOString()));
-  }, (s) => setStatus(s), 600), []);
+    const at = new Date().toISOString();
+    useCRM.getState().saveNote(withDoc(cur, d.title.trim() || "Untitled note", d.doc, at), baseRef.current);
+    baseRef.current = at;
+  }, (s, err) => { if (s === "error" && isStaleError(err)) { setConflict(true); setStatus("pending"); return; } setStatus(s); }, 600), []);
 
   const titleRef = useRef(title);
   titleRef.current = title;
@@ -66,9 +72,43 @@ function Notes() {
   useEffect(() => {
     const n = useCRM.getState().notes.find((x) => x.id === selId);
     setTitle(n?.title ?? "");
+    baseRef.current = n?.updatedAt;
+    setConflict(false);
     if (editor && n) editor.commands.setContent(noteDoc(n) as never, { emitUpdate: false });
     setStatus("idle");
   }, [selId, editor]);
+
+  // Another tab saved this note while nothing is typed here: show its latest text (never replaces an unsaved draft).
+  const selUpdated = notes.find((n) => n.id === selId)?.updatedAt;
+  useEffect(() => {
+    if (!selUpdated || selUpdated === baseRef.current || conflict || saver.hasPending()) return;
+    const n = useCRM.getState().notes.find((x) => x.id === selId); if (!n || !editor) return;
+    baseRef.current = n.updatedAt; setTitle(n.title); editor.commands.setContent(noteDoc(n) as never, { emitUpdate: false });
+  }, [selUpdated, selId, editor, conflict, saver]);
+
+  const loadLatest = () => {
+    saver.cancel();
+    const n = useCRM.getState().notes.find((x) => x.id === selId);
+    if (n && editor) { baseRef.current = n.updatedAt; setTitle(n.title); editor.commands.setContent(noteDoc(n) as never, { emitUpdate: false }); }
+    setConflict(false); setStatus("idle"); toast("Loaded the latest saved note");
+  };
+  const keepMine = () => {
+    const n = useCRM.getState().notes.find((x) => x.id === selId);
+    if (!n || !editor) return;
+    if (!window.confirm("Replace the newer text saved in another tab with your draft?")) return;
+    baseRef.current = n.updatedAt; setConflict(false);
+    saver.schedule({ id: n.id, title: titleRef.current, doc: editor.getJSON() as NoteDoc });
+    if (saver.flush()) toast.success("Your draft replaced the other tab's version");
+  };
+  const saveAsCopy = () => {
+    if (!editor) return;
+    const at = new Date().toISOString();
+    const base: Note = { id: uid("note"), title: "", body: "", pinned: false, createdAt: at, updatedAt: at };
+    const copy = withDoc(base, `${titleRef.current.trim() || "Untitled note"} (my draft)`, editor.getJSON() as NoteDoc, at);
+    try { useCRM.getState().saveNote(copy); } catch { toast.error("Couldn't save the copy — your draft is still here"); return; }
+    saver.cancel(); setConflict(false); toast.success("Draft saved as a new note");
+    setSelId(copy.id);
+  };
 
   useEffect(() => {
     const out = () => saver.flush();
@@ -76,9 +116,12 @@ function Notes() {
     return () => { window.removeEventListener("beforeunload", out); saver.flush(); };
   }, [saver]);
 
-  const select = (id: string) => { if (id !== selId) saver.flush(); setSelId(id); setMobileOpen(true); };
+  const select = (id: string) => {
+    if (id !== selId) { if (conflict || !saver.flush()) { toast.error("Resolve this note's unsaved changes before switching."); return; } }
+    setSelId(id); setMobileOpen(true);
+  };
   const create = () => {
-    saver.flush();
+    if (conflict || !saver.flush()) { toast.error("Resolve this note's unsaved changes first."); return; }
     const at = new Date().toISOString();
     const n: Note = { id: uid("note"), title: "", body: "", doc: { type: "doc", content: [{ type: "paragraph" }] }, pinned: false, createdAt: at, updatedAt: at };
     try { saveNote(n); } catch { toast.error("Couldn't create the note — browser storage may be full"); return; }
@@ -118,12 +161,21 @@ function Notes() {
           {!sel ? <Empty icon={<StickyNote />} title="Select or create a note" /> : (<>
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="sm" className="lg:hidden" onClick={() => { saver.flush(); setMobileOpen(false); }}><ArrowLeft className="size-4" />Notes</Button>
-              <SaveBadge status={status} onRetry={() => saver.flush()} />
+              {conflict ? <span className="notes-save text-destructive" role="status"><AlertCircle className="size-3" />Not saved — conflict</span> : <SaveBadge status={status} onRetry={() => saver.flush()} />}
               <div className="ml-auto flex gap-1">
                 <Button size="icon" variant="ghost" aria-label={sel.pinned ? "Unpin note" : "Pin note"} aria-pressed={sel.pinned} onClick={() => togglePin(sel)}><Pin className={cn("size-4", sel.pinned && "fill-current")} /></Button>
                 <Button size="icon" variant="ghost" aria-label="Delete note" className="hover:text-destructive" onClick={() => remove(sel)}><Trash2 className="size-4" /></Button>
               </div>
             </div>
+            {conflict && <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm">
+              <p className="font-medium">This note has newer changes in another tab. Your draft has been preserved.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Nothing was saved from this tab. Choose what to keep.</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={saveAsCopy}>Save my draft as a new note</Button>
+                <Button size="sm" variant="outline" onClick={loadLatest}>Load latest (discard draft)</Button>
+                <Button size="sm" variant="ghost" onClick={keepMine}>Replace with my draft</Button>
+              </div>
+            </div>}
             <input id="note-title" aria-label="Note title" className="notes-title" value={title} placeholder="Untitled note"
               onChange={(e) => { setTitle(e.target.value); if (editor) saver.schedule({ id: sel.id, title: e.target.value, doc: editor.getJSON() as NoteDoc }); }}
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); editor?.commands.focus("start"); } }} />

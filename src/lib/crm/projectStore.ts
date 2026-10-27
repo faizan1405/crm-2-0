@@ -1,6 +1,7 @@
 // Phase 3G.1 — Project Desk store slice. Merged into the single CRM store (store.ts); rules stay in pure projects.ts.
 import { uid, dayKey } from "./format";
 import { activePreview, allows } from "./session";
+import { StaleRecordError } from "./crossTab";
 import {
   applyStatus, canCompleteTask, canEditTask, canSeeProject, canUndo, deliveryError, deliveryGaps, draftFromDeal, activeProjectForDeal,
   looksLikeSecret, projectError, starterTemplates, supportError, PROJECT_SCHEMA, SECRET_ERROR, STAGE_TEXT, STATUS_TEXT,
@@ -24,12 +25,15 @@ export interface ProjectSlice {
   updateProject: (id: string, patch: Partial<Project>, note?: string) => string | null;
   setProjectStatus: (id: string, status: ProjectStatus) => void;
   /** Returns the version after the move, used for safe Undo. */
-  moveProjectStage: (id: string, stage: ProjectStage) => { from: ProjectStage; version: number } | null;
+  /** `from` = stage the user saw; if another tab moved the project since, throws StaleRecordError (nothing saved). */
+  moveProjectStage: (id: string, stage: ProjectStage, from?: ProjectStage) => { from: ProjectStage; version: number } | null;
   undoProjectStage: (id: string, to: ProjectStage, expectedVersion: number) => boolean;
-  archiveProject: (id: string, archived: boolean) => void;
+  /** Returns false when the project is already in that state (e.g. archived from another tab) — no duplicate history. */
+  archiveProject: (id: string, archived: boolean) => boolean;
   addProjectNote: (id: string, text: string) => string | null;
   addTask: (projectId: string, t: TaskInput) => Res<{ id: string }>;
-  updateTask: (id: string, patch: Partial<TaskInput>) => string | null;
+  /** `baseVersion` = task version the form started from; a newer saved version throws StaleRecordError (nothing saved). */
+  updateTask: (id: string, patch: Partial<TaskInput>, baseVersion?: number) => string | null;
   setTaskDone: (id: string, done: boolean) => boolean;
   moveTask: (id: string, dir: -1 | 1) => void;
   addMilestone: (projectId: string, title: string, dueDate?: string) => string | null;
@@ -93,8 +97,10 @@ export function createProjectSlice(set: (fn: (s: S) => Partial<S>) => void, get:
       return null;
     },
     setProjectStatus: (id, status) => { const p = visible(id); if (!p || p.status === status) return; edit(id, (x) => applyStatus(x, status, today()), `Status: ${STATUS_TEXT[p.status]} → ${STATUS_TEXT[status]}`); },
-    moveProjectStage: (id, stage) => {
-      const p = visible(id); if (!p || p.stage === stage) return null;
+    moveProjectStage: (id, stage, from) => {
+      const p = visible(id); if (!p) return null;
+      if (from !== undefined && p.stage !== from) throw new StaleRecordError(id, "project");
+      if (p.stage === stage) return null;
       if (stage === "delivered" && !p.delivery) return null; // delivery is recorded through the checklist, never by dragging
       edit(id, () => ({ stage }), `Stage: ${STAGE_TEXT[p.stage]} → ${STAGE_TEXT[stage]}`);
       return { from: p.stage, version: findP(id)!.version };
@@ -104,7 +110,10 @@ export function createProjectSlice(set: (fn: (s: S) => Partial<S>) => void, get:
       edit(id, () => ({ stage: to }), `Undo: stage back to ${STAGE_TEXT[to]}`);
       return true;
     },
-    archiveProject: (id, archived) => edit(id, () => ({ archived }), archived ? "Archived (records kept)" : "Restored from archive"),
+    archiveProject: (id, archived) => {
+      const p = findP(id); if (!p || !!p.archived === archived) return false;
+      edit(id, () => ({ archived }), archived ? "Archived (records kept)" : "Restored from archive"); return true;
+    },
     addProjectNote: (id, text) => {
       const p = visible(id); if (!p) return "Project not found."; if (!text.trim()) return "Write a note.";
       if (looksLikeSecret(text)) return SECRET_ERROR;
@@ -119,9 +128,10 @@ export function createProjectSlice(set: (fn: (s: S) => Partial<S>) => void, get:
       set((s) => ({ projectTasks: [...s.projectTasks, row] }));
       return { ok: true, id };
     },
-    updateTask: (id, patch) => {
+    updateTask: (id, patch, baseVersion) => {
       const t = get().projectTasks.find((x) => x.id === id); const p = t && findP(t.projectId);
       if (!t || !p || !canEditTask(t, p, projectViewer())) return "You can't edit this task.";
+      if (baseVersion !== undefined && t.version !== baseVersion) throw new StaleRecordError(id, "task");
       if (patch.title !== undefined && !patch.title.trim()) return "Give the task a title.";
       if (looksLikeSecret(patch.notes)) return SECRET_ERROR;
       const changes = [patch.assigneeId !== undefined && patch.assigneeId !== t.assigneeId ? `Reassigned from ${t.assigneeId ?? "nobody"} to ${patch.assigneeId ?? "nobody"}` : "", patch.dueDate !== undefined && patch.dueDate !== t.dueDate ? `Due ${patch.dueDate || "cleared"}` : ""].filter(Boolean);

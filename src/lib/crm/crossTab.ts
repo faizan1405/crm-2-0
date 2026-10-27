@@ -8,6 +8,9 @@ export const STALE_MESSAGE = {
   lead: "This lead was updated in another tab. Review the latest changes before saving.",
   followup: "This follow-up was updated in another tab. Review the latest schedule before saving.",
   payment: "This payment was changed in another tab. Reload the latest information before continuing.",
+  task: "This task was updated in another tab. Review the latest changes before saving.",
+  project: "This project was changed in another tab. Review its latest stage before changing it.",
+  note: "This note has newer changes in another tab. Your draft has been preserved.",
 } as const;
 export class StaleRecordError extends Error {
   readonly stale = true;

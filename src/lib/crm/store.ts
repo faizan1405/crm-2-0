@@ -86,7 +86,7 @@ const GUARDS: Record<string, Guard> = {
   setLeadFieldValues: ["leads.edit", { ok: false, errors: { _: DENIED } }], setLeadTags: ["leads.edit", false], bulkTagLeads: ["leads.edit", { changed: 0, before: {}, applied: {} }], undoBulkTags: ["leads.edit", { restored: 0, kept: 0 }],
   saveView: ["leads.view", { ok: false, error: DENIED }], deleteView: ["leads.view", undefined], duplicateView: ["leads.view", undefined], setViewPref: ["leads.view", undefined],
   saveGoal: ["__owner", DENIED], setGoalStatus: ["__owner", undefined], duplicateGoal: ["__owner", undefined], setPerfPrefs: ["__owner", undefined], recordGoalAlerts: ["__owner", undefined],
-  createProject: ["projects.create", { ok: false, error: DENIED }], updateProject: ["projects.edit", DENIED], setProjectStatus: ["projects.stage", undefined], moveProjectStage: ["projects.stage", null], undoProjectStage: ["projects.stage", false], archiveProject: ["__owner", undefined],
+  createProject: ["projects.create", { ok: false, error: DENIED }], updateProject: ["projects.edit", DENIED], setProjectStatus: ["projects.stage", undefined], moveProjectStage: ["projects.stage", null], undoProjectStage: ["projects.stage", false], archiveProject: ["__owner", false],
   addProjectNote: ["projects.notes", DENIED], addTask: ["projects.tasks_add", { ok: false, error: DENIED }], updateTask: ["projects.view", DENIED], setTaskDone: ["projects.view", false], moveTask: ["projects.tasks_edit", undefined], addMilestone: ["projects.tasks_add", DENIED],
   toggleCheck: ["projects.edit", undefined], addCheck: ["projects.edit", DENIED], addDependency: ["projects.edit", DENIED], toggleDependency: ["projects.edit", undefined], addProjectLink: ["projects.edit", DENIED], deliverProject: ["projects.edit", DENIED],
   saveSupport: ["__owner", DENIED], addSupportRequest: ["projects.support", { ok: false, error: DENIED }], updateSupportRequest: ["projects.support", DENIED], saveProjectTemplate: ["__owner", DENIED],
@@ -253,7 +253,8 @@ interface CRMState extends Prefs, ProjectSlice, ProjectCustomSlice, AnalyticsSli
   /** `baseDue` = due time the user saw; if the follow-up was rescheduled since, throws StaleRecordError (nothing saved). */
   completeFollowUp: (id: string, baseDue?: string) => FollowUpOutcome;
   rescheduleFollowUp: (id: string, date: string, baseDue?: string) => FollowUpOutcome;
-  saveNote: (note: Note) => void;
+  /** `base` = updatedAt the editor loaded; if the saved note changed since, throws StaleRecordError (nothing saved). */
+  saveNote: (note: Note, base?: string) => void;
   deleteNote: (id: string) => void;
   toggleBriefing: (key: string) => void;
   resetBriefing: () => void;
@@ -871,8 +872,11 @@ export const useCRM = create<CRMState>()(
         });
         return undefined;
       },
-      saveNote: (note) =>
-        set((s) => ({ notes: s.notes.some((n) => n.id === note.id) ? s.notes.map((n) => (n.id === note.id ? note : n)) : [note, ...s.notes] })),
+      saveNote: (note, base) => {
+        const prev = get().notes.find((n) => n.id === note.id);
+        if (base !== undefined && prev && prev.updatedAt !== base) throw new StaleRecordError(note.id, "note");
+        set((s) => ({ notes: s.notes.some((n) => n.id === note.id) ? s.notes.map((n) => (n.id === note.id ? note : n)) : [note, ...s.notes] }));
+      },
       deleteNote: (id) => set((s) => ({ notes: s.notes.filter((n) => n.id !== id) })),
       toggleBriefing: (key) =>
         set((s) => {

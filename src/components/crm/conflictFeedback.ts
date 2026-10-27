@@ -25,3 +25,13 @@ export function runVoid(run: () => VoidResult): boolean {
     throw e;
   }
 }
+
+/** Runs an edit that may be refused as stale; shows the conflict message once. Returns `undefined` when nothing was saved. */
+export function runGuarded<T>(run: () => T): { value: T } | undefined {
+  try { return { value: run() }; }
+  catch (e) {
+    if (isStaleError(e)) { toast.error(e.message); return undefined; }
+    if (isPersistError(e)) return undefined;
+    throw e;
+  }
+}
