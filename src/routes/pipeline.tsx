@@ -14,7 +14,7 @@ import { useCRM } from "@/lib/crm/store";
 import { useAccess, STAGE_DENIED } from "@/lib/crm/session";
 import { formatINR, formatINRCompact, formatDateTime, relative } from "@/lib/crm/format";
 import { dealCollected, dealOutstanding } from "@/lib/crm/finance";
-import { canUndoStage, cardSignals, isOpen, stageSummary, STALL_DAYS } from "@/lib/crm/pipeline";
+import { canUndoStage, cardSignals, groupByStage, isOpen, PIPE_BATCH, stageSummary, STALL_DAYS, visibleCards } from "@/lib/crm/pipeline";
 import { LEAD_STATUSES, STATUS_LABEL, type Lead, type LeadStatus } from "@/lib/crm/types";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +45,8 @@ function Pipeline() {
   const [pendingLost, setPendingLost] = useState<string | null>(null);
   const [fuFor, setFuFor] = useState<string | null>(null);
   const [pulse, setPulse] = useState<string | null>(null);
+  const [limits, setLimits] = useState<Partial<Record<LeadStatus, number>>>({});
+  const byStage = useMemo(() => groupByStage(leads, LEAD_STATUSES), [leads]);
   const now = useMemo(() => new Date(), [leads, followUps, activities]); // eslint-disable-line react-hooks/exhaustive-deps
   const select = (id: string | undefined) => navigate({ search: id ? { lead: id } : {}, replace: true, resetScroll: false });
   const sel = leads.find((l) => l.id === selected);
@@ -89,8 +91,8 @@ function Pipeline() {
         <div className="pipe-kpi"><span className="eyebrow">Stalled</span><span className="num pipe-kpi-v">{openSig.filter((s) => s.stalled).length}</span><span className="pipe-kpi-h">Past the stage time limit</span></div>
         <div className="pipe-dist" aria-label="Stage distribution">
           <span className="eyebrow">Stage distribution</span>
-          <div className="pipe-dist-bar">{LEAD_STATUSES.map((s) => { const n = leads.filter((l) => l.status === s).length; return n ? <button key={s} type="button" data-stage={s} style={{ flexGrow: n }} title={`${STATUS_LABEL[s]}: ${n}`} aria-label={`Jump to ${STATUS_LABEL[s]} (${n})`} onClick={() => jump(s)} /> : null; })}</div>
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">{LEAD_STATUSES.map((s) => <span key={s} data-stage={s} className="inline-flex items-center gap-1"><i className="pipe-dot" />{STATUS_LABEL[s]} <b className="num font-medium text-foreground">{leads.filter((l) => l.status === s).length}</b></span>)}</div>
+          <div className="pipe-dist-bar">{LEAD_STATUSES.map((s) => { const n = byStage.get(s)!.length; return n ? <button key={s} type="button" data-stage={s} style={{ flexGrow: n }} title={`${STATUS_LABEL[s]}: ${n}`} aria-label={`Jump to ${STATUS_LABEL[s]} (${n})`} onClick={() => jump(s)} /> : null; })}</div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">{LEAD_STATUSES.map((s) => <span key={s} data-stage={s} className="inline-flex items-center gap-1"><i className="pipe-dot" />{STATUS_LABEL[s]} <b className="num font-medium text-foreground">{byStage.get(s)!.length}</b></span>)}</div>
         </div>
       </section>
 
@@ -102,7 +104,9 @@ function Pipeline() {
       <div className={cn("pipe-wrap", sel && "has-inspector")}>
         <div ref={board} className="theatre pipe-board scrollbar-thin">
           {LEAD_STATUSES.map((s, i) => {
-            const col = leads.filter((l) => l.status === s).sort((a, b) => (b.quotedAmount ?? 0) - (a.quotedAmount ?? 0));
+            const col = byStage.get(s)!;
+            const limit = limits[s] ?? PIPE_BATCH;
+            const { shown, hidden } = visibleCards(col, limit, [dragging, sel?.id]);
             const sum = stageSummary(leads, s, activities, followUps, now);
             return (
               <div key={s} data-col={s} data-stage={s} aria-label={`${STATUS_LABEL[s]} stage`} className={cn("theatre-col pipe-col", over === s && "is-over")}
@@ -117,7 +121,7 @@ function Pipeline() {
                   <div className="theatre-meter"><div style={{ width: `${(sum.count / Math.max(leads.length, 1)) * 100}%` }} /></div>
                 </div>
                 <div className="flex min-h-40 flex-col gap-2.5">
-                  {col.map((l) => { const sig = cardSignals(l, activities, followUps, now); return (
+                  {shown.map((l) => { const sig = cardSignals(l, activities, followUps, now); return (
                     <div key={l.id} role="button" tabIndex={0} draggable={canMove} data-priority={l.priority} aria-pressed={sel?.id === l.id} aria-label={`${l.name}${l.company ? `, ${l.company}` : ""} — open inspector`}
                       onDragStart={(e) => { e.dataTransfer.setData("text/plain", l.id); e.dataTransfer.effectAllowed = "move"; dragAt.current = Date.now(); setDragging(l.id); }}
                       onDragEnd={() => { dragAt.current = Date.now(); setDragging(null); setOver(null); }}
@@ -147,6 +151,7 @@ function Pipeline() {
                       </div>
                     </div>); })}
                   {dragging && over === s && !col.some((l) => l.id === dragging) && <div className="pipe-drop" aria-hidden>Drop to move to {STATUS_LABEL[s]}</div>}
+                  {hidden > 0 && <div className="mt-1 flex flex-col items-center gap-1.5 text-center" data-testid="pipe-more"><span className="num text-[11px] text-muted-foreground">Showing {shown.length} of {col.length} leads</span><Button type="button" variant="outline" size="sm" className="rounded-full text-xs" onClick={() => setLimits((m) => ({ ...m, [s]: limit + PIPE_BATCH }))}>Show {Math.min(PIPE_BATCH, hidden)} more</Button></div>}
                   {col.length === 0 && !(dragging && over === s) && <div className="rounded-xl border border-dashed p-6 text-center text-xs text-muted-foreground">Drop a ticket here</div>}
                 </div>
               </div>
