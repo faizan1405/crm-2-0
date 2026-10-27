@@ -11,6 +11,7 @@ export const STALE_MESSAGE = {
   task: "This task was updated in another tab. Review the latest changes before saving.",
   project: "This project was changed in another tab. Review its latest stage before changing it.",
   note: "This note has newer changes in another tab. Your draft has been preserved.",
+  quotation: "This package was changed in another tab. Your edits are kept — review the latest version before saving.",
 } as const;
 export class StaleRecordError extends Error {
   readonly stale = true;

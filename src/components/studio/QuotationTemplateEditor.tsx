@@ -15,6 +15,10 @@ export function QuotationTemplateEditor({ initial, previewLeadId, onClose, onSav
   const isNew = !initial || !quotationTemplates.some((x) => x.id === initial.id);
   const start = useMemo(() => initial ?? emptyQuotationTemplate(quotationTemplates.length), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [t, setT] = useState<QuotationTemplate>(start);
+  // The version this editor opened; a save from an outdated tab is refused and the edits stay on screen.
+  const [base, setBase] = useState(start.updatedAt);
+  const [stale, setStale] = useState(false);
+  const latest = quotationTemplates.find((x) => x.id === t.id);
   const [view, setView] = useState<"write" | "preview">("write");
   const [leadId, setLeadId] = useState(previewLeadId ?? leads[0]?.id ?? "");
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -33,7 +37,9 @@ export function QuotationTemplateEditor({ initial, previewLeadId, onClose, onSav
   const useToken = () => { let body = t.messageBody; mismatch.forEach((m) => { body = body.split(m).join("{packagePrice}"); }); set({ messageBody: body }); };
   const save = () => {
     if (err) { toast.error(err); return; }
-    const id = saveQuotationTemplate(t);
+    let id: string | null;
+    try { id = saveQuotationTemplate(t, isNew ? undefined : base); }
+    catch (e) { if (isStaleError(e)) { setStale(true); return; } if (isPersistError(e)) return; throw e; }
     if (!id) { toast.error("Couldn't save this package"); return; }
     toast.success(isNew ? "Package saved — it's available in every WhatsApp message now" : "Package updated everywhere");
     onSaved?.(id); onClose();
