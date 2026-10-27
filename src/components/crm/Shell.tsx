@@ -2,10 +2,10 @@ import { WhatsAppComposer } from "@/components/crm/WhatsAppComposer";
 import { isPending } from "@/lib/crm/followups";
 import { PostCallDialog, openCallLog } from "@/components/crm/PostCallDialog";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { startAutomationRunner } from "@/lib/crm/automationRunner";
-import { onPersistFailure, isPersistError } from "@/lib/crm/persistStatus";
+import { onPersistFailure, isPersistError, usePersistStatus, recoveredFromFailure } from "@/lib/crm/persistStatus";
 import { toast } from "sonner";
 import {
   LayoutDashboard, Users, KanbanSquare, CalendarClock, Wallet, StickyNote, Moon, Sun,
@@ -114,6 +114,9 @@ export function Shell({ title, subtitle, actions, children }: { title: string; s
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); setCollapsed(localStorage.getItem(COLLAPSE_KEY) === "1"); }, []);
   const toggleCollapse = () => setCollapsed(c => { try { localStorage.setItem(COLLAPSE_KEY, c ? "0" : "1"); } catch { /* layout preference only */ } return !c; });
+  // Once a retry saves, the earlier "not saved" notice is outdated — clear it so it can't sit beside the success message.
+  const saveOk = usePersistStatus().lastOk; const prevSaveOk = useRef(saveOk);
+  useEffect(() => { if (recoveredFromFailure(prevSaveOk.current, saveOk)) toast.dismiss("persist-failure"); prevSaveOk.current = saveOk; }, [saveOk]);
   // Failed saves: one clear message; the action was rolled back, so forms stay open with their content for a retry.
   useEffect(() => {
     const off = onPersistFailure((e) => toast.error(e.quota ? "Browser storage is full" : "Changes not saved", {

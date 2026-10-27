@@ -60,8 +60,8 @@ export function ProofField({ value, onChange }: { value: StagedProof | null; onC
 
 /** Save staged proof against a payment; returns false (with message) on failure so the user can retry. */
 export async function saveProof(paymentId: string, p: StagedProof): Promise<boolean> {
-  try { await idbProofRepo.put(paymentId, p.file, p.file.name, p.type); return true; }
-  catch (e) { toast.error(`Proof not saved: ${friendlyStorageError(e)}`); return false; }
+  try { await idbProofRepo.put(paymentId, p.file, p.file.name, p.type); toast.dismiss(`proof-failed-${paymentId}`); return true; }
+  catch (e) { toast.error(`Proof not saved: ${friendlyStorageError(e)}`, { id: `proof-failed-${paymentId}`, description: "The previous proof (if any) is unchanged. Try again." }); return false; }
 }
 
 export function PaymentProofPreview({ paymentId, meta, title, onClose }: { paymentId: string; meta: ProofMeta; title: string; onClose: () => void }) {
