@@ -416,3 +416,36 @@ Open: D2.2.2 (finance, projects, follow-ups and other workflows across tabs), D2
 **Limitations.** No cross-tab lock: two saves in the same instant can still race; these are sequential-stale guarantees, not transactions. Real financial transaction safety needs the future backend.
 
 Open: D2.2.2B (Projects, Tasks, Notes, rest), D2.1.1 three storage-failure browser scenarios, Pipeline long columns, Owner quotation packages, physical Pipeline drag, tag-filter clearing, security/privacy/accessibility, final end-to-end, backend transactions and real restore.
+
+## Checkpoint D2.2.2B.1 — Project & Task multi-tab browser QA (2026-10-27)
+
+**Setup.** One test browser profile, two real same-origin tabs, fresh isolated storage (no Owner records touched). Project "QA D222B1 Project" created through the real *Create project from deal* dialog with extra tasks QA Task 1–3 (8 tasks total incl. template). Test fixture in that isolated storage only: linked deal set to ₹40,000 with two valid payments (₹12,000 + ₹8,000 = ₹20,000). To produce a genuinely outdated tab, Tab B's cross-tab refresh listener was paused (simulates a background tab that hasn't caught up); every action was still a real UI click.
+
+**Fixes (both reproduced first, then re-run).**
+1. Task notes lost update — Tab B's unsaved notes draft overwrote Tab A's newer saved notes ("Task notes saved" shown in B). Cause: the save passed the task version current at click time, not the one the draft started from. Now the notes draft remembers its starting version; an outdated save is refused, the draft stays, and a notice shows the latest saved notes with *Load latest (discard draft)* / *Keep my draft*. If nothing was typed, the notes simply refresh.
+2. Board stage select silently overwrote a newer stage (Testing & QA → Awaiting content from an outdated tab). The per-card select now passes the stage the card showed, so the outdated move is refused.
+
+**Browser results.**
+- Task 1 different tasks from two tabs — **Passed**: Task 1 "A note on task 1", Task 2 "B note on task 2" both stored.
+- Task 2 same task, stale save — **Failed → fixed → Passed**: stored notes "A saved task 3"; B got "This task was updated in another tab…", its draft "B unsaved draft for task 3" kept, conflict notice shown.
+- Task 3 complete same task from both tabs — **Passed**: B still showed "Complete"; status done, exactly 1 "Completed" history entry; B: "This task was already completed in another tab — nothing changed."
+- Task 4 reopen + outdated action — **Passed**: history Created → Edited → Completed → Reopened (no extra entries); B: "already reopened in another tab — nothing changed."
+- Task 5 refresh both tabs — **Passed**: 8 tasks, 8 unique ids, QA Task 2 done, others open; both tabs "1 of 8 tasks complete".
+- Project stage, detail page — **Passed**: stored Design; outdated B refused ("This project was changed in another tab…").
+- Project stage, board — **Failed → fixed → Passed**: stored Testing & QA; B refused; history only Discovery→Design, Design→Testing & QA.
+- Archive from both tabs — **Passed**: archived once, 1 "Archived (records kept)" entry; B: "already archived in another tab — nothing changed" (no false success); after refresh both tabs show Restore project.
+- Project notes from two tabs — **Passed**: "Note: QA note from tab A" and "…tab B" on this project only, no duplicates.
+- Client notes from two tabs — **Passed**: both stored once as note activities on the linked lead.
+- Client requirements conflicting edit — **Not tested**: requirements support add/tick only, no text editing.
+- Delivery & finance — **Passed**: Mark delivered (with override reason for open checklist items) → stage delivered; deal ₹40,000 (status active, unchanged), received ₹20,000, outstanding ₹20,000; payments 5 before/after, same two payments, none voided; Finance tab identical in both tabs after refresh.
+- Employee C authorized task action — **Passed**: completed own assigned QA Task 1; unassigned task disabled; no Finance tab, no amounts.
+- Unauthorized Employee D — **Passed**: no Save changes, stage select disabled, no archive, no project-note box; client note refused ("You don't have permission to add client notes."), nothing stored; no amounts shown.
+- Revoked permission on reopening preview — **Passed**: Employee C's task button disabled.
+- Preview isolation — **Passed**: Owner projects, tasks, deals, payments, activities and leads byte-identical after each preview exit; task completed in preview not in Owner data.
+- No page errors in any run.
+
+**Gates.** 458 tests pass (baseline kept; fixes are screen wiring onto already-tested store guards), typecheck clean, full production build OK.
+
+**Limitations.** No cross-tab lock: two saves landing in the same instant can still race. Reassign/due-date task selects apply onto the latest record without a conflict prompt. Not real multi-user sync; data lives in this browser only.
+
+Open: D2.1.1 storage-failure browser tests, Pipeline long-column performance, actual Owner quotation-package verification, physical pointer-driven Pipeline dragging, tag-filter clearing browser test, security/privacy/accessibility audit, final end-to-end acceptance, secure backend transactions and actual restoration.
