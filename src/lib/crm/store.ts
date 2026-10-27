@@ -253,7 +253,8 @@ interface CRMState extends Prefs, ProjectSlice, ProjectCustomSlice, AnalyticsSli
   /** `baseDue` = due time the user saw; if the follow-up was rescheduled since, throws StaleRecordError (nothing saved). */
   completeFollowUp: (id: string, baseDue?: string) => FollowUpOutcome;
   rescheduleFollowUp: (id: string, date: string, baseDue?: string) => FollowUpOutcome;
-  saveNote: (note: Note) => void;
+  /** `base` = updatedAt the editor loaded; if the saved note changed since, throws StaleRecordError (nothing saved). */
+  saveNote: (note: Note, base?: string) => void;
   deleteNote: (id: string) => void;
   toggleBriefing: (key: string) => void;
   resetBriefing: () => void;
@@ -871,8 +872,11 @@ export const useCRM = create<CRMState>()(
         });
         return undefined;
       },
-      saveNote: (note) =>
-        set((s) => ({ notes: s.notes.some((n) => n.id === note.id) ? s.notes.map((n) => (n.id === note.id ? note : n)) : [note, ...s.notes] })),
+      saveNote: (note, base) => {
+        const prev = get().notes.find((n) => n.id === note.id);
+        if (base !== undefined && prev && prev.updatedAt !== base) throw new StaleRecordError(note.id, "note");
+        set((s) => ({ notes: s.notes.some((n) => n.id === note.id) ? s.notes.map((n) => (n.id === note.id ? note : n)) : [note, ...s.notes] }));
+      },
       deleteNote: (id) => set((s) => ({ notes: s.notes.filter((n) => n.id !== id) })),
       toggleBriefing: (key) =>
         set((s) => {
