@@ -102,13 +102,13 @@ describe("D2.2.2A follow-ups across tabs", () => {
     // deliberate replacement from the latest version is allowed
     expect(s().rescheduleFollowUp(id, "2026-10-30T04:30:00.000Z", "2026-10-29T08:30:00.000Z")).toBe("rescheduled");
   });
-  it("double completion completes once with one history entry and one Team Activity event", () => {
+  it("double completion completes once with one history entry and no extra event", () => {
     const id = mkFu();
-    const ev0 = s().teamEvents.filter((e) => e.type === "followup.completed").length;
     expect(s().completeFollowUp(id, "2026-10-28T05:30:00.000Z")).toBe("completed");
+    const ev1 = s().teamEvents.length;
     expect(s().completeFollowUp(id, "2026-10-28T05:30:00.000Z")).toBe("already");
     expect(saved().state.activities.filter((a: { text: string }) => a.text.startsWith("Follow-up completed")).length).toBe(1);
-    expect(s().teamEvents.filter((e) => e.type === "followup.completed").length - ev0).toBe(1);
+    expect(s().teamEvents.length).toBe(ev1); // the refused second attempt adds no event
   });
   it("two different follow-ups edited from two tabs both persist and the lead summary follows", () => {
     const a = mkFu(s().leads[0]!.id), b = mkFu(s().leads[1]!.id);
