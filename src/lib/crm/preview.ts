@@ -60,7 +60,7 @@ export function scopeSecondary(d: ScopeInput, employeeId: string, ids: Set<strin
     // Only events about this employee or their in-scope records; amounts/old values stripped from money events without finance access.
     teamEvents: (d.teamEvents ?? [])
       .filter((e) => e.actorUserId === employeeId || e.targetEmployeeId === employeeId || (e.relatedLeadId != null && ids.has(e.relatedLeadId)) || (e.entityType === "project" && projectIds.has(e.entityId)))
-      .map((e) => (!money && (FINANCE_ENTITY.has(e.entityType) || e.module === "finance") ? { ...e, oldValues: undefined, newValues: undefined } : e)),
+      .map((e): ActivityEvent => { if (money || !(FINANCE_ENTITY.has(e.entityType) || e.module === "finance")) return e; const { oldValues: _o, newValues: _n, ...rest } = e; return rest; }),
     reminders: (d.reminders ?? []).filter((r) => (r.leadId !== "" && ids.has(r.leadId)) || (r.projectId != null && projectIds.has(r.projectId))),
     assignments: pick(d.assignments, (k) => ids.has(k)),
     assignmentEvents: (d.assignmentEvents ?? []).filter((e) => ids.has(e.leadId) && (e.previousAssigneeId === employeeId || e.newAssigneeId === employeeId)),
