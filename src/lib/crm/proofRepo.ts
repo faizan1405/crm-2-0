@@ -40,14 +40,20 @@ const listeners = new Set<() => void>();
 let version = 0;
 const bump = () => { version++; listeners.forEach((l) => l()); };
 
+export const PROOF_PREVIEW_DENIED = "Payment proofs can't be added, replaced or removed in an employee preview. Nothing was changed.";
+/** E1.1B: during an employee preview, only proofs of payments in the employee's scoped copy are readable, and files are never written. */
+const previewVisible = (paymentId: string) => !activePreview() || useCRM.getState().payments.some((p) => p.id === paymentId);
+
 export const idbProofRepo: ProofRepo = {
-  async list() { const d = await db(); return req(d.transaction("meta").objectStore("meta").getAll() as IDBRequest<ProofMeta[]>); },
+  async list() { const d = await db(); const all = await req(d.transaction("meta").objectStore("meta").getAll() as IDBRequest<ProofMeta[]>); return all.filter((m) => previewVisible(m.paymentId)); },
   async get(paymentId) {
+    if (!previewVisible(paymentId)) return null;
     const d = await db(); const t = d.transaction(["meta", "files"]);
     const [meta, blob] = await Promise.all([req(t.objectStore("meta").get(paymentId) as IDBRequest<ProofMeta | undefined>), req(t.objectStore("files").get(paymentId) as IDBRequest<ArrayBuffer | undefined>)]);
     return meta && blob && blob.byteLength > 0 ? { meta, blob: new Blob([blob], { type: meta.mimeType }) } : null;
   },
   async put(paymentId, file, name, type) {
+    if (activePreview()) throw new Error(PROOF_PREVIEW_DENIED);
     if (busy.has(paymentId)) throw new Error("This payment's proof is already being saved");
     busy.add(paymentId);
     try {
