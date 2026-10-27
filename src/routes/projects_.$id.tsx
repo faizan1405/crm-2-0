@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ArrowDown, ArrowLeft, ArrowUp, Check, ExternalLink, FolderKanban, MessageCircle, Plus, RotateCcw } from "lucide-react";
 import { Shell, Empty, selectCls } from "@/components/crm/Shell";
