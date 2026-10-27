@@ -166,6 +166,13 @@ function TaskRow({ t, late, assignee, people, canEdit, canDone, onDone, onMove, 
   useEffect(() => { if (changedElsewhere && !dirty) { setNotes(t.notes ?? ""); setBase({ version: t.version, notes: t.notes ?? "" }); } }, [changedElsewhere, dirty, t.version, t.notes]);
   const conflict = changedElsewhere && dirty && (t.notes ?? "") !== base.notes;
   const loadLatest = () => { setNotes(t.notes ?? ""); setBase({ version: t.version, notes: t.notes ?? "" }); };
+  // Assignee / due-date edits carry the version this row showed; if another tab saved first, keep the person's choice and ask.
+  const [pending, setPending] = useState<{ patch: { assigneeId?: string | null; dueDate?: string | undefined }; label: string } | null>(null);
+  const quickEdit = (patch: { assigneeId?: string | null; dueDate?: string | undefined }, label: string) => {
+    if (onEdit(patch, t.version)) { setPending(null); return; }
+    const cur = useCRM.getState().projectTasks.find((x) => x.id === t.id);
+    if (cur && cur.version !== t.version) setPending({ patch, label });
+  };
   const saveNotes = () => { if (onEdit({ notes: notes || undefined }, base.version)) { const cur = useCRM.getState().projectTasks.find((x) => x.id === t.id); setBase({ version: cur?.version ?? t.version, notes }); toast.success("Task notes saved"); } };
   return <li className="pd-task" data-done={t.status === "done" || undefined}>
     <div className="flex items-start gap-3">
@@ -174,7 +181,8 @@ function TaskRow({ t, late, assignee, people, canEdit, canDone, onDone, onMove, 
       {canEdit && <div className="flex gap-0.5"><Button size="icon" variant="ghost" className="size-7" aria-label="Move up" onClick={() => onMove(-1)}><ArrowUp className="size-3.5" /></Button><Button size="icon" variant="ghost" className="size-7" aria-label="Move down" onClick={() => onMove(1)}><ArrowDown className="size-3.5" /></Button></div>}
     </div>
     {open && <div className="mt-3 grid gap-2 border-t pt-3">
-      {canEdit && <div className="pd-filters"><select aria-label="Reassign" className={selectCls} value={t.assigneeId ?? ""} onChange={(e) => onEdit({ assigneeId: e.target.value || null })}><option value="">Unassigned</option>{people.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select><Input aria-label="Change due date" type="date" className="w-auto" value={t.dueDate ?? ""} onChange={(e) => onEdit({ dueDate: e.target.value || undefined })} /></div>}
+      {canEdit && <div className="pd-filters"><select aria-label="Reassign" className={selectCls} value={t.assigneeId ?? ""} onChange={(e) => { const v = e.target.value || null; quickEdit({ assigneeId: v }, `assignee “${people.find((x) => x.id === v)?.name ?? "Unassigned"}”`); }}><option value="">Unassigned</option>{people.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select><Input aria-label="Change due date" type="date" className="w-auto" value={t.dueDate ?? ""} onChange={(e) => quickEdit({ dueDate: e.target.value || undefined }, e.target.value ? `due date ${formatDate(e.target.value)}` : "no due date")} /></div>}
+      {canEdit && pending && <div className="pd-note" role="alert"><b>This task was updated in another tab.</b> Nothing was saved. Latest: {assignee}{t.dueDate ? ` · due ${formatDate(t.dueDate)}` : " · no due date"}. Your change: {pending.label}.<div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => { if (onEdit(pending.patch, t.version)) { setPending(null); toast.success("Your change was saved on top of the latest task"); } }}>Apply my change</Button><Button size="sm" variant="outline" onClick={() => setPending(null)}>Keep latest</Button></div></div>}
       {canEdit ? <>{conflict && <div className="pd-note" role="alert"><b>These task notes were updated in another tab.</b> Your draft is kept. Latest saved notes: “{t.notes || "(empty)"}”<div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={loadLatest}>Load latest (discard draft)</Button><Button size="sm" variant="outline" onClick={() => setBase({ version: t.version, notes: t.notes ?? "" })}>Keep my draft</Button></div></div>}<div className="flex gap-2"><Textarea aria-label="Task notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" /><Button variant="outline" onClick={saveNotes}>Save</Button></div></> : t.notes && <p className="text-sm">{t.notes}</p>}
       <ul className="text-[11px] text-muted-foreground">{t.history.slice(-5).reverse().map((h, i) => <li key={i}>{formatDateTime(h.at)} · {h.change}</li>)}</ul>
     </div>}
