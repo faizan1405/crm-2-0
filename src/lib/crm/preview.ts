@@ -8,13 +8,13 @@ import type { QuotationShare } from "./studio";
 import { scopeProjectCustomization } from "./projectCustomize";
 import { isOnProject, scopeProjects, type Project, type ProjectMilestone, type ProjectTask, type SupportRequest } from "./projects";
 import type { ActivityEvent } from "./activity";
-import type { AssignmentEvent } from "./access";
+import type { AssignmentEvent, EmployeeAccess } from "./access";
 import type { Reminder } from "./automation";
 import { goalsFor, visibleGoal, type GoalDef, type GoalRevision } from "./performance";
 import type { InboxMeta, LeadRelation } from "./inbox";
 import { scopeCustomization, viewAllowed, type CustomFieldDef, type FieldValues, type LeadTags, type SavedView } from "./customize";
 
-interface ScopeInput { leads: Lead[]; followUps: FollowUp[]; activities: LeadActivity[]; deals: Deal[]; payments: Payment[]; quotationShares: QuotationShare[]; assignments: Record<string, Assignment>; customFields?: CustomFieldDef[]; fieldValues?: FieldValues; leadTags?: LeadTags; savedViews?: SavedView[]; projects?: Project[]; projectTasks?: ProjectTask[]; projectMilestones?: ProjectMilestone[]; supportRequests?: SupportRequest[]; projectFields?: CustomFieldDef[]; projectFieldValues?: FieldValues; projectTags?: LeadTags; teamEvents?: ActivityEvent[]; reminders?: Reminder[]; assignmentEvents?: AssignmentEvent[]; goals?: GoalDef[]; goalRevisions?: GoalRevision[]; inboxMeta?: Record<string, InboxMeta>; leadRelations?: Record<string, LeadRelation>; employeeAccess?: Record<string, unknown> }
+interface ScopeInput { leads: Lead[]; followUps: FollowUp[]; activities: LeadActivity[]; deals: Deal[]; payments: Payment[]; quotationShares: QuotationShare[]; assignments: Record<string, Assignment>; customFields?: CustomFieldDef[]; fieldValues?: FieldValues; leadTags?: LeadTags; savedViews?: SavedView[]; projects?: Project[]; projectTasks?: ProjectTask[]; projectMilestones?: ProjectMilestone[]; supportRequests?: SupportRequest[]; projectFields?: CustomFieldDef[]; projectFieldValues?: FieldValues; projectTags?: LeadTags; teamEvents?: ActivityEvent[]; reminders?: Reminder[]; assignmentEvents?: AssignmentEvent[]; goals?: GoalDef[]; goalRevisions?: GoalRevision[]; inboxMeta?: Record<string, InboxMeta>; leadRelations?: Record<string, LeadRelation>; employeeAccess?: Record<string, EmployeeAccess> }
 
 export const FINANCE_REDACTED = "Finance update (details hidden — no finance access)";
 
