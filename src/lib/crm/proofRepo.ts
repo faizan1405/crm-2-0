@@ -3,6 +3,8 @@
 // (private storage, server-side validation and finance-permission checks on every read).
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { readBytes, type ProofMeta, type ProofKind } from "./attachments";
+import { activePreview } from "./session";
+import { useCRM } from "./store";
 
 export interface ProofRepo {
   list(): Promise<ProofMeta[]>;
@@ -70,6 +72,7 @@ export const idbProofRepo: ProofRepo = {
     } finally { busy.delete(paymentId); }
   },
   async remove(paymentId) {
+    if (activePreview()) throw new Error(PROOF_PREVIEW_DENIED);
     const d = await db(); const t = d.transaction(["meta", "files"], "readwrite");
     t.objectStore("meta").delete(paymentId); t.objectStore("files").delete(paymentId);
     await done(t); bump();
