@@ -106,6 +106,7 @@ describe("tasks and progress", () => {
   it("reassignment keeps the previous assignee in task history", () => {
     const id = make();
     const t = s().projectTasks.find((x) => x.projectId === id)!;
+    useCRM.setState({ employees: ["emp_a", "emp_b"].map((e) => ({ id: e, name: e, accountStatus: "active" })) as never });
     s().updateTask(t.id, { assigneeId: "emp_a" });
     s().updateTask(t.id, { assigneeId: "emp_b" });
     const h = s().projectTasks.find((x) => x.id === t.id)!.history.map((x) => x.change);

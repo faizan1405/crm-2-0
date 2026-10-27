@@ -133,6 +133,7 @@ export function createProjectSlice(set: (fn: (s: S) => Partial<S>) => void, get:
       if (!t || !p || !canEditTask(t, p, projectViewer())) return "You can't edit this task.";
       if (baseVersion !== undefined && t.version !== baseVersion) throw new StaleRecordError(id, "task");
       if (patch.title !== undefined && !patch.title.trim()) return "Give the task a title.";
+      if (patch.assigneeId !== undefined && patch.assigneeId !== t.assigneeId) { const e = taskAssigneeError(patch.assigneeId, (get() as unknown as { employees: { id: string; accountStatus: string }[] }).employees); if (e) return e; }
       if (looksLikeSecret(patch.notes)) return SECRET_ERROR;
       const changes = [patch.assigneeId !== undefined && patch.assigneeId !== t.assigneeId ? `Reassigned from ${t.assigneeId ?? "nobody"} to ${patch.assigneeId ?? "nobody"}` : "", patch.dueDate !== undefined && patch.dueDate !== t.dueDate ? `Due ${patch.dueDate || "cleared"}` : ""].filter(Boolean);
       editTask(id, () => patch as Partial<ProjectTask>, changes.join(" · ") || "Edited");
@@ -220,4 +221,11 @@ export function createProjectSlice(set: (fn: (s: S) => Partial<S>) => void, get:
 export function migrateProjects(state: Record<string, unknown>, version: number): Record<string, unknown> {
   if (!state || version >= 8) return state;
   return { ...state, projects: state["projects"] ?? [], projectTasks: state["projectTasks"] ?? [], projectMilestones: state["projectMilestones"] ?? [], supportRequests: state["supportRequests"] ?? [], projectTemplates: state["projectTemplates"] ?? starterTemplates(new Date().toISOString()) };
+}
+
+/** A task may be newly assigned only to nobody, the Owner, or an active employee (inactive/archived/pending/unknown are refused). */
+export function taskAssigneeError(id: string | null, employees: readonly { id: string; accountStatus: string }[]): string | null {
+  if (!id || id === "owner") return null;
+  const e = employees.find((x) => x.id === id);
+  return e && e.accountStatus === "active" ? null : "This person can't be assigned tasks — only active team members can.";
 }
