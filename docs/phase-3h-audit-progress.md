@@ -449,3 +449,27 @@ Open: D2.2.2B (Projects, Tasks, Notes, rest), D2.1.1 three storage-failure brows
 **Limitations.** No cross-tab lock: two saves landing in the same instant can still race. Reassign/due-date task selects apply onto the latest record without a conflict prompt. Not real multi-user sync; data lives in this browser only.
 
 Open: D2.1.1 storage-failure browser tests, Pipeline long-column performance, actual Owner quotation-package verification, physical pointer-driven Pipeline dragging, tag-filter clearing browser test, security/privacy/accessibility audit, final end-to-end acceptance, secure backend transactions and actual restoration.
+
+## Checkpoint D2.1.1 — Final storage-failure browser acceptance
+
+Environment: one headless Chromium test browser on the dev server, fresh synthetic demo data (no Owner records). Isolated records: "T211 Proof Deal" (Other client, ₹50,000), one ₹10,000 payment, project "T211 Storage Project" with tasks "T211 Task A" / "T211 Task B", synthetic PNGs (proof_a 140 B, proof_b 156 B). Everything created through the real UI.
+
+Failure injection:
+- localStorage: `Storage.prototype.setItem` wrapped in the page to throw a real `DOMException("QuotaExceededError")` only for the CRM key. The app's own persist path (`atomic` → zustand persist → setItem) runs unchanged and hits the error exactly as a full browser would. Browser storage was never cleared.
+- IndexedDB: `IDBObjectStore.prototype.put` wrapped so the real readwrite transaction is aborted after the file and metadata writes are queued. This exercises the real `idbProofRepo.put` transaction and its rollback; it does not reproduce the exact `QuotaExceededError` name a real full disk produces (so the generic, not the "storage is full", message is shown).
+
+| Scenario | Result |
+|---|---|
+| 1. Project Task save failure | **Passed** |
+| 2. Payment-proof replacement failure | **Passed** |
+| 3. Data Vault after failed saves | **Passed** |
+| 4. Storage-failure UX | **Passed** after 1 fix |
+
+1. Tasks — notes saved normally, survived refresh (v2). Under failure: notes edit → Save showed only "Browser storage is full … Nothing was recorded", no "Task notes saved"; typed draft stayed in the box; stored notes, version and history unchanged. Complete Task B under failure: button stayed "Complete", stored status open, no history entry. 5 writes blocked. Retry: "Task notes saved", refresh shows new notes, exactly 1 history entry added; completion retry persisted once.
+2. Proofs — original PNG readable after refresh, 140 B, SHA-256 3ac066a0…8eaa. Under failure: "Proof not saved: Couldn't save the file in this browser — The previous proof is unchanged", no "Proof replaced"; original bytes/checksum and attachment id unchanged, viewer still shows it; payment ₹10,000 unchanged. Retry: "Proof replaced"; after refresh bytes = replacement (156 B, checksum match). Exactly one metadata and one file entry — no orphans or duplicates.
+3. Vault — real Full Backup downloaded ("Complete backup verified and downloaded."); ZIP inspected: 24 entries, manifest complete, 1 of 1 proof files, only the replacement PNG (old checksum absent), deal/payment/project/tasks present with the retried notes. Restore & Verify: "Valid complete backup". Only `backupHistory` changed — no business records modified. Restore not enabled.
+4. Defect fixed (reproduced in the browser first): after a successful retry the old "Browser storage is full" / "Proof not saved" message stayed on screen next to the success message. Now cleared on the next successful save (`recoveredFromFailure`, proof toast id per payment). Regression test added.
+
+Quality gates: 459 tests pass (1 new), typecheck clean, production build OK.
+
+Still open: Task assignee and due-date cross-tab conflict protection; Pipeline long-column rendering; real Owner quotation package verification; real mouse Pipeline drag; tag-filter clearing browser regression; security and privacy audit; accessibility and keyboard testing; final end-to-end acceptance; future secure Hostinger persistence, atomic transactions and real restoration.
