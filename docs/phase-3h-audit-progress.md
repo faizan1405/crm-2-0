@@ -394,3 +394,25 @@ Open: D2.2 multi-tab conflicts, Pipeline progressive rendering, Owner quotation 
 **Limitations.** localStorage has no cross-tab lock and actions are synchronous, so Web Locks can't wrap them; two saves landing in the same instant can still race (last write wins for that instant). Quick single-field controls (priority/stage selects, pin) apply onto the latest record without a conflict prompt — they don't send stale fields. Only the Lead edit form has the draft-conflict UI; tags, custom fields, notes and assignment rely on re-read-before-write. Not real multi-user sync.
 
 Open: D2.2.2 (finance, projects, follow-ups and other workflows across tabs), D2.1.1 browser scenarios (project task failed save, proof replacement failure, Data Vault after failed saves), Pipeline progressive rendering, Owner quotation packages, physical Pipeline drag, tag-filter clearing, security/accessibility, final end-to-end, real backend storage and restore.
+
+## Checkpoint D2.2.2A — Finance & Follow-up multi-tab reliability (2026-10-27)
+
+**Risks found (before).** Since D2.2.1 every action already re-reads the latest saved state, so stale whole-collection overwrites of Deals/Payments/Follow-ups were already prevented and `addPayment` re-checked the latest outstanding balance. Remaining defects: (1) `voidPayment` silently did nothing on an already-voided payment but the screen still said "Payment voided" (false success); (2) `completeFollowUp` likewise showed "Follow-up completed" for an already-completed/replaced follow-up; (3) a reschedule window opened before another tab's reschedule overwrote the newer time (lost update); (4) a stale Complete would complete a follow-up whose schedule had changed meanwhile without telling the user. Reminders/notifications are derived from saved records, so no separate reminder rows existed to duplicate.
+
+**Changes.** `voidPayment` returns voided/already/missing; `completeFollowUp(id, baseDue)` and `rescheduleFollowUp(id, at, baseDue)` return completed/rescheduled/already/closed/missing and throw `StaleRecordError` (nothing saved, no history) when the due time differs from the one the user saw. Shared `runFollowUp`/`runVoid` show exactly one honest message. The reschedule window remembers the time it opened with; on conflict it keeps the new time and shows "This follow-up was updated in another tab. Review the latest schedule before saving." with Replace with my new time / Keep latest. A rejected payment whose amount exceeds the latest balance explains it was changed in another tab. No new storage, no second finance or follow-up system.
+
+**Browser (one test browser, two real same-origin tabs, synthetic T222 deals; fresh storage):**
+- 1 Two payments on T222 Deal A (₹40,000), Tab B's window opened before Tab A saved: ₹4,000 + ₹16,000 → two separate ids, received ₹20,000, outstanding ₹20,000, exactly two "Payment of … recorded" history entries.
+- 2 Void ₹16,000 from both tabs at nearly the same moment: Tab B's screen had already refreshed, so its Void button was gone; payment voided once and kept in the ledger, 1 void history entry, received ₹4,000. The "already voided" message itself was exercised only in automated tests (a truly stale click couldn't be produced — a held confirm box freezes both tabs).
+- 3 Stale action: Tab B's window open, Tab A recorded ₹15,000; Tab B's ₹30,000 refused ("Amount exceeds the ₹21,000 outstanding"), nothing saved; received ₹19,000.
+- 4 Two deals, near-simultaneous saves: Deal A ₹1,000 and Deal B ₹2,500 both stored, both deals present (A received ₹20,000, B ₹2,500).
+- 6 Two reschedules: Tab A moved fu_T1 to 28 Oct 10:00 IST; Tab B's older window → conflict notice, nothing saved, fu_T1 kept 28 Oct 10:00.
+- 7 Double completion, near-simultaneous: fu_T2 completed once, 1 completion history entry (second tab's button had already disappeared).
+- 9 Refresh: lead_1 next follow-up = 28 Oct 10:00 IST, lead_2 none; no page errors.
+- Not browser-tested (automated only): 5 reschedule-vs-stale-complete, 8 two different follow-ups, 10 employee Finance permission; Finance Studio/Analytics screen totals not compared on screen (saved-record totals verified).
+
+**Tests.** 10 new (`crossTab.d222a.test.ts`). **450 pass**, typecheck clean, production build OK.
+
+**Limitations.** No cross-tab lock: two saves in the same instant can still race; these are sequential-stale guarantees, not transactions. Real financial transaction safety needs the future backend.
+
+Open: D2.2.2B (Projects, Tasks, Notes, rest), D2.1.1 three storage-failure browser scenarios, Pipeline long columns, Owner quotation packages, physical Pipeline drag, tag-filter clearing, security/privacy/accessibility, final end-to-end, backend transactions and real restore.
