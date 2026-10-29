@@ -45,6 +45,11 @@ const DialogContent = React.forwardRef<
   // Most CRM dialogs are opened from state, not a Radix Trigger, so Radix has nothing to return focus to.
   // Remember the control that had focus when the dialog opened and put focus back there on close.
   const returnTo = React.useRef<HTMLElement | null>(null);
+  // Dialogs removed from the page while open (keyed remounts) never fire onCloseAutoFocus — restore focus here too.
+  React.useEffect(() => () => {
+    const t = returnTo.current; returnTo.current = null;
+    if (t) requestAnimationFrame(() => { const a = document.activeElement; if ((!a || a === document.body || !a.isConnected) && t.isConnected) t.focus(); });
+  }, []);
   return (
   <DialogPortal>
     <DialogOverlay />
