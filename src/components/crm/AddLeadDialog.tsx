@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Sparkles, AlertTriangle, PenLine } from "lucide-react";
 import { useCRM, duplicatePhone } from "@/lib/crm/store";
-import { validPhone } from "@/lib/crm/validation";
+import { validEmail, validPhone } from "@/lib/crm/validation";
 import { businessDateTime } from "@/lib/crm/dates";
 import { structureLead } from "@/lib/crm/parse";
 import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, type LeadPriority, type LeadSource, type LeadStatus, type Lead } from "@/lib/crm/types";
