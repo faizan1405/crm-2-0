@@ -34,7 +34,10 @@ export const Route = createFileRoute("/notes")({
 type Draft = { id: string; title: string; doc: NoteDoc };
 
 function Notes() {
-  const { notes, saveNote, deleteNote } = useCRM();
+  // Subscribe to notes only: re-rendering the editor page on every unrelated CRM change made typing and switching sluggish.
+  const notes = useCRM((s) => s.notes);
+  const saveNote = useCRM((s) => s.saveNote);
+  const deleteNote = useCRM((s) => s.deleteNote);
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<NoteSort>("recent");
   const list = useMemo(() => filterNotes(notes, q, sort), [notes, q, sort]);
