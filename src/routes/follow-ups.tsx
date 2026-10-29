@@ -9,6 +9,7 @@ import { Shell, Empty, PriorityBadge } from "@/components/crm/Shell";
 import { SuggestionList } from "@/components/crm/Suggestions";
 import { CallButton } from "@/components/crm/CallButton";
 import { openCallLog } from "@/components/crm/PostCallDialog";
+import { useAccess } from "@/lib/crm/session";
 import { WhatsAppButton } from "@/components/crm/WhatsAppComposer";
 import { FollowUpDialog } from "@/components/crm/Dialogs";
 import { useCRM } from "@/lib/crm/store";
@@ -42,6 +43,7 @@ function FollowUps() {
   const { followUps, leads, deals, activities, completeFollowUp, rescheduleFollowUp } = useCRM();
   const [tab, setTab] = useState<Tab>("today");
   const [add, setAdd] = useState(false);
+  const { can } = useAccess();
   const [resched, setResched] = useState<FollowUp | null>(null);
   const [inspect, setInspect] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -55,7 +57,7 @@ function FollowUps() {
   const once = (id: string, fn: () => void) => { if (busy === id) return; setBusy(id); fn(); setTimeout(() => setBusy(null), 400); };
 
   return (
-    <Shell title="Follow-ups" subtitle={`${counts.overdue + counts.today} need attention today · India time (IST)`} actions={<Button onClick={() => setAdd(true)}><Plus className="size-4" />Schedule</Button>}>
+    <Shell title="Follow-ups" subtitle={`${counts.overdue + counts.today} need attention today · India time (IST)`} actions={can("followups.create") ? <Button onClick={() => setAdd(true)}><Plus className="size-4" />Schedule</Button> : undefined}>
       <RemindersPanel />
       <div className="fu-overview mb-6">
         {([["Pending", counts.overdue + counts.today + counts.upcoming, ListTodo, "upcoming"], ["Overdue", counts.overdue, AlertCircle, "overdue"], ["Left today", counts.today, Clock, "today"], ["Hot clients", hot, Flame, "today"]] as const).map(([label, n, Icon, t]) => (
@@ -84,7 +86,7 @@ function FollowUps() {
                 {isPending(f) && l && (
                   <div className="fu-actions">
                     <CallButton leadId={l.id} phone={l.phone} name={l.name} source="Follow-ups" />
-                    <Button size="sm" variant="outline" className="rounded-full" onClick={() => openCallLog(l.id, "Follow-ups")}><NotebookPen className="size-3.5" />Log call</Button>
+                    {can("clients.calls") && <Button size="sm" variant="outline" className="rounded-full" onClick={() => openCallLog(l.id, "Follow-ups")}><NotebookPen className="size-3.5" />Log call</Button>}
                     <WhatsAppButton leadId={l.id} name={l.name} source="Follow-ups" label />
                     <Button size="sm" variant="ghost" className="rounded-full" onClick={() => setResched(f)}><CalendarSync className="size-3.5" />Reschedule</Button>
                     <Button size="sm" variant="ghost" className="rounded-full" disabled={busy === f.id} onClick={() => once(f.id, () => { runFollowUp(() => rescheduleFollowUp(f.id, tomorrowSameTime(f.dueAt), f.dueAt), `Moved to tomorrow, ${timeOnly(f.dueAt)}`); })}><SunMedium className="size-3.5" />Tomorrow {timeOnly(f.dueAt)}</Button>
