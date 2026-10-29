@@ -29,6 +29,15 @@ const DialogOverlay = React.forwardRef<
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
+// Last control focused outside any dialog: the opener, even when the dialog autofocuses its first field on mount.
+let lastOutsideFocus: HTMLElement | null = null;
+if (typeof document !== "undefined") {
+  document.addEventListener("focusin", (e) => {
+    const t = e.target;
+    if (t instanceof HTMLElement && !t.closest("[role=dialog],[role=alertdialog]")) lastOutsideFocus = t;
+  }, true);
+}
+
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
@@ -45,7 +54,7 @@ const DialogContent = React.forwardRef<
         "fixed left-[50%] top-[50%] z-50 grid w-[calc(100%-2rem)] max-h-[90dvh] overflow-y-auto max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-card p-6 shadow-pop duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 rounded-lg",
         className,
       )}
-      onOpenAutoFocus={(e) => { const a = document.activeElement; returnTo.current = a instanceof HTMLElement && a !== document.body ? a : null; onOpenAutoFocus?.(e); }}
+      onOpenAutoFocus={(e) => { const a = document.activeElement; returnTo.current = a instanceof HTMLElement && a !== document.body && !a.closest("[role=dialog],[role=alertdialog]") ? a : lastOutsideFocus; onOpenAutoFocus?.(e); }}
       onCloseAutoFocus={(e) => { onCloseAutoFocus?.(e); const t = returnTo.current; returnTo.current = null; if (!e.defaultPrevented && t?.isConnected) { e.preventDefault(); t.focus(); } }}
       {...props}
     >
