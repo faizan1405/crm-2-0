@@ -62,6 +62,9 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     if (be) e.budget = be;
     if (qe) e.quotedAmount = qe;
     setErrors(e);
+    // Keyboard users land on the first field that needs fixing (form order).
+    const firstBad = (["name", "phone", "email", "budget", "quotedAmount"] as const).find((k) => e[k]);
+    if (firstBad) requestAnimationFrame(() => document.getElementById(`f-${firstBad}`)?.focus());
     const cfr = validateLeadValues(cfDefs, cf, { isNew: true });
     setCfErr(cfr.errors);
     if (Object.keys(e).length || Object.keys(cfr.errors).length) return;
@@ -83,9 +86,9 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     close();
   };
 
-  const err = (k: keyof Form) => errors[k] && <p className="text-xs text-destructive">{errors[k]}</p>;
+  const err = (k: keyof Form) => errors[k] && <p id={`f-${k}-error`} className="text-xs text-destructive">{errors[k]}</p>;
   const field = (k: keyof Form, label: string, props: React.ComponentProps<typeof Input> = {}) => (
-    <div className="grid gap-1.5"><Label htmlFor={`f-${k}`}>{label}</Label><Input id={`f-${k}`} value={f[k]} onChange={set(k)} aria-invalid={!!errors[k]} {...props} />{err(k)}</div>
+    <div className="grid gap-1.5"><Label htmlFor={`f-${k}`}>{label}</Label><Input id={`f-${k}`} value={f[k]} onChange={set(k)} aria-invalid={!!errors[k]} {...(errors[k] ? { "aria-describedby": `f-${k}-error` } : {})} {...props} />{err(k)}</div>
   );
   const showForm = mode === "manual" || structured;
 

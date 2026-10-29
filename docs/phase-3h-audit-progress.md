@@ -581,3 +581,26 @@ Not Tested: PDF proofs in preview; Employee B submitting the Follow-up / Log cal
 Harness note: an early run read a second store module copy; those readings were discarded and rerun against the live instance.
 Quality: 487 tests pass, typecheck clean, full production build OK.
 Still open: Owner's three real quotation packages (manual), E2, F, backend-only security/central storage/real restoration.
+
+## E2.1 — keyboard navigation, form accessibility, permission UX (isolated test browser, synthetic data)
+Fixes made
+- Permission UX: Log call and Follow-up are hidden for employees without `clients.calls` / `followups.create` (lead page, Leads and Pipeline side panels, Follow-ups page). `openCallLog`/`startCall` refuse centrally ("You don't have permission to log calls."), and `FollowUpDialog` shows no form without `followups.create` (new) / `followups.edit` (reschedule). Store guards are unchanged and still refuse writes.
+- Focus return: dialogs opened from state (most CRM dialogs) sent focus to the page body on close. `DialogContent` now remembers the opener and restores focus, including for keyed remounts and autofocus fields.
+- Pipeline: closing the inspector (Escape) returns focus to the card it came from.
+- Add Lead: on a failed save, focus moves to the first invalid field; each error is linked to its field via `aria-describedby` (plus the existing `aria-invalid`).
+
+Browser Passed (real keyboard input)
+- Sidebar: Tab reaches every nav link in order with a visible outline; Enter navigates.
+- Pages /, Leads, Pipeline, Follow-ups, Sales Studio, Deals, Projects, Team, Data Vault: no unnamed focusable controls, no positive tabindex, one main, no horizontal overflow at 1440. Personal Notes loads slowly (editor); not swept.
+- Dialogs Add Lead, Schedule follow-up, Log call, WhatsApp composer, Record payment, Add employee: focus moves inside, has accessible name, 30 Tabs stay inside, Escape closes, focus returns to opener.
+- Add Lead by keyboard only: invalid phone + −50 budget → both errors next to fields, aria-invalid on both, focus on phone.
+- Pipeline: card reachable by Tab with visible ring; Enter opens inspector; ArrowDown on Stage select changed New → Contacted, history "Status changed to contacted", Undo by keyboard restored New; Escape closes and focus returns to card.
+- Project tasks: task form fields in logical order; Space opens task editor (Reassign, due date, notes); Space on the check completes the task.
+- Mobile 768/390/360: Add Lead opened by keyboard, failed save focuses the first field in view, next field stays in view, dialog scrolls, no horizontal overflow, focus returns.
+- Employee B: Log call / Follow-up / Review & schedule not shown on lead page or Pipeline panel; direct store logCall/addFollowUp refused; no activity, follow-up or call log saved.
+- PDF proof: Owner attached a synthetic PDF through the UI. Employee C (no finance): no View/Add proof. Employee D (proofs.view, no download): sees "PDF document", no Replace/Remove/Download/Open and no download link. Direct repo put/remove refused in preview. PDF bytes and metadata identical after exiting.
+
+Automated-only: dialog focus return (new jsdom test); permission helpers (new test).
+Not Tested: Edit Lead form, Bulk Assignment, Payment Proof Preview by keyboard, Permission Editor toggles, quotation package fields, task notes/due-date error messages; Personal Notes keyboard sweep. Escape-safety of unsaved drafts was not checked beyond existing unsaved-change prompts. No screen reader was used.
+Existing semantic decision kept: a zero Budget is stored as blank.
+Still open: E2.2 (screen-reader semantics, contrast, touch targets), F end-to-end, Owner's real quotation packages (manual), server-side security/central storage/atomic transactions/real restoration.

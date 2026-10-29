@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { selectCls } from "@/components/crm/Shell";
 import { useCRM } from "@/lib/crm/store";
+import { allows, useSession, CALL_LOG_DENIED } from "@/lib/crm/session";
 import { activeFollowUp } from "@/lib/crm/followups";
 import { uid, formatDateTime } from "@/lib/crm/format";
 import { CALL_OUTCOMES, DATE_SHORTCUTS, callLogError, needsStageConfirm, outcomeStage, shortcutValue, toISO, type CallOutcome } from "@/lib/crm/calllog";
@@ -41,7 +42,9 @@ export const useCallLog = create<{
 );
 
 /** Use on any Call link: the device dialer opens via tel:, then the same log opens for this lead. */
+const callLogAllowed = () => allows(useSession.getState().preview, "clients.calls");
 export function startCall(leadId: string, source: string) {
+  if (!callLogAllowed()) return; // dialing is the phone's job; logging needs clients.calls
   useCallLog.getState().start(leadId, source);
   setTimeout(() => { const p = useCallLog.getState().pending; if (p?.leadId === leadId) useCallLog.getState().open(leadId); }, 400);
 }
@@ -149,4 +152,4 @@ export function PostCallDialog() {
 }
 
 /** Same reopen helper used by "Log call" buttons that don't dial. */
-export const openCallLog = (leadId: string, source: string) => { useCallLog.getState().start(leadId, source); useCallLog.getState().open(leadId); };
+export const openCallLog = (leadId: string, source: string) => { if (!callLogAllowed()) { toast.error(CALL_LOG_DENIED); return; } useCallLog.getState().start(leadId, source); useCallLog.getState().open(leadId); };

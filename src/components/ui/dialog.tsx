@@ -29,18 +29,42 @@ const DialogOverlay = React.forwardRef<
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
+// Last control focused outside any dialog: the opener, even when the dialog autofocuses its first field on mount.
+let lastOutsideFocus: HTMLElement | null = null;
+if (typeof document !== "undefined") {
+  document.addEventListener("focusin", (e) => {
+    const t = e.target;
+    if (t instanceof HTMLElement && !t.closest("[role=dialog],[role=alertdialog]")) lastOutsideFocus = t;
+  }, true);
+}
+
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+>(({ className, children, onOpenAutoFocus, onCloseAutoFocus, ...props }, ref) => {
+  // Most CRM dialogs are opened from state, not a Radix Trigger, so Radix has nothing to return focus to.
+  // Remember the control that had focus when the dialog opened and put focus back there on close.
+  const returnTo = React.useRef<HTMLElement | null>(null);
+  // Dialogs removed from the page while open (keyed remounts) never fire onCloseAutoFocus — restore focus here too.
+  React.useEffect(() => () => {
+    const t = returnTo.current; returnTo.current = null;
+    if (t) requestAnimationFrame(() => { const a = document.activeElement; if ((!a || a === document.body || !a.isConnected) && t.isConnected) t.focus(); });
+  }, []);
+  return (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
-      ref={ref}
+      ref={(node) => {
+        // Content attaches only when the dialog opens; the opener is the last control focused outside a dialog.
+        if (node && !returnTo.current) returnTo.current = lastOutsideFocus;
+        if (typeof ref === "function") ref(node); else if (ref) ref.current = node;
+      }}
       className={cn(
         "fixed left-[50%] top-[50%] z-50 grid w-[calc(100%-2rem)] max-h-[90dvh] overflow-y-auto max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-card p-6 shadow-pop duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 rounded-lg",
         className,
       )}
+      onOpenAutoFocus={(e) => { const a = document.activeElement; returnTo.current = a instanceof HTMLElement && a !== document.body && !a.closest("[role=dialog],[role=alertdialog]") ? a : lastOutsideFocus; onOpenAutoFocus?.(e); }}
+      onCloseAutoFocus={(e) => { onCloseAutoFocus?.(e); const t = returnTo.current; returnTo.current = null; if (!e.defaultPrevented && t?.isConnected) { e.preventDefault(); t.focus(); } }}
       {...props}
     >
       {children}
@@ -50,7 +74,8 @@ const DialogContent = React.forwardRef<
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPortal>
-));
+  );
+});
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (

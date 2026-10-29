@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { businessDateTime } from "@/lib/crm/dates";
 import { selectCls } from "./Shell";
+import { useAccess, followUpPermission, FOLLOWUP_DENIED } from "@/lib/crm/session";
 
 export interface FollowUpDraft { at?: string; type?: FollowUpType; note?: string }
 
@@ -33,7 +34,16 @@ export function FollowUpConflict({ existing, requested, onKeep, onReplace, onCan
   );
 }
 
-export function FollowUpDialog({ open, onOpenChange, leadId, initial, rescheduleId }: { open: boolean; onOpenChange: (o: boolean) => void; leadId?: string; initial?: FollowUpDraft; rescheduleId?: string }) {
+type FollowUpDialogProps = { open: boolean; onOpenChange: (o: boolean) => void; leadId?: string; initial?: FollowUpDraft; rescheduleId?: string };
+/** Never shows a working-looking form the employee can't submit; the store still refuses the write on its own. */
+export function FollowUpDialog(props: FollowUpDialogProps) {
+  const { can } = useAccess();
+  const allowed = can(followUpPermission(!!props.rescheduleId));
+  const { open, onOpenChange } = props;
+  useEffect(() => { if (open && !allowed) { toast.error(FOLLOWUP_DENIED); onOpenChange(false); } }, [open, allowed, onOpenChange]);
+  return allowed ? <FollowUpForm {...props} /> : null;
+}
+function FollowUpForm({ open, onOpenChange, leadId, initial, rescheduleId }: { open: boolean; onOpenChange: (o: boolean) => void; leadId?: string; initial?: FollowUpDraft; rescheduleId?: string }) {
   const { leads, addFollowUp, rescheduleFollowUp } = useCRM();
   const [lead, setLead] = useState(leadId ?? "");
   const [type, setType] = useState<FollowUpType>("call");
