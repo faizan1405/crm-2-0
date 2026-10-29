@@ -13,7 +13,7 @@ import { CreateProjectDialog, useCanProject } from "@/components/projects/Projec
 import { activeProjectForDeal } from "@/lib/crm/projects";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useDialogRequestClose, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { ProofField, PaymentProofPreview, saveProof, useProofPicker, type StagedProof } from "@/components/crm/PaymentProof";
 import { useProofIndex } from "@/lib/crm/proofRepo";
