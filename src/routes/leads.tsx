@@ -329,9 +329,9 @@ function Inspector({ id, onFollowUp, onStage, onRemove, onAssign, quickSel }: { 
       </div>
       <div className="mt-6 flex flex-wrap items-center gap-2">
         <CallButton leadId={l.id} phone={l.phone} name={l.name} source="Leads workspace" />
-        <Button variant="outline" size="sm" className="rounded-full" onClick={() => openCallLog(l.id, "Leads workspace")}><PhoneCall className="size-3.5" />Log call</Button>
+        {can("clients.calls") && <Button variant="outline" size="sm" className="rounded-full" onClick={() => openCallLog(l.id, "Leads workspace")}><PhoneCall className="size-3.5" />Log call</Button>}
         <WhatsAppButton leadId={l.id} name={l.name} source="Leads workspace" label />
-        <Button variant="outline" size="sm" className="rounded-full" onClick={onFollowUp}><CalendarPlus className="size-3.5" />Follow-up</Button>
+        {can("followups.create") && <Button variant="outline" size="sm" className="rounded-full" onClick={onFollowUp}><CalendarPlus className="size-3.5" />Follow-up</Button>}
         <Button variant="ghost" size="sm" asChild className="ml-auto rounded-full"><Link to="/leads/$id" params={{ id: l.id }}>Full record<ArrowUpRight className="size-3.5" /></Link></Button>
       </div>
       <dl className="mt-7 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-foreground pt-5 sm:grid-cols-3 xl:grid-cols-5">

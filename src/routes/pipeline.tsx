@@ -186,6 +186,7 @@ const Ticket = memo(function Ticket({ l, s, sig, canMove, selected, isDragging, 
 
 function PipeInspector({ lead: l, canMove, onClose, onStage, onFollowUp }: { lead: Lead; canMove: boolean; onClose: () => void; onStage: (s: LeadStatus) => void; onFollowUp: () => void }) {
   const { deals, payments, activities, followUps, addActivity } = useCRM();
+  const { can } = useAccess();
   const [note, setNote] = useState("");
   const [noting, setNoting] = useState(false);
   const now = new Date();
@@ -208,9 +209,9 @@ function PipeInspector({ lead: l, canMove, onClose, onStage, onFollowUp }: { lea
       </div>
       <div className="pipe-actions">
         <CallButton leadId={l.id} phone={l.phone} name={l.name} source="Pipeline" />
-        <Button variant="outline" size="sm" className="rounded-full" onClick={() => openCallLog(l.id, "Pipeline")}><PhoneCall className="size-3.5" />Log call</Button>
+        {can("clients.calls") && <Button variant="outline" size="sm" className="rounded-full" onClick={() => openCallLog(l.id, "Pipeline")}><PhoneCall className="size-3.5" />Log call</Button>}
         <WhatsAppButton leadId={l.id} name={l.name} source="Pipeline" label />
-        <Button variant="outline" size="sm" className="rounded-full" onClick={onFollowUp}><CalendarPlus className="size-3.5" />Follow-up</Button>
+        {can("followups.create") && <Button variant="outline" size="sm" className="rounded-full" onClick={onFollowUp}><CalendarPlus className="size-3.5" />Follow-up</Button>}
         <Button variant="outline" size="sm" className="rounded-full" onClick={() => setNoting((v) => !v)} aria-expanded={noting}><NotebookPen className="size-3.5" />Note</Button>
       </div>
       {noting && <div className="grid gap-2"><Textarea aria-label="New note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What happened? Saved to this client's history." autoFocus /><div className="flex justify-end gap-2"><Button size="sm" variant="ghost" onClick={() => setNoting(false)}>Cancel</Button><Button size="sm" onClick={saveNote} disabled={!note.trim()}>Save note</Button></div></div>}
