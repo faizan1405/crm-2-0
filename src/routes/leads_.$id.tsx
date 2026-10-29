@@ -3,7 +3,7 @@ import { mailtoHref } from "@/lib/crm/validation";
 import { runFollowUp, runVoid } from "@/components/crm/conflictFeedback";
 import { openCallLog } from "@/components/crm/PostCallDialog";
 import { CallButton } from "@/components/crm/CallButton";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useBlocker } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ArrowLeft, Phone, MessageCircle, Mail, CalendarPlus, Check, Pencil } from "lucide-react";
