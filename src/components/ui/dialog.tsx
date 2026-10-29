@@ -40,8 +40,14 @@ if (typeof document !== "undefined") {
 
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, onOpenAutoFocus, onCloseAutoFocus, ...props }, ref) => {
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { dirty?: boolean }
+>(({ className, children, onOpenAutoFocus, onCloseAutoFocus, onEscapeKeyDown, onPointerDownOutside, onInteractOutside, dirty, ...props }, ref) => {
+  // Unsaved-draft guard: with `dirty`, Escape, outside clicks and the X ask before closing instead of silently discarding.
+  const [asking, setAsking] = React.useState(false);
+  const keepRef = React.useRef<HTMLButtonElement>(null);
+  React.useEffect(() => { if (!dirty) setAsking(false); }, [dirty]);
+  React.useEffect(() => { if (asking) keepRef.current?.focus(); }, [asking]);
+  const guard = (e: Event) => { if (dirty) { e.preventDefault(); setAsking(true); } };
   // Most CRM dialogs are opened from state, not a Radix Trigger, so Radix has nothing to return focus to.
   // Remember the control that had focus when the dialog opened and put focus back there on close.
   const returnTo = React.useRef<HTMLElement | null>(null);
@@ -65,13 +71,31 @@ const DialogContent = React.forwardRef<
       )}
       onOpenAutoFocus={(e) => { const a = document.activeElement; returnTo.current = a instanceof HTMLElement && a !== document.body && !a.closest("[role=dialog],[role=alertdialog]") ? a : lastOutsideFocus; onOpenAutoFocus?.(e); }}
       onCloseAutoFocus={(e) => { onCloseAutoFocus?.(e); const t = returnTo.current; returnTo.current = null; if (!e.defaultPrevented && t?.isConnected) { e.preventDefault(); t.focus(); } }}
+      onEscapeKeyDown={(e) => { onEscapeKeyDown?.(e); if (!e.defaultPrevented) { if (asking) { e.preventDefault(); setAsking(false); } else guard(e); } }}
+      onPointerDownOutside={(e) => { onPointerDownOutside?.(e); if (!e.defaultPrevented) guard(e); }}
+      onInteractOutside={(e) => { onInteractOutside?.(e); if (!e.defaultPrevented && dirty) e.preventDefault(); }}
       {...props}
     >
       {children}
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background cursor-pointer transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+      {asking && dirty && (
+        <div role="alert" className="sticky bottom-0 z-10 grid gap-2 rounded-lg border border-warning/40 bg-card p-3 text-sm shadow-pop">
+          <p className="font-medium">Discard unsaved changes?</p>
+          <p className="text-xs text-muted-foreground">What you typed in this window hasn't been saved.</p>
+          <div className="flex flex-wrap gap-2">
+            <button ref={keepRef} type="button" onClick={() => setAsking(false)} className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Keep editing</button>
+            <DialogPrimitive.Close className="inline-flex h-9 items-center rounded-md border px-3 text-sm font-medium text-destructive focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Discard changes</DialogPrimitive.Close>
+          </div>
+        </div>
+      )}
+      {dirty ? (
+        <button type="button" onClick={() => setAsking(true)} className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background cursor-pointer transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+          <X className="h-4 w-4" />
+          <span className="sr-only">Close</span>
+        </button>
+      ) : <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background cursor-pointer transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
-      </DialogPrimitive.Close>
+      </DialogPrimitive.Close>}
     </DialogPrimitive.Content>
   </DialogPortal>
   );
