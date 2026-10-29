@@ -1,15 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { useState } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useDialogRequestClose, Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 function Harness() {
   const [open, setOpen] = useState(true);
   const [v, setV] = useState("");
   return <Dialog open={open} onOpenChange={setOpen}>
-    <DialogContent dirty={!!v}><DialogTitle>Draft form</DialogTitle><DialogDescription>d</DialogDescription><input aria-label="Field" value={v} onChange={(e) => setV(e.target.value)} /></DialogContent>
+    <DialogContent dirty={!!v}><DialogTitle>Draft form</DialogTitle><DialogDescription>d</DialogDescription><input aria-label="Field" value={v} onChange={(e) => setV(e.target.value)} /><Cancel /></DialogContent>
   </Dialog>;
 }
+function Cancel() { const rc = useDialogRequestClose(); return <button type="button" onClick={rc}>Cancel</button>; }
 const esc = () => fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
 
 describe("E2.2A unsaved-draft guard", () => {
@@ -31,5 +32,17 @@ describe("E2.2A unsaved-draft guard", () => {
     esc();
     fireEvent.click(await screen.findByRole("button", { name: "Discard changes" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+  it("Cancel closes an untouched form at once but asks before discarding a draft", async () => {
+    render(<Harness />);
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+  it("Cancel with typed text shows the discard prompt and keeps the dialog open", async () => {
+    render(<Harness />);
+    fireEvent.change(await screen.findByLabelText("Field"), { target: { value: "draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(await screen.findByText("Discard unsaved changes?")).toBeTruthy();
+    expect((screen.getByLabelText("Field") as HTMLInputElement).value).toBe("draft");
   });
 });
