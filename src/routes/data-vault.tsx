@@ -90,7 +90,7 @@ function Vault() {
     <Shell title="Data Vault" subtitle="Owner-only backups of your CRM data and payment proof files.">
       <div className="tm-notice"><ShieldCheck className="size-4 shrink-0" /><span><b>Owner only.</b> Employees never get backup, export or restore access. In this browser demo that rule is shown in the interface only — real protection comes with the secure backend. Archives are built on this device and downloaded to it; nothing is uploaded. <b>Backups are not encrypted or password-protected</b> — they contain client and financial data, so store them somewhere safe.</span></div>
       <div className="seg dv-tabs my-4" role="tablist" aria-label="Data Vault sections" onKeyDown={onRovingKeyDown}>
-        {TABS.map((t) => <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} aria-pressed={tab === t.id} tabIndex={roving(tab === t.id)} onClick={() => nav({ search: (s) => ({ ...s, tab: t.id }) })}><t.icon className="size-3.5" />{t.label}</button>)}
+        {TABS.map((t) => <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} tabIndex={roving(tab === t.id)} onClick={() => nav({ search: (s) => ({ ...s, tab: t.id }) })}><t.icon className="size-3.5" />{t.label}</button>)}
       </div>
       {tab === "overview" && <Overview />}
       {tab === "custom" && <Custom />}

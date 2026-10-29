@@ -334,7 +334,7 @@ main input[type="checkbox"] { accent-color: var(--foreground); width: 16px; heig
 .lime-chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; background: var(--lime); color: var(--lime-foreground); padding: 3px 10px; font-size: 11px; font-weight: 600; }
 .seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 999px; background: var(--secondary); border: 1px solid var(--border); }
 .seg button { white-space: nowrap; flex-shrink: 0; height: 30px; padding: 0 12px; border-radius: 999px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); transition: background 160ms ease, color 160ms ease; display: inline-flex; align-items: center; gap: 6px; }
-.seg button[aria-pressed="true"], .seg button[aria-checked="true"] { background: var(--card); color: var(--foreground); box-shadow: 0 1px 2px oklch(0 0 0 / 8%); }
+.seg button[aria-pressed="true"], .seg button[aria-checked="true"], .seg button[aria-selected="true"] { background: var(--card); color: var(--foreground); box-shadow: 0 1px 2px oklch(0 0 0 / 8%); }
 
 /* Legacy names kept so all nine pages share the new system */
 .stat-card, .lead-card, .deal-card, .note-card, .followup-row, .briefing-item, .briefing-stat {
