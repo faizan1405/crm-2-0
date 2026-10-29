@@ -557,3 +557,10 @@ Real test browser, isolated synthetic data (E11B employees A–D, deals ₹73,33
 **Status:** 486 tests pass, typecheck clean, production build OK.
 **Server-side needed later:** validation and URL/permission checks must be repeated on the future backend; browser storage stays readable by anyone with local access.
 **Open:** E1.2B (browser reruns above), E2 accessibility, F end-to-end, Owner quotation-package manual check, future secure backend.
+
+## E1.2B — partial (this round)
+- Fixed: Add Lead silently dropped a negative Budget / Quoted amount. New `amountFieldError` shows "Amount can't be negative"; nothing saves; other fields stay filled. Edit Lead already refused negatives via `leadEditError`; bulk/AI paths never produce negatives.
+- Browser Passed: Add Lead with -500 budget → message shown, 0 leads saved, name/company kept; corrected to 0 → saved once (zero stored as empty per existing rule), no page errors.
+- Automated: 487 tests pass (1 new), typecheck clean.
+- Not Tested this round: project task/notes special characters, quotation descriptions + WhatsApp, Employee B/C preview regression, preview proof-modification refusal, link regression.
+- Still open: Owner's three real quotation packages (manual), E2, F, secure backend.

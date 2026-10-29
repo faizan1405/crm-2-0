@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Sparkles, AlertTriangle, PenLine } from "lucide-react";
 import { useCRM, duplicatePhone } from "@/lib/crm/store";
-import { validEmail, validPhone } from "@/lib/crm/validation";
+import { amountFieldError, validEmail, validPhone } from "@/lib/crm/validation";
 import { businessDateTime } from "@/lib/crm/dates";
 import { structureLead } from "@/lib/crm/parse";
 import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, type LeadPriority, type LeadSource, type LeadStatus, type Lead } from "@/lib/crm/types";
@@ -58,6 +58,9 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     if (!f.name.trim()) e.name = "Name is required";
     if (!validPhone(f.phone)) e.phone = "Enter a 10-digit phone number";
     if (f.email.trim() && !validEmail(f.email)) e.email = "Invalid email";
+    const be = amountFieldError(f.budget), qe = amountFieldError(f.quotedAmount);
+    if (be) e.budget = be;
+    if (qe) e.quotedAmount = qe;
     setErrors(e);
     const cfr = validateLeadValues(cfDefs, cf, { isNew: true });
     setCfErr(cfr.errors);
