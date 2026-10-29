@@ -51,3 +51,13 @@ describe("addLead store guard", () => {
     expect(useCRM.getState().leads.length).toBe(before);
   });
 });
+
+import { amountFieldError } from "./validation";
+describe("E1.2B negative budget in Add Lead", () => {
+  it("blank is valid, zero/positive valid, negative refused", () => {
+    expect(amountFieldError("")).toBeUndefined();
+    expect(amountFieldError("0")).toBeUndefined();
+    expect(amountFieldError("40000")).toBeUndefined();
+    expect(amountFieldError("-500")).toBe("Amount can't be negative");
+  });
+});
