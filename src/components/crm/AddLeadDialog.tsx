@@ -41,6 +41,7 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const [allowDup, setAllowDup] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof Form, string>>>({});
   const dup = duplicatePhone(leads, f.phone);
+  const dirty = !!raw.trim() || (Object.keys(f) as (keyof Form)[]).some((k) => String(f[k] ?? "") !== String(blank[k] ?? "")) || tagIds.length > 0 || JSON.stringify(cf) !== JSON.stringify(cfInit());
   const set = (k: keyof Form) => (e: { target: { value: string } }) => setF((p) => ({ ...p, [k]: e.target.value }));
 
   const close = () => { setCf(cfInit()); setCfErr({}); setTagIds([]); onOpenChange(false); setF(blank); setRaw(""); setStructured(false); setHint(undefined); setAllowDup(false); setErrors({}); };
@@ -94,7 +95,7 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
 
   return (
     <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : close())}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent dirty={dirty} className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Add lead</DialogTitle>
           <DialogDescription>A new opportunity starts here.</DialogDescription>

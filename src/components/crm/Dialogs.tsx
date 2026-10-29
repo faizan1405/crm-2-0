@@ -60,6 +60,7 @@ function FollowUpForm({ open, onOpenChange, leadId, initial, rescheduleId }: { o
     baseDue.current = rescheduleId ? useCRM.getState().followUps.find((x) => x.id === rescheduleId)?.dueAt : undefined;
     setType(initial?.type ?? "call"); setAt(initial?.at ?? ""); setNote(initial?.note ?? "");
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dirty = open && (type !== (initial?.type ?? "call") || at !== (initial?.at ?? "") || note !== (initial?.note ?? "") || (!leadId && !!lead));
   const target = leadId ?? lead;
   const done = (msg: string) => { toast.success(msg); setAt(""); setNote(""); setConflict(null); onOpenChange(false); };
   const save = (replaceId?: string) => {
@@ -78,7 +79,7 @@ function FollowUpForm({ open, onOpenChange, leadId, initial, rescheduleId }: { o
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent dirty={dirty}>
         <DialogHeader><DialogTitle>{rescheduleId ? "Reschedule follow-up" : "Schedule follow-up"}</DialogTitle>{initial?.at && <DialogDescription>Suggested time — review and change before saving. Times are India time (IST).</DialogDescription>}</DialogHeader>
         <div className="grid gap-3">
           {!leadId && (

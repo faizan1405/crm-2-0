@@ -37,18 +37,20 @@ export function WhatsAppButton({ leadId, name, source, label, className }: { lea
 export function WhatsAppComposer() {
   const { leadId, source, preset, nonce, close } = useWhatsApp();
   const lead = useCRM((s) => s.leads.find((l) => l.id === leadId));
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => { setDirty(false); }, [leadId, nonce]);
   if (!lead) return null;
   return (
     <Dialog open onOpenChange={(o) => !o && close()}>
-      <DialogContent className="wa-composer max-h-[92dvh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent dirty={dirty} className="wa-composer max-h-[92dvh] overflow-y-auto sm:max-w-2xl">
         {/* Keyed by client + open: switching client remounts, so no draft, quotation or number can leak across. */}
-        <ComposerBody key={`${lead.id}:${nonce}`} lead={lead} source={source} preset={preset} close={close} />
+        <ComposerBody key={`${lead.id}:${nonce}`} lead={lead} source={source} preset={preset} close={close} onDirty={setDirty} />
       </DialogContent>
     </Dialog>
   );
 }
 
-function ComposerBody({ lead, source, preset, close }: { lead: Lead; source: string; preset: ComposerPreset; close: () => void }) {
+function ComposerBody({ lead, source, preset, close, onDirty }: { lead: Lead; source: string; preset: ComposerPreset; close: () => void; onDirty: (d: boolean) => void }) {
   const { deals, owner, business, addActivity, quotationTemplates, waTemplates, demos, logQuotationShare } = useCRM();
   const deal = useMemo(() => deals.find((d) => d.leadId === lead.id && d.status !== "cancelled"), [deals, lead.id]);
   // Global packages — the same list for every client, always the latest saved version.
@@ -67,6 +69,8 @@ function ComposerBody({ lead, source, preset, close }: { lead: Lead; source: str
   const [base, setBase] = useState(fresh);
   const [edited, setEdited] = useState(!!preset.text);
   const [opened, setOpened] = useState(false);
+  // A hand-edited message is a draft worth protecting; a purpose/package-generated one can be rebuilt.
+  useEffect(() => { onDirty(edited && !!text.trim()); }, [edited, text, onDirty]);
   const sync = syncDraft({ text, base, edited }, fresh);
   useEffect(() => { if (sync.text !== text) setText(sync.text); if (sync.base !== base) setBase(sync.base); }, [fresh]); // eslint-disable-line react-hooks/exhaustive-deps
 

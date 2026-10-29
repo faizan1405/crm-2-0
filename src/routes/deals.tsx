@@ -186,6 +186,8 @@ function PaymentDialog({ deal, onClose }: { deal: Deal; onClose: () => void }) {
   const [proof, setProof] = useState<StagedProof | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [openedOn] = useState(() => ({ amount: String(out), date: dayKey(new Date()) }));
+  const dirty = !savedId && (amount !== openedOn.amount || date !== openedOn.date || method !== "UPI" || type !== "milestone" || !!ref.trim() || !!proof);
   const save = async () => {
     if (saving) return;
     if (savedId) { // payment already recorded; only retry the proof
@@ -207,7 +209,7 @@ function PaymentDialog({ deal, onClose }: { deal: Deal; onClose: () => void }) {
   };
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
+      <DialogContent dirty={dirty}>
         <DialogHeader><DialogTitle>Record payment · {deal.name}</DialogTitle></DialogHeader>
         <div className="rounded-lg border border-teal/20 bg-teal-soft p-4"><div className="flex items-center gap-2 text-xs text-teal"><ArrowDownLeft className="size-4" />Payment for {deal.clientName}</div><div className="num mt-2 text-2xl font-extrabold text-foreground">{formatINR(out)}</div><div className="mt-1 text-xs text-muted-foreground">Outstanding balance</div></div>
         <div className="grid gap-3 sm:grid-cols-2">
