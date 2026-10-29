@@ -135,7 +135,7 @@ export function createProjectSlice(set: (fn: (s: S) => Partial<S>) => void, get:
       if (patch.title !== undefined && !patch.title.trim()) return "Give the task a title.";
       if (patch.assigneeId !== undefined && patch.assigneeId !== t.assigneeId) { const e = taskAssigneeError(patch.assigneeId, (get() as unknown as { employees: { id: string; accountStatus: string }[] }).employees); if (e) return e; }
       if (looksLikeSecret(patch.notes)) return SECRET_ERROR;
-      const changes = [patch.assigneeId !== undefined && patch.assigneeId !== t.assigneeId ? `Reassigned from ${t.assigneeId ?? "nobody"} to ${patch.assigneeId ?? "nobody"}` : "", patch.dueDate !== undefined && patch.dueDate !== t.dueDate ? `Due ${patch.dueDate || "cleared"}` : ""].filter(Boolean);
+      const changes = [patch.assigneeId !== undefined && patch.assigneeId !== t.assigneeId ? (() => { const emps = (get() as unknown as { employees: { id: string; name: string }[] }).employees; return `Reassigned from ${assigneeLabel(t.assigneeId, emps)} to ${assigneeLabel(patch.assigneeId, emps)}`; })() : "", patch.dueDate !== undefined && patch.dueDate !== t.dueDate ? `Due ${patch.dueDate || "cleared"}` : ""].filter(Boolean);
       editTask(id, () => patch as Partial<ProjectTask>, changes.join(" · ") || "Edited");
       return null;
     },
@@ -221,6 +221,13 @@ export function createProjectSlice(set: (fn: (s: S) => Partial<S>) => void, get:
 export function migrateProjects(state: Record<string, unknown>, version: number): Record<string, unknown> {
   if (!state || version >= 8) return state;
   return { ...state, projects: state["projects"] ?? [], projectTasks: state["projectTasks"] ?? [], projectMilestones: state["projectMilestones"] ?? [], supportRequests: state["supportRequests"] ?? [], projectTemplates: state["projectTemplates"] ?? starterTemplates(new Date().toISOString()) };
+}
+
+/** Readable name for task history — never a raw employee ID. */
+export function assigneeLabel(id: string | null | undefined, employees: readonly { id: string; name: string }[]): string {
+  if (!id) return "nobody";
+  if (id === "owner") return "Owner";
+  return employees.find((x) => x.id === id)?.name ?? "a former team member";
 }
 
 /** A task may be newly assigned only to nobody, the Owner, or an active employee (inactive/archived/pending/unknown are refused). */
