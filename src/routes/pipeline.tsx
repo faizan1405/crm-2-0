@@ -164,7 +164,7 @@ const sameSig = (a: CardSignals, b: CardSignals) => a.days === b.days && a.stall
 // Memoized so opening the inspector, Show more or a single move re-renders only the cards that changed.
 const Ticket = memo(function Ticket({ l, s, sig, canMove, selected, isDragging, pulsed, h }: TicketProps) {
   return (
-                    <div role="button" tabIndex={0} data-lead-id={l.id} draggable={canMove} data-priority={l.priority} aria-pressed={selected} aria-label={`${l.name}${l.company ? `, ${l.company}` : ""} — open inspector`}
+                    <div role="group" aria-roledescription="lead card" aria-keyshortcuts="Enter" tabIndex={0} data-lead-id={l.id} draggable={canMove} data-priority={l.priority} aria-current={selected ? "true" : undefined} aria-label={`${l.name}${l.company ? `, ${l.company}` : ""} — press Enter to open inspector`}
                       onDragStart={(e) => { e.dataTransfer.setData("text/plain", l.id); e.dataTransfer.effectAllowed = "move"; h.dragStart(l.id); }}
                       onDragEnd={h.dragEnd}
                       onClick={() => { h.click(l.id); }}
