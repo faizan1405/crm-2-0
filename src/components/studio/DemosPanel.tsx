@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { safeHref } from "@/lib/crm/validation";
 import { toast } from "sonner";
 import { Plus, Globe, Pencil, Trash2, ArrowUp, ArrowDown, ExternalLink } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
@@ -41,7 +42,7 @@ export function DemosPanel() {
                 {d.thumbnail && safeUrl(d.thumbnail) ? <img src={safeUrl(d.thumbnail)!} alt="" loading="lazy" className="demo-thumb" /> : <div className="demo-thumb grid place-items-center"><Globe className="size-5 text-muted-foreground" /></div>}
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5"><span className="truncate font-semibold">{d.title}</span><span className="aging">{d.category}</span>{d.tags.map((t) => <span key={t} className="ph-chip">{t}</span>)}</div>
-                  <a href={d.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 truncate text-xs text-muted-foreground hover:text-foreground"><ExternalLink className="size-3 shrink-0" /><span className="truncate">{d.url}</span></a>
+                  <a href={safeHref(d.url) ?? undefined} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 truncate text-xs text-muted-foreground hover:text-foreground"><ExternalLink className="size-3 shrink-0" /><span className="truncate">{d.url}</span></a>
                   {d.description && <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{d.description}</p>}
                   <div className="mt-2 flex flex-wrap items-center gap-4 text-xs">
                     <label className="flex items-center gap-2"><Switch aria-label={`Include ${d.title} in sample messages by default`} checked={d.includeByDefault} onCheckedChange={(v) => saveDemo({ ...d, includeByDefault: v })} />In default samples</label>

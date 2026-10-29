@@ -41,7 +41,7 @@ export type CallLogResult = { ok: true; opId: string } | { ok: false; conflict?:
 import { demoLeads, demoDeals, demoPayments, demoFollowUps, demoNotes, demoActivities } from "./demo";
 import { uid, digits, dayKey } from "./format";
 import { dealOutstanding } from "./finance";
-import { leadEditError } from "./validation";
+import { leadCreateError, leadEditError } from "./validation";
 import { applyAssign, assignable, evaluate, fireKey, ruleError, DEFAULT_RULE_SETTINGS, OWNER_ONLY_KEYS, type Assignment, type AssignmentEvent, type AssignmentRule, type EmployeeAccess, type RuleSettings, type RuleTrigger } from "./access";
 import type { BackupRecord } from "./vault";
 import type { PlanItem, SkipReason } from "./bulk";
@@ -698,6 +698,7 @@ export const useCRM = create<CRMState>()(
       ...createAnalyticsSlice(set as never, get as never),
       ...defaultPrefs,
       addLead: (lead) => {
+        if (leadCreateError(lead)) return "";
         const id = uid("lead");
         const at = new Date().toISOString();
         set((s) => ({

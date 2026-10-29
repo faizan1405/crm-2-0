@@ -1,6 +1,7 @@
 // Phase 3G.1.1 — Project custom fields ("Additional information") and Project tags.
 // Reuses the Lead field inputs (FieldForm/FieldInput) and tag chips; every write goes through Project store actions.
 import { useMemo, useState } from "react";
+import { safeHref } from "@/lib/crm/validation";
 import { toast } from "sonner";
 import { ChevronDown, Lock, Pencil, Tag } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
@@ -35,7 +36,7 @@ export function ProjectAdditionalInfo({ projectId }: { projectId: string }) {
     if (!r.ok) { setErrors(r.errors); if (r.errors["_"]) toast.error(r.errors["_"]); return; }
     setEditing(false); toast.success("Additional information saved");
   };
-  const row = (d: CustomFieldDef) => <div key={d.id} className="min-w-0"><dt className="eyebrow flex items-center gap-1.5">{d.label}{d.visibility === "owner" && <Lock className="size-2.5" aria-label="Owner only" />}</dt><dd className={cn("mt-1.5 text-sm break-words", v[d.id] === undefined && "text-muted-foreground")}>{v[d.id] === undefined ? (d.required ? <span className="cf-needs">Needs completion</span> : "—") : d.type === "url" ? <a className="underline" href={String(v[d.id])} target="_blank" rel="noreferrer noopener">{String(v[d.id]).replace(/^https?:\/\//, "")}</a> : displayValue(d, v[d.id])}</dd></div>;
+  const row = (d: CustomFieldDef) => <div key={d.id} className="min-w-0"><dt className="eyebrow flex items-center gap-1.5">{d.label}{d.visibility === "owner" && <Lock className="size-2.5" aria-label="Owner only" />}</dt><dd className={cn("mt-1.5 text-sm break-words", v[d.id] === undefined && "text-muted-foreground")}>{v[d.id] === undefined ? (d.required ? <span className="cf-needs">Needs completion</span> : "—") : d.type === "url" ? (safeHref(v[d.id]) ? <a className="underline" href={safeHref(v[d.id])!} target="_blank" rel="noreferrer noopener">{String(v[d.id]).replace(/^https?:\/\//, "")}</a> : <span>{String(v[d.id])}</span>) : displayValue(d, v[d.id])}</dd></div>;
   return <section aria-label="Additional information" className="receipt p-5 sm:p-6">
     <div className="flex flex-wrap items-center gap-2">
       <button type="button" className="eyebrow flex items-center gap-1.5" aria-expanded={open} onClick={() => setOpen(!open)}><ChevronDown className={cn("size-3.5 transition-transform", !open && "-rotate-90")} />Additional information</button>

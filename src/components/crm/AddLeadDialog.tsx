@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Sparkles, AlertTriangle, PenLine } from "lucide-react";
 import { useCRM, duplicatePhone } from "@/lib/crm/store";
-import { validPhone } from "@/lib/crm/validation";
+import { validEmail, validPhone } from "@/lib/crm/validation";
 import { businessDateTime } from "@/lib/crm/dates";
 import { structureLead } from "@/lib/crm/parse";
 import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, type LeadPriority, type LeadSource, type LeadStatus, type Lead } from "@/lib/crm/types";
@@ -57,7 +57,7 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     const e: typeof errors = {};
     if (!f.name.trim()) e.name = "Name is required";
     if (!validPhone(f.phone)) e.phone = "Enter a 10-digit phone number";
-    if (f.email && !/^\S+@\S+\.\S+$/.test(f.email)) e.email = "Invalid email";
+    if (f.email.trim() && !validEmail(f.email)) e.email = "Invalid email";
     setErrors(e);
     const cfr = validateLeadValues(cfDefs, cf, { isNew: true });
     setCfErr(cfr.errors);
@@ -68,7 +68,7 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     const lead: Omit<Lead, "id" | "createdAt" | "updatedAt"> = {
       name: f.name.trim(), phone: f.phone.trim(), source: f.source, status: f.status, priority: f.priority, pinned: false,
       aiScore: f.priority === "hot" ? 82 : f.priority === "warm" ? 66 : 45,
-      ...(f.email ? { email: f.email } : {}), ...(f.company ? { company: f.company } : {}), ...(f.requirement ? { requirement: f.requirement } : {}),
+      ...(f.email.trim() ? { email: f.email.trim() } : {}), ...(f.company ? { company: f.company } : {}), ...(f.requirement ? { requirement: f.requirement } : {}),
       ...(budget ? { budget } : {}), ...(quoted ? { quotedAmount: quoted } : {}), ...(f.notes ? { notes: f.notes } : {}),
     };
     const id = addLead(lead);
