@@ -16,6 +16,15 @@ export function telHref(phone: string | undefined) {
   const p = (phone ?? "").trim(), d = p.replace(/\D/g, "");
   return d.length >= 6 && d.length <= 15 ? `tel:${p.startsWith("+") ? "+" : ""}${d}` : null;
 }
+/** Optional money field typed in a form: blank is fine; otherwise must be a finite number >= 0. */
+export function amountFieldError(raw: string): string | undefined {
+  const s = raw.trim();
+  if (!s) return undefined;
+  const n = Number(s);
+  if (!Number.isFinite(n)) return "Enter a valid number";
+  if (n < 0) return "Amount can't be negative";
+  return undefined;
+}
 /** Store-level guard for new leads (forms validate first; this stops imports or scripts from saving broken records). */
 export function leadCreateError(lead: Pick<Lead, "name" | "phone"> & Partial<Pick<Lead, "email" | "budget" | "quotedAmount">>) {
   if (!lead.name?.trim() || !validPhone(lead.phone ?? "")) return "Name and a valid 10-digit phone are required";

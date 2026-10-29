@@ -58,6 +58,9 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     if (!f.name.trim()) e.name = "Name is required";
     if (!validPhone(f.phone)) e.phone = "Enter a 10-digit phone number";
     if (f.email.trim() && !validEmail(f.email)) e.email = "Invalid email";
+    const be = amountFieldError(f.budget), qe = amountFieldError(f.quotedAmount);
+    if (be) e.budget = be;
+    if (qe) e.quotedAmount = qe;
     setErrors(e);
     const cfr = validateLeadValues(cfDefs, cf, { isNew: true });
     setCfErr(cfr.errors);
