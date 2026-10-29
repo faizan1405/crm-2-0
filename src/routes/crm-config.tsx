@@ -43,7 +43,7 @@ function CrmConfig() {
   if (preview) return <Shell title="CRM Configuration"><Empty icon={<Lock />} title="Owner only" hint="Employees can't change custom fields, tags or company views." /></Shell>;
   const tabs: [TabKey, string, typeof Settings2][] = [["fields", "Custom fields", SlidersHorizontal], ["tags", "Tags", Tag], ["views", "Saved views", Eye]];
   return <Shell title="CRM Configuration" subtitle="Shape the information you keep on every lead and project — without touching code.">
-    <div className="mb-6 flex gap-4 overflow-x-auto border-t border-foreground pt-4" role="tablist">{tabs.map(([k, l, I]) => <Link key={k} to="/crm-config" search={{ tab: k }} role="tab" aria-selected={tab === k} className={cn("flex shrink-0 items-center gap-1.5 border-b-2 pb-1.5 text-sm", tab === k ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}><I className="size-4" />{l}</Link>)}</div>
+    <div className="mb-6 flex gap-4 overflow-x-auto border-t border-foreground pt-4" >{tabs.map(([k, l, I]) => <Link key={k} to="/crm-config" search={{ tab: k }} aria-current={tab === k ? "page" : undefined} className={cn("flex shrink-0 items-center gap-1.5 border-b-2 pb-1.5 text-sm", tab === k ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}><I className="size-4" />{l}</Link>)}</div>
     {tab === "fields" ? <FieldsTab key={entity} entity={entity} /> : tab === "tags" ? <TagsTab /> : <ViewsTab />}
   </Shell>;
 }

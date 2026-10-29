@@ -21,6 +21,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { toast } from "sonner";
+import { onRovingKeyDown, roving } from "@/lib/a11y/tabKeys";
 
 type S = { tab?: string; employee?: string; period?: string; from?: string; to?: string };
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
@@ -87,7 +88,7 @@ function TeamPerformance() {
     <div className="ta-note"><Info className="size-4 shrink-0" /><p><strong>Assigned workload</strong> is what employees currently hold. <strong>Verified contribution</strong> only counts actions recorded under that person's identity. Today every genuine action in this browser is yours as Owner, so employee contribution shows “Not measurable yet”. {ATTRIBUTION_NOTE}{demoOn && <strong> Demo mode is on: synthetic employee activity is shown in scorecards, trends and comparison only, marked Demo, and never saved, counted in company totals or backed up.</strong>}</p></div>
 
     <div className="pf-toolbar mt-5">
-      <div className="pf-tabs" role="tablist" aria-label="Team performance sections">{TABS.map((t) => <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className="pf-tab" onClick={() => set({ tab: t.id })}>{t.label}</button>)}</div>
+      <div className="pf-tabs" role="tablist" aria-label="Team performance sections" onKeyDown={onRovingKeyDown}>{TABS.map((t) => <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} tabIndex={roving(tab === t.id)} className="pf-tab" onClick={() => set({ tab: t.id })}>{t.label}</button>)}</div>
       <div className="flex flex-wrap items-center gap-2">
         <select className={selectCls} aria-label="Reporting period" value={period} onChange={(e) => set({ period: e.target.value })}>{PERIODS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select>
         {period === "custom" && <><Input type="date" aria-label="From" className="w-auto" value={search.from ?? win.start} onChange={(e) => set({ from: e.target.value })} /><Input type="date" aria-label="To" className="w-auto" value={search.to ?? win.end} onChange={(e) => set({ to: e.target.value })} /></>}

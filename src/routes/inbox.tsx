@@ -19,6 +19,7 @@ import { formatDate, formatINR } from "@/lib/crm/format";
 import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, type Lead, type LeadPriority } from "@/lib/crm/types";
 import { buildRows, CATEGORY_LABEL, DUP_LABEL, duplicateIds, filterRows, findDuplicates, FIRST_CONTACT_LABEL, mergeBlockers, overview, type DupPair, type InboxCategory, type InboxFilters } from "@/lib/crm/inbox";
 import { EMPTY_SELECTION, addPage, isSelected, selectMatching, selectedIds, selectionCount, toggle, type Selection } from "@/lib/crm/bulk";
+import { onRovingKeyDown, roving } from "@/lib/a11y/tabKeys";
 
 export const Route = createFileRoute("/inbox")({
   head: () => ({
@@ -76,8 +77,8 @@ function InboxPage() {
         ))}
       </div>
 
-      <div className="mb-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Inbox categories">
-        {CATS.map((c) => <button key={c} role="tab" aria-selected={cat === c} type="button" onClick={() => { setCat(c); setPage(0); }} className={`rounded-full border px-3 py-1.5 text-xs font-medium ${cat === c ? "border-primary bg-primary-soft text-primary" : "text-muted-foreground hover:text-foreground"}`}>{CATEGORY_LABEL[c]} <span className="num opacity-70">{counts[c]}</span></button>)}
+      <div className="mb-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Inbox categories" onKeyDown={onRovingKeyDown}>
+        {CATS.map((c) => <button key={c} role="tab" aria-selected={cat === c} tabIndex={roving(cat === c)} type="button" onClick={() => { setCat(c); setPage(0); }} className={`rounded-full border px-3 py-1.5 text-xs font-medium ${cat === c ? "border-primary bg-primary-soft text-primary" : "text-muted-foreground hover:text-foreground"}`}>{CATEGORY_LABEL[c]} <span className="num opacity-70">{counts[c]}</span></button>)}
       </div>
 
       <div className="surface mb-3 flex flex-wrap items-center gap-2 p-3">

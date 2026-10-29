@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { selectCls } from "@/components/crm/Shell";
+import { onRovingKeyDown, roving } from "@/lib/a11y/tabKeys";
 
 /** Create or edit one reusable package. Saving changes the global template only — never deals, payments or sent history. */
 export function QuotationTemplateEditor({ initial, previewLeadId, onClose, onSaved }: { initial?: QuotationTemplate | undefined; previewLeadId?: string | undefined; onClose: () => void; onSaved?: (id: string) => void }) {
@@ -68,9 +69,9 @@ export function QuotationTemplateEditor({ initial, previewLeadId, onClose, onSav
             </div>
           </div>
 
-          <div className="qt-tabs" role="tablist" aria-label="Editor view">
-            <button type="button" role="tab" aria-selected={view === "write"} onClick={() => setView("write")}><PenLine className="size-3.5" />Write</button>
-            <button type="button" role="tab" aria-selected={view === "preview"} onClick={() => setView("preview")}><Eye className="size-3.5" />Preview</button>
+          <div className="qt-tabs" role="tablist" aria-label="Editor view" onKeyDown={onRovingKeyDown}>
+            <button type="button" role="tab" aria-selected={view === "write"} tabIndex={roving(view === "write")} onClick={() => setView("write")}><PenLine className="size-3.5" />Write</button>
+            <button type="button" role="tab" aria-selected={view === "preview"} tabIndex={roving(view === "preview")} onClick={() => setView("preview")}><Eye className="size-3.5" />Preview</button>
           </div>
 
           {view === "write" ? (

@@ -117,7 +117,7 @@ function Pipeline() {
       </section>
 
       <div className="mb-3 flex items-center gap-2">
-        <div className="max-w-full overflow-x-auto md:hidden"><div className="seg w-max" role="tablist" aria-label="Jump to stage">{LEAD_STATUSES.map((s) => <button key={s} type="button" role="tab" onClick={() => jump(s)}>{STATUS_LABEL[s]}</button>)}</div></div>
+        <div className="max-w-full overflow-x-auto md:hidden"><div className="seg w-max" role="group" aria-label="Jump to stage">{LEAD_STATUSES.map((s) => <button key={s} type="button" onClick={() => jump(s)}>{STATUS_LABEL[s]}</button>)}</div></div>
         <div className="ml-auto hidden gap-1 md:flex"><Button variant="outline" size="icon" className="rounded-full" aria-label="Previous stages" onClick={() => board.current?.scrollBy({ left: -(board.current?.clientWidth ?? 300) / 2, behavior: smooth() })}><ChevronLeft /></Button><Button variant="outline" size="icon" className="rounded-full" aria-label="Next stages" onClick={() => board.current?.scrollBy({ left: (board.current?.clientWidth ?? 300) / 2, behavior: smooth() })}><ChevronRight /></Button></div>
       </div>
 
@@ -164,7 +164,7 @@ const sameSig = (a: CardSignals, b: CardSignals) => a.days === b.days && a.stall
 // Memoized so opening the inspector, Show more or a single move re-renders only the cards that changed.
 const Ticket = memo(function Ticket({ l, s, sig, canMove, selected, isDragging, pulsed, h }: TicketProps) {
   return (
-                    <div role="button" tabIndex={0} data-lead-id={l.id} draggable={canMove} data-priority={l.priority} aria-pressed={selected} aria-label={`${l.name}${l.company ? `, ${l.company}` : ""} — open inspector`}
+                    <div role="group" aria-roledescription="lead card" aria-keyshortcuts="Enter" tabIndex={0} data-lead-id={l.id} draggable={canMove} data-priority={l.priority} aria-current={selected ? "true" : undefined} aria-label={`${l.name}${l.company ? `, ${l.company}` : ""} — press Enter to open inspector`}
                       onDragStart={(e) => { e.dataTransfer.setData("text/plain", l.id); e.dataTransfer.effectAllowed = "move"; h.dragStart(l.id); }}
                       onDragEnd={h.dragEnd}
                       onClick={() => { h.click(l.id); }}

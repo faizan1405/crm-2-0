@@ -635,3 +635,16 @@ Open: E2.2A.2 (keyboard: Edit Lead, Bulk Assignment, Proof Viewer, Permission Sw
 - Responsive 1440/768/390/360 — Passed: quotation editor Save reachable, visible focus style, no horizontal overflow; Edit Lead form no overflow.
 Tests 500 pass (5 new), typecheck clean, production build OK. No screen-reader testing performed.
 Open: E2.2B (screen-reader semantics, contrast, touch targets, tab-role arrow keys); F; Owner's 3 real quotation packages (manual); future secure backend.
+
+## E2.2B.1 — accessible names, control semantics, announcements (isolated test browser, synthetic/demo data)
+**Defects fixed**
+- Section switchers marked as tabs (Follow-ups, Sales Studio, Data Vault, Inbox, Team, Team Performance, Add Lead entry method, Quotation Write/Preview, Demo categories) had no arrow-key support and every tab sat in the Tab order. Now: shared `onRovingKeyDown` (Left/Right/Up/Down, Home/End, skips disabled, selection follows focus) + roving tabindex (only selected tab is tabbable). Redundant `aria-pressed` on tabs removed (axe aria-allowed-attr on Data Vault ×5, Team ×2).
+- Bulk Assignment mode ("One employee / Distribute") is a single-choice selector → now `role=radiogroup` with `role=radio` + `aria-checked`; arrows switch mode; disabled Distribute (1 lead) is skipped. Appearance unchanged.
+- Non-tab groups falsely marked as tabs: Pipeline "Jump to stage" (plain buttons in a labelled group), Project Desk and CRM Config section links (now `aria-current="page"`).
+- Pipeline card was `role=button` containing a stage `<select>` (axe nested-interactive ×12; screen readers flatten button contents). Now a focusable labelled group ("lead card", Enter opens inspector, `aria-current` when open); Enter/Space/click behaviour unchanged.
+**Browser (keyboard)**: Follow-ups tabs Right/Right/End/Home/Left moved focus + selection correctly, 1 tab in Tab order — Passed. Bulk Assignment ArrowRight → Distribute checked, ArrowLeft → One employee checked; dialog labelled — Passed.
+**Automated (axe-core 4.10, WCAG 2 A/AA, contrast excluded)**: Dashboard, Pipeline, Follow-ups, Sales Studio, Data Vault, Team — 0 violations after fixes. Bulk dialog: 2 colour-contrast findings → E2.2B.2.
+**Previously verified, not re-run**: field errors linked via `aria-invalid`/`aria-describedby` (Lead, Budget, Payment, Quotation `qt-err`), focus on first invalid field, discard prompt, focus return. Toasts (save/fail/denied/conflict/already voided/already completed) use the toast library's polite live region — Automated-only/inspection, not re-tested this round.
+**Screen reader: Not Tested** (none available in the test environment). Accessibility tree + axe only.
+Tests: 505 (5 new arrow-key rules), typecheck clean.
+Open: E2.2B.2 (contrast, touch targets, responsive visual a11y); F; Owner quotation packages (manual); future Hostinger backend auth/permissions/storage/transactions/restoration.
