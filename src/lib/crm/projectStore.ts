@@ -198,15 +198,24 @@ export function createProjectSlice(set: (fn: (s: S) => Partial<S>) => void, get:
       if (!visible(r.projectId)) return { ok: false, error: "Project not found." };
       if (!r.title.trim()) return { ok: false, error: "Give the request a title." };
       if (looksLikeSecret(r.description)) return { ok: false, error: SECRET_ERROR };
-      const id = uid("sr"), at = now();
-      set((s) => ({ supportRequests: [{ ...r, title: r.title.trim(), id, createdAt: at, updatedAt: at, version: 1, status: "open", coverage: r.coverage ?? "undecided" }, ...s.supportRequests] }));
+      const emps = (get() as unknown as { employees: { id: string; name: string; accountStatus: string }[] }).employees ?? [];
+      const ae = taskAssigneeError(r.assigneeId, emps); if (ae) return { ok: false, error: ae };
+      const id = uid("sr"), at = now(), title = r.title.trim();
+      set((s) => ({ supportRequests: [{ ...r, title, id, createdAt: at, updatedAt: at, version: 1, status: "open", coverage: r.coverage ?? "undecided" }, ...s.supportRequests] }));
+      edit(r.projectId, () => ({}), `Support request opened: “${title}”${r.assigneeId ? ` · assigned to ${assigneeLabel(r.assigneeId, emps)}` : ""}`);
       return { ok: true, id };
     },
     updateSupportRequest: (id, patch) => {
       const r = get().supportRequests.find((x) => x.id === id); if (!r || !visible(r.projectId)) return "Request not found.";
       if (looksLikeSecret(patch.resolution)) return SECRET_ERROR;
       if (patch.status === "resolved" && !(patch.resolution ?? r.resolution ?? "").trim()) return "Add resolution notes before resolving.";
-      set((s) => ({ supportRequests: s.supportRequests.map((x) => (x.id === id ? { ...x, ...patch, ...(patch.status === "resolved" && x.status !== "resolved" ? { resolvedAt: now() } : {}), updatedAt: now(), version: x.version + 1 } : x)) }));
+      const emps = (get() as unknown as { employees: { id: string; name: string; accountStatus: string }[] }).employees ?? [];
+      if (patch.assigneeId !== undefined && patch.assigneeId !== r.assigneeId) { const ae = taskAssigneeError(patch.assigneeId, emps); if (ae) return ae; }
+      const changes = supportChangeLog(r, patch, emps);
+      if (!changes.length) return null;
+      const reopening = patch.status === "open" || patch.status === "in_progress";
+      set((s) => ({ supportRequests: s.supportRequests.map((x) => (x.id === id ? { ...x, ...patch, ...(patch.status === "resolved" && x.status !== "resolved" ? { resolvedAt: now() } : {}), ...(reopening ? { resolvedAt: undefined } : {}), updatedAt: now(), version: x.version + 1 } : x)) }));
+      edit(r.projectId, () => ({}), changes.join(" · "));
       return null;
     },
     saveProjectTemplate: (t) => {
@@ -228,6 +237,17 @@ export function assigneeLabel(id: string | null | undefined, employees: readonly
   if (!id) return "nobody";
   if (id === "owner") return "Owner";
   return employees.find((x) => x.id === id)?.name ?? "a former team member";
+}
+
+/** Project-history lines for a support request change; empty when nothing actually changed (no duplicate events). */
+export function supportChangeLog(r: Pick<SupportRequest, "title" | "status" | "assigneeId" | "priority" | "coverage" | "dueDate">, patch: Partial<Pick<SupportRequest, "status" | "resolution" | "assigneeId" | "priority" | "dueDate" | "coverage">>, employees: readonly { id: string; name: string }[]): string[] {
+  const t = `Support “${r.title}”`, out: string[] = [];
+  if (patch.status && patch.status !== r.status) out.push(patch.status === "resolved" ? `${t} resolved` : (r.status === "resolved" || r.status === "closed") ? `${t} reopened` : patch.status === "in_progress" ? `${t} started` : `${t} → ${patch.status.replace("_", " ")}`);
+  if (patch.assigneeId !== undefined && patch.assigneeId !== r.assigneeId) out.push(`${t} reassigned from ${assigneeLabel(r.assigneeId, employees)} to ${assigneeLabel(patch.assigneeId, employees)}`);
+  if (patch.priority && patch.priority !== r.priority) out.push(`${t} priority ${patch.priority}`);
+  if (patch.coverage && patch.coverage !== r.coverage) out.push(`${t} coverage ${patch.coverage}`);
+  if (patch.dueDate !== undefined && patch.dueDate !== r.dueDate) out.push(`${t} due ${patch.dueDate || "cleared"}`);
+  return out;
 }
 
 /** A task may be newly assigned only to nobody, the Owner, or an active employee (inactive/archived/pending/unknown are refused). */
