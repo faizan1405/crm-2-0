@@ -564,3 +564,20 @@ Real test browser, isolated synthetic data (E11B employees A–D, deals ₹73,33
 - Automated: 487 tests pass (1 new), typecheck clean.
 - Not Tested this round: project task/notes special characters, quotation descriptions + WhatsApp, Employee B/C preview regression, preview proof-modification refusal, link regression.
 - Still open: Owner's three real quotation packages (manual), E2, F, secure backend.
+
+## E1.2B.1 — remaining security browser tests (isolated test browser, synthetic data only)
+Setup: test records created with the app's own store actions on the app's live store instance (resolved by resource URL), then exercised with real UI clicks. No code changes needed; no defects found.
+
+Browser Passed
+- Project text: project created via "Create project" handoff; task title `<img src=x onerror=alert(1)> Task "A" & <b>B</b> — हिंदी ✓`, requirement `<svg onload=…> Req & "photos" — लोगो`, project note `<script>…</script> Note & ‘quote’ < > नमस्ते` added via the UI; after reload each appears exactly once as text, no injected img/svg/script elements, board loads, no dialogs/page errors.
+- Quotation & WhatsApp: 3 synthetic packages (HTML-like, quotes, Hindi, ₹, #, ?) saved through the editor; after reload all 3 cards present, description reopens byte-exact, nothing injected. Composer on a synthetic lead → wa.me/919822233344, single `text` param = exact message with description, name and ₹30,000, no fragment; quotation shares 0→0 and activity count unchanged after closing without "I sent it".
+- Employee B (view-only, assigned lead with HTML-like name/notes/tag, javascript: custom field): sees only own lead; unassigned lead hidden in list and by direct URL; name/notes/tag rendered as text, 0 javascript links; Stage select disabled; Log note refused ("You don't have permission to add client notes."); quick status, update and tag writes refused; working-copy lead unchanged. Follow-up and Log call dialogs still open (not submitted — UX note, not tested further).
+- Employee C (Delivery, projects.view + tasks_complete, no finance): sees only the assigned project (special-character title); unassigned project hidden and "Project not available" by URL; no Finance tab, no amounts on project or Deals; Complete works on own task; Add task hidden.
+- Proof isolation: Owner added a PNG proof via UI. Employee B/C: no Add proof, no View proof. Employee D (proofs.view, amounts, no download/replace/remove): image shown, no Replace/Remove/Download. Direct repo put/remove in preview → PROOF_PREVIEW_DENIED. After exiting, proof bytes (102 B, checksum) and metadata identical; Owner leads, deals, payments, projects, tasks, tags, field values, employees, notes identical.
+- Links: https custom field and http demo clickable; javascript: custom field, demo (shown as text) and tampered project link (shown as text) → 0 javascript hrefs; adding a javascript: project link refused ("Enter a full link starting with https://"); Add Lead with `a@b.co?cc=evil@x.com` + 5-digit phone → both errors, 0 saved.
+
+Automated-only: tel links for stored undialable phone numbers (the UI can't save one).
+Not Tested: PDF proofs in preview; Employee B submitting the Follow-up / Log call dialogs.
+Harness note: an early run read a second store module copy; those readings were discarded and rerun against the live instance.
+Quality: 487 tests pass, typecheck clean, full production build OK.
+Still open: Owner's three real quotation packages (manual), E2, F, backend-only security/central storage/real restoration.
