@@ -293,7 +293,12 @@ function Leads() {
         {can("leads.edit") && crm.tagDefs.length > 0 && <select aria-label="Bulk remove tag" className={cn(selectCls, "h-8 text-xs")} value="" onChange={(e) => e.target.value && setTagOp({ tagId: e.target.value, mode: "remove" })}><option value="">Remove tag…</option>{crm.tagDefs.filter((t) => tagForLeads(t) || Object.values(crm.leadTags).some((ids) => ids.includes(t.id))).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}
         <Button size="sm" variant="ghost" aria-label="Clear selection" onClick={() => setSelection(EMPTY_SELECTION)}><X />Clear</Button>
       </div>}
-      <BulkAssignDialog open={bulkAssign} leadIds={picked} scope={selection.kind === "matching" ? `All leads matching ${selection.label}${selection.exclude.length ? `, minus ${selection.exclude.length} excluded` : ""}` : "Leads picked individually"} onClose={() => setBulkAssign(false)} onDone={() => setSelection(EMPTY_SELECTION)} />
+      <BulkAssignDialog open={bulkAssign} leadIds={picked} scope={selection.kind === "matching" ? `All leads matching ${selection.label}${selection.exclude.length ? `, minus ${selection.exclude.length} excluded` : ""}` : "Leads picked individually"} onClose={() => setBulkAssign(false)} onDone={() => {
+        // The selection bar (and its opener button) disappears once the selection clears, so put keyboard focus back on the first assigned lead's checkbox instead of losing it.
+        const first = crm.leads.find((l) => l.id === picked[0])?.name;
+        setSelection(EMPTY_SELECTION);
+        if (first) setTimeout(() => { const el = [...document.querySelectorAll<HTMLElement>("[role=checkbox][aria-label]")].find((x) => x.getAttribute("aria-label") === `Select ${first}` && x.offsetParent); el?.focus(); }, 250);
+      }} />
       {viewEdit && <ViewEditor initial={viewEdit} onClose={() => setViewEdit(null)} onSaved={(id) => openView(id)} />}
       <Dialog open={!!tagOp} onOpenChange={(o) => !o && setTagOp(null)}>
         <DialogContent className="sm:max-w-md">{tagOp && (() => { const t = crm.tagDefs.find((x) => x.id === tagOp.tagId); const live = picked.filter((id) => crm.leads.some((l) => l.id === id)); const has = live.filter((id) => (crm.leadTags[id] ?? []).includes(tagOp.tagId)).length; const affected = tagOp.mode === "add" ? live.length - has : has; return <>
