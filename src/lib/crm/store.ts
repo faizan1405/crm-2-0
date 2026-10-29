@@ -698,6 +698,7 @@ export const useCRM = create<CRMState>()(
       ...createAnalyticsSlice(set as never, get as never),
       ...defaultPrefs,
       addLead: (lead) => {
+        if (leadCreateError(lead)) return "";
         const id = uid("lead");
         const at = new Date().toISOString();
         set((s) => ({
