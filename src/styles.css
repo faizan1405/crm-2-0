@@ -698,6 +698,8 @@ button.ph-chip:hover { background: var(--primary-soft); color: var(--primary); }
 .pipe-kpi-h { font-size: 11px; color: var(--muted-foreground); }
 .pipe-dist-bar { display: flex; gap: 3px; height: 10px; margin: 6px 0 4px; }
 .pipe-dist-bar > button { min-width: 6px; border-radius: 4px; background: var(--stage); transition: transform 160ms var(--ease-out), filter 160ms ease; }
+.pipe-dist-bar > button { position: relative; }
+.pipe-dist-bar > button::after { content: ""; position: absolute; inset: -17px 0; }
 .pipe-dist-bar > button:hover { transform: scaleY(1.5); filter: brightness(1.05); }
 .pipe-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--stage); display: inline-block; }
 .pipe-wrap { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
@@ -1098,3 +1100,8 @@ a.pd-row:hover { border-color: var(--input); background: var(--muted); }
 .as-dl { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; font-size: 13px; }
 .as-dl dt { color: var(--muted-foreground); }
 .as-dl dd { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Touch-target helper: enlarges the tappable area to ≥44px without changing the visual size. */
+.touch-hit { position: relative; }
+.touch-hit::after { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
+@media (pointer: coarse) { .touch-hit { min-height: 36px; } button.touch-hit[data-size], .touch-hit[data-slot="button"] { min-height: 44px; min-width: 44px; } }
