@@ -170,7 +170,7 @@ function PaymentRow({ id, proof }: { id: string; proof?: import("@/lib/crm/attac
           : !previewActive && <button type="button" disabled={busy} onClick={picker.open} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"><Paperclip className="size-3" />{busy ? "Saving…" : "Add proof"}</button>}</span>
         {view && proof && <PaymentProofPreview paymentId={id} meta={proof} title={`${formatINR(p.amount)} · ${p.method}`} onClose={() => setView(false)} />}
       </span>
-      <span className="flex items-center gap-2"><span className="num">{formatINR(p.amount)}</span>{!p.voided && <Button size="sm" variant="ghost" className="text-xs text-muted-foreground hover:text-destructive" onClick={() => { if (window.confirm("Void this payment?")) { runVoid(() => voidPayment(p.id)); } }}>Void</Button>}</span>
+      <span className="flex items-center gap-2"><span className="num">{formatINR(p.amount)}</span>{!p.voided && <Button size="sm" variant="ghost" aria-label={`Void payment of ${formatINR(p.amount)}`} className="touch-hit ml-1 max-md:min-h-11 max-md:min-w-11 text-xs text-muted-foreground hover:text-destructive" onClick={() => { if (window.confirm("Void this payment?")) { runVoid(() => voidPayment(p.id)); } }}>Void</Button>}</span>
     </li>
   );
 }

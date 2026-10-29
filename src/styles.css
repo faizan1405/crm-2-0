@@ -102,7 +102,7 @@
   --secondary: oklch(0.935 0.012 92);
   --secondary-foreground: oklch(0.27 0.012 155);
   --muted: oklch(0.935 0.012 92);
-  --muted-foreground: oklch(0.52 0.016 155);
+  --muted-foreground: oklch(0.505 0.016 155);
   --accent: oklch(0.92 0.014 92);
   --accent-foreground: oklch(0.27 0.012 155);
   --teal: oklch(0.52 0.08 175);
@@ -493,7 +493,7 @@ main input[type="checkbox"] { accent-color: var(--foreground); width: 16px; heig
 [data-collapsed="true"] .sb .sb-label { opacity: 0; pointer-events: none; }
 .sb-nav { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 6px 12px; scrollbar-width: none; }
 .sb-group + .sb-group { margin-top: 18px; }
-.sb-group-label { height: 22px; padding: 0 10px; font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .14em; color: var(--sidebar-muted); opacity: .75; white-space: nowrap; transition: opacity 180ms ease; }
+.sb-group-label { height: 22px; padding: 0 10px; font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .14em; color: var(--sidebar-muted); opacity: .9; white-space: nowrap; transition: opacity 180ms ease; }
 [data-collapsed="true"] .sb-group-label { opacity: 0; }
 .sb-link { position: relative; display: flex; align-items: center; gap: 12px; height: 38px; padding: 0 12px; margin-top: 2px; border-radius: 10px; font-size: 13.5px; font-weight: 500; color: var(--sidebar-muted); transition: background 150ms ease, color 150ms ease; }
 .sb-link:hover { background: var(--sidebar-accent); color: var(--sidebar-foreground); }
@@ -698,6 +698,8 @@ button.ph-chip:hover { background: var(--primary-soft); color: var(--primary); }
 .pipe-kpi-h { font-size: 11px; color: var(--muted-foreground); }
 .pipe-dist-bar { display: flex; gap: 3px; height: 10px; margin: 6px 0 4px; }
 .pipe-dist-bar > button { min-width: 6px; border-radius: 4px; background: var(--stage); transition: transform 160ms var(--ease-out), filter 160ms ease; }
+.pipe-dist-bar > button { position: relative; }
+.pipe-dist-bar > button::after { content: ""; position: absolute; inset: -17px 0; }
 .pipe-dist-bar > button:hover { transform: scaleY(1.5); filter: brightness(1.05); }
 .pipe-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--stage); display: inline-block; }
 .pipe-wrap { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
@@ -1098,3 +1100,7 @@ a.pd-row:hover { border-color: var(--input); background: var(--muted); }
 .as-dl { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; font-size: 13px; }
 .as-dl dt { color: var(--muted-foreground); }
 .as-dl dd { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Touch-target helper: enlarges the tappable area to ≥44px without changing the visual size. */
+.touch-hit { position: relative; }
+.touch-hit::after { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
