@@ -7,7 +7,7 @@ import { amountFieldError, validEmail, validPhone } from "@/lib/crm/validation";
 import { businessDateTime } from "@/lib/crm/dates";
 import { structureLead } from "@/lib/crm/parse";
 import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, type LeadPriority, type LeadSource, type LeadStatus, type Lead } from "@/lib/crm/types";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useDialogRequestClose, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -155,7 +155,7 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
             <div className="grid gap-1.5 sm:col-span-2"><Label>Tags</Label><TagPicker value={tagIds} onChange={setTagIds} /></div>
             <div className="grid gap-1.5 sm:col-span-2"><Label>Notes</Label><Textarea rows={2} value={f.notes} onChange={set("notes")} /></div>
             <div className="flex justify-end gap-2 sm:col-span-2">
-              <Button variant="ghost" onClick={close}>Cancel</Button>
+              <CancelButton />
               <Button onClick={save} disabled={!!dup && !allowDup}>Save lead</Button>
             </div>
           </div>
@@ -164,3 +164,5 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     </Dialog>
   );
 }
+
+function CancelButton() { const requestClose = useDialogRequestClose(); return <Button variant="ghost" onClick={requestClose}>Cancel</Button>; }

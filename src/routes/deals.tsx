@@ -13,7 +13,7 @@ import { CreateProjectDialog, useCanProject } from "@/components/projects/Projec
 import { activeProjectForDeal } from "@/lib/crm/projects";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useDialogRequestClose, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { ProofField, PaymentProofPreview, saveProof, useProofPicker, type StagedProof } from "@/components/crm/PaymentProof";
 import { useProofIndex } from "@/lib/crm/proofRepo";
@@ -220,7 +220,7 @@ function PaymentDialog({ deal, onClose }: { deal: Deal; onClose: () => void }) {
           <div className="grid gap-1.5 sm:col-span-2"><Label htmlFor="pay-ref">Reference</Label><Input id="pay-ref" placeholder="UTR / cheque no. (optional)" value={ref} onChange={(e) => setRef(e.target.value)} /></div>
           <ProofField value={proof} onChange={setProof} />
         </div>
-        <DialogFooter><Button variant="ghost" onClick={onClose}>{savedId ? "Close" : "Cancel"}</Button><Button disabled={saving} onClick={save}>{saving ? "Saving…" : savedId ? "Retry proof" : "Save payment"}</Button></DialogFooter>
+        <DialogFooter><PayCancel label={savedId ? "Close" : "Cancel"} /><Button disabled={saving} onClick={save}>{saving ? "Saving…" : savedId ? "Retry proof" : "Save payment"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -268,3 +268,5 @@ function NewDealDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o
     </Dialog>
   );
 }
+
+function PayCancel({ label }: { label: string }) { const requestClose = useDialogRequestClose(); return <Button variant="ghost" onClick={requestClose}>{label}</Button>; }

@@ -612,3 +612,11 @@ Browser (keyboard): all 4 dialogs → Escape kept dialog open and asked; Keep ed
 **Not tested this round:** Edit Lead (inline form on lead page, not a dialog — no Escape guard), bulk assignment, proof viewer, permission switches, quotation fields by keyboard, Project Task editor Escape, task notes/due-date error messages. No screen-reader claims.
 Tests 493 (2 new: `dialog-dirty.e22a.test.tsx`), typecheck clean, production build OK.
 Open: E2.2A leftovers above; E2.2B; F; Owner's 3 real quotation packages (manual); future server-side security/storage.
+
+## E2.2A.1 — Cancel safety, task editor, two-tab Notes (isolated test browser, synthetic data)
+**Defect fixed — Cancel bypassed the draft guard.** Add Lead and Record Payment Cancel closed instantly and discarded typed work. `DialogContent` now provides `useDialogRequestClose()`; those Cancel buttons use it, so with changes they show the same "Discard unsaved changes?" prompt; untouched forms still close at once. Schedule Follow-up and WhatsApp have no Cancel button (X/Escape already guarded).
+Browser: Add Lead (manual) + Record Payment — untouched Cancel closes with no prompt: Passed; dirty Cancel asks, Keep editing keeps draft, Discard closes, focus back to opener, nothing saved: Passed.
+**Project Task editor** is an inline expandable row (no dialog, no X/outside/Cancel). Escape: typed notes kept — Passed. Collapsing kept the draft; added a small "· Unsaved notes" mark on the collapsed row (new) — Passed. Reopen draft intact, not completed, not stored until Save, Save stores it, history only "Created"/"Edited" — Passed. Task notes/due date have no validation rules (any text, empty or any date accepted), so no error messages exist to test — Not Tested (nothing to test).
+**Personal Notes two tabs (shared storage):** Tab B kept typing while Tab A saved newer text → B's autosave refused, A's text kept, B shows conflict controls with draft on screen; "Save my draft as a new note" created "(my draft)"; after refresh both notes intact, original has A's text only — Passed. Note: if B is idle when A saves, B quietly shows A's latest (by design).
+Tests 495 pass (2 new Cancel regression tests), typecheck clean, build OK.
+Open: E2.2A.2 (keyboard: Edit Lead, Bulk Assignment, Proof Viewer, Permission Switches, Quotation Fields); E2.2B; F; Owner quotation packages; future secure backend.
