@@ -38,6 +38,10 @@ if (typeof document !== "undefined") {
   }, true);
 }
 
+// Lets in-dialog Cancel buttons go through the same unsaved-draft guard as Escape and the X.
+const RequestCloseContext = React.createContext<() => void>(() => {});
+const useDialogRequestClose = () => React.useContext(RequestCloseContext);
+
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { dirty?: boolean }
@@ -47,6 +51,8 @@ const DialogContent = React.forwardRef<
   const keepRef = React.useRef<HTMLButtonElement>(null);
   React.useEffect(() => { if (!dirty) setAsking(false); }, [dirty]);
   React.useEffect(() => { if (asking) keepRef.current?.focus(); }, [asking]);
+  const closeRef = React.useRef<HTMLButtonElement>(null);
+  const requestClose = React.useCallback(() => { if (dirty) setAsking(true); else closeRef.current?.click(); }, [dirty]);
   const guard = (e: Event) => { if (dirty) { e.preventDefault(); setAsking(true); } };
   // Most CRM dialogs are opened from state, not a Radix Trigger, so Radix has nothing to return focus to.
   // Remember the control that had focus when the dialog opened and put focus back there on close.
@@ -76,7 +82,8 @@ const DialogContent = React.forwardRef<
       onInteractOutside={(e) => { onInteractOutside?.(e); if (!e.defaultPrevented && dirty) e.preventDefault(); }}
       {...props}
     >
-      {children}
+      <RequestCloseContext.Provider value={requestClose}>{children}</RequestCloseContext.Provider>
+      <DialogPrimitive.Close ref={closeRef} hidden tabIndex={-1} aria-hidden="true" />
       {asking && dirty && (
         <div role="alert" className="sticky bottom-0 z-10 grid gap-2 rounded-lg border border-warning/40 bg-card p-3 text-sm shadow-pop">
           <p className="font-medium">Discard unsaved changes?</p>
@@ -140,6 +147,7 @@ const DialogDescription = React.forwardRef<
 DialogDescription.displayName = DialogPrimitive.Description.displayName;
 
 export {
+  useDialogRequestClose,
   Dialog,
   DialogPortal,
   DialogOverlay,
