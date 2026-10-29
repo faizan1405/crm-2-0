@@ -49,6 +49,17 @@ function Pipeline() {
   const byStage = useMemo(() => groupByStage(leads, LEAD_STATUSES), [leads]);
   const now = useMemo(() => new Date(), [leads, followUps, activities]); // eslint-disable-line react-hooks/exhaustive-deps
   const select = (id: string | undefined) => navigate({ search: id ? { lead: id } : {}, replace: true, resetScroll: false });
+  // Closing the inspector (Escape, Close) puts keyboard focus back on the card it was opened from.
+  const lastSelected = useRef<string | undefined>(selected);
+  useEffect(() => {
+    const prev = lastSelected.current; lastSelected.current = selected;
+    if (!prev || selected) return;
+    requestAnimationFrame(() => {
+      const a = document.activeElement;
+      if (a && a !== document.body && a.isConnected) return;
+      document.querySelector<HTMLElement>(`[data-lead-id="${CSS.escape(prev)}"]`)?.focus();
+    });
+  }, [selected]);
   const sel = leads.find((l) => l.id === selected);
   // Wide screens dock the inspector beside the board; smaller screens float it above everything (portal escapes the page's stacking context).
   const wide = useSyncExternalStore((cb) => { const m = window.matchMedia("(min-width: 1280px)"); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); }, () => window.matchMedia("(min-width: 1280px)").matches, () => true);
@@ -153,7 +164,7 @@ const sameSig = (a: CardSignals, b: CardSignals) => a.days === b.days && a.stall
 // Memoized so opening the inspector, Show more or a single move re-renders only the cards that changed.
 const Ticket = memo(function Ticket({ l, s, sig, canMove, selected, isDragging, pulsed, h }: TicketProps) {
   return (
-                    <div role="button" tabIndex={0} draggable={canMove} data-priority={l.priority} aria-pressed={selected} aria-label={`${l.name}${l.company ? `, ${l.company}` : ""} — open inspector`}
+                    <div role="button" tabIndex={0} data-lead-id={l.id} draggable={canMove} data-priority={l.priority} aria-pressed={selected} aria-label={`${l.name}${l.company ? `, ${l.company}` : ""} — open inspector`}
                       onDragStart={(e) => { e.dataTransfer.setData("text/plain", l.id); e.dataTransfer.effectAllowed = "move"; h.dragStart(l.id); }}
                       onDragEnd={h.dragEnd}
                       onClick={() => { h.click(l.id); }}
