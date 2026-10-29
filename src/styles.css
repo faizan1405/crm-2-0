@@ -102,7 +102,7 @@
   --secondary: oklch(0.935 0.012 92);
   --secondary-foreground: oklch(0.27 0.012 155);
   --muted: oklch(0.935 0.012 92);
-  --muted-foreground: oklch(0.52 0.016 155);
+  --muted-foreground: oklch(0.505 0.016 155);
   --accent: oklch(0.92 0.014 92);
   --accent-foreground: oklch(0.27 0.012 155);
   --teal: oklch(0.52 0.08 175);
@@ -493,7 +493,7 @@ main input[type="checkbox"] { accent-color: var(--foreground); width: 16px; heig
 [data-collapsed="true"] .sb .sb-label { opacity: 0; pointer-events: none; }
 .sb-nav { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 6px 12px; scrollbar-width: none; }
 .sb-group + .sb-group { margin-top: 18px; }
-.sb-group-label { height: 22px; padding: 0 10px; font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .14em; color: var(--sidebar-muted); opacity: .75; white-space: nowrap; transition: opacity 180ms ease; }
+.sb-group-label { height: 22px; padding: 0 10px; font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .14em; color: var(--sidebar-muted); opacity: .9; white-space: nowrap; transition: opacity 180ms ease; }
 [data-collapsed="true"] .sb-group-label { opacity: 0; }
 .sb-link { position: relative; display: flex; align-items: center; gap: 12px; height: 38px; padding: 0 12px; margin-top: 2px; border-radius: 10px; font-size: 13.5px; font-weight: 500; color: var(--sidebar-muted); transition: background 150ms ease, color 150ms ease; }
 .sb-link:hover { background: var(--sidebar-accent); color: var(--sidebar-foreground); }
