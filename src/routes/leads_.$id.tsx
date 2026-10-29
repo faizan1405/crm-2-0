@@ -59,9 +59,9 @@ function LeadDetail() {
   return (
     <Shell title={lead.name} subtitle={[lead.company, STATUS_LABEL[lead.status]].filter(Boolean).join(" · ")}
       actions={<div className="flex flex-wrap gap-2">
-        <CallButton leadId={id} phone={lead.phone} name={lead.name} source="Lead detail" className="h-9 px-4" /><Button variant="outline" onClick={() => openCallLog(id, "Lead detail")}>Log call</Button>
+        <CallButton leadId={id} phone={lead.phone} name={lead.name} source="Lead detail" className="h-9 px-4" />{can("clients.calls") && <Button variant="outline" onClick={() => openCallLog(id, "Lead detail")}>Log call</Button>}
         <WhatsAppButton leadId={id} name={lead.name} source="Lead detail" label className="h-9 px-4" />
-        <Button onClick={() => setFu(true)}><CalendarPlus className="size-4" />Follow-up</Button>
+        {can("followups.create") && <Button onClick={() => setFu(true)}><CalendarPlus className="size-4" />Follow-up</Button>}
       </div>}>
       <Link to="/leads" className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All leads</Link>
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">

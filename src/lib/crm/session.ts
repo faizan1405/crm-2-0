@@ -59,6 +59,10 @@ export function useAccess() {
   return { preview, can: (perm: string) => allows(preview, perm) };
 }
 
+export const CALL_LOG_DENIED = "You don't have permission to log calls.";
+export const FOLLOWUP_DENIED = "You don't have permission to schedule or change follow-ups.";
+/** Permission needed before showing the follow-up form: new follow-ups need create, rescheduling needs edit. */
+export const followUpPermission = (reschedule: boolean) => (reschedule ? "followups.edit" : "followups.create");
 /** Shown whenever a stage change is refused (Pipeline drag, card select, Prospects, inspectors). */
 export const STAGE_DENIED = "You don't have permission to change this lead's stage.";
 export const canChangeStage = (p: PreviewSession | null) => allows(p, "pipeline.edit") || allows(p, "leads.edit");
