@@ -1,4 +1,5 @@
 import { WhatsAppButton } from "@/components/crm/WhatsAppComposer";
+import { telHref } from "@/lib/crm/validation";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import type * as React from "react";
@@ -262,7 +263,7 @@ function Leads() {
                 <tr key={l.id} className="border-b hover:bg-card">
                   <td className="pl-1"><span className="inline-flex items-center gap-1"><Checkbox aria-label={`Select ${l.name}`} checked={isPicked(l.id)} onCheckedChange={(v) => togglePick(l.id, !!v)} /><Button size="icon" variant="ghost" title={l.pinned ? "Unpin" : "Pin"} aria-label={l.pinned ? "Unpin" : "Pin"} onClick={() => updateLead(l.id, { pinned: !l.pinned })} className={cn("rounded-full", !l.pinned && "opacity-30 hover:opacity-80")}><Pin className="size-3.5" /></Button></span></td>
                   <td className="min-w-52 px-3"><Link to="/leads/$id" params={{ id: l.id }} className="hover:underline"><Identity name={l.name} company={l.company} /></Link></td>
-                  <td className="num px-3 text-muted-foreground"><a href={`tel:${l.phone.replace(/[^\d+]/g, "")}`} className="hover:text-foreground" onClick={() => startCall(l.id, "Leads")}>{l.phone}</a></td>
+                  <td className="num px-3 text-muted-foreground"><a href={telHref(l.phone) ?? undefined} className="hover:text-foreground" onClick={(e) => { if (!telHref(l.phone)) { e.preventDefault(); return; } startCall(l.id, "Leads"); }}>{l.phone}</a></td>
                   <td className="px-3">{l.source}<div className="mt-0.5"><AssigneeTag leadId={l.id} /></div></td>
                   <td className="px-3"><TagPicker leadId={l.id} /></td>
                   <td className="px-3"><PriorityBadge p={l.priority} /></td>

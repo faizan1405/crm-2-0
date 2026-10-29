@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { safeHref } from "@/lib/crm/validation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ArrowDown, ArrowLeft, ArrowUp, Check, ExternalLink, FolderKanban, MessageCircle, Plus, RotateCcw } from "lucide-react";
@@ -213,7 +214,7 @@ function RequirementsTab({ p }: { p: Project }) {
         {canEdit && <div className="mt-3 flex gap-2"><Input aria-label="Client dependency" placeholder="e.g. Product photos" value={dep} onChange={(e) => setDep(e.target.value)} /><Button variant="outline" onClick={() => { const e = addDependency(p.id, dep); if (e) toast.error(e); else setDep(""); }}>Add</Button></div>}
       </Card>
       <Card title="References & links">
-        <ul className="grid gap-1.5">{p.links.map((l) => <li key={l.id}><a href={l.url} target="_blank" rel="noopener noreferrer" className="pd-row text-sm"><ExternalLink className="size-3.5 shrink-0" /><span className="truncate">{l.label}</span></a></li>)}{p.links.length === 0 && <li className="text-sm text-muted-foreground">No links yet.</li>}</ul>
+        <ul className="grid gap-1.5">{p.links.map((l) => <li key={l.id}><a href={safeHref(l.url) ?? undefined} target="_blank" rel="noopener noreferrer" className="pd-row text-sm"><ExternalLink className="size-3.5 shrink-0" /><span className="truncate">{l.label}</span></a></li>)}{p.links.length === 0 && <li className="text-sm text-muted-foreground">No links yet.</li>}</ul>
         {canEdit && <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]"><Input aria-label="Link label" placeholder="Label" value={lnk.label} onChange={(e) => setLnk({ ...lnk, label: e.target.value })} /><Input aria-label="Link URL" placeholder="https://" value={lnk.url} onChange={(e) => setLnk({ ...lnk, url: e.target.value })} /><Button variant="outline" onClick={() => { const e = addProjectLink(p.id, lnk.label, lnk.url); if (e) toast.error(e); else setLnk({ label: "", url: "" }); }}>Add</Button></div>}
         <p className="mt-3 text-xs text-muted-foreground">File uploads for projects aren't available yet — add links to shared folders instead. Payment proofs stay in Deals & Payments.</p>
       </Card>
@@ -273,7 +274,7 @@ function DeliveryTab({ p }: { p: Project }) {
           <div><dt>Delivered</dt><dd>{formatDate(p.delivery.date, { day: "numeric", month: "short", year: "numeric" })}</dd></div>
           <div><dt>By</dt><dd>{people.name(p.delivery.deliveredBy)}</dd></div>
           <div><dt>Client approval</dt><dd className="capitalize">{p.delivery.approval.replace("_", " ")}</dd></div>
-          <div><dt>Link</dt><dd>{p.delivery.url ? <a href={p.delivery.url} target="_blank" rel="noopener noreferrer" className="underline">{p.delivery.url}</a> : "—"}</dd></div>
+          <div><dt>Link</dt><dd>{p.delivery.url ? <a href={safeHref(p.delivery.url) ?? undefined} target="_blank" rel="noopener noreferrer" className="underline">{p.delivery.url}</a> : "—"}</dd></div>
           {p.delivery.notes && <div><dt>Handover notes</dt><dd>{p.delivery.notes}</dd></div>}
           {p.delivery.override && <div><dt>Delivered with open items</dt><dd>{p.delivery.incomplete.join(", ")} — {p.delivery.override}</dd></div>}
         </dl> : !canEdit ? <p className="text-sm text-muted-foreground">Not delivered yet.</p> : <div className="grid gap-3">

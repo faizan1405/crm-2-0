@@ -1,4 +1,5 @@
 import { WhatsAppButton } from "@/components/crm/WhatsAppComposer";
+import { mailtoHref } from "@/lib/crm/validation";
 import { runFollowUp, runVoid } from "@/components/crm/conflictFeedback";
 import { openCallLog } from "@/components/crm/PostCallDialog";
 import { CallButton } from "@/components/crm/CallButton";
@@ -126,7 +127,7 @@ function LeadDetail() {
               {leadDeals.map((d) => <Link key={d.id} to="/deals" className="block rounded-lg border p-2.5 text-sm hover:border-primary"><div className="font-medium">{d.name}</div><div className="num text-xs text-muted-foreground">{formatINR(d.finalAmount)}</div></Link>)}
             </section>
           )}
-          {lead.email && <Button variant="outline" asChild><a href={`mailto:${lead.email}`}><Mail className="size-4" />Email {lead.email}</a></Button>}
+          {mailtoHref(lead.email) && <Button variant="outline" asChild><a href={mailtoHref(lead.email)!}><Mail className="size-4" />Email {lead.email}</a></Button>}
         </div>
       </div>
       <FollowUpDialog open={fu} onOpenChange={setFu} leadId={id} />

@@ -1,6 +1,7 @@
 // Phase 3G shared UI: custom field inputs, the inspector "Additional information" section, tag chips/pickers
 // and the condition builder used by Saved Views and Automation Studio. All writes go through store actions.
 import { useMemo, useState } from "react";
+import { safeHref } from "@/lib/crm/validation";
 import { toast } from "sonner";
 import { ChevronDown, Lock, Pencil, Plus, Tag, Trash2, AlertTriangle } from "lucide-react";
 import { useCRM, viewCtxOf, projectCtxOf } from "@/lib/crm/store";
@@ -78,7 +79,7 @@ export function AdditionalInfo({ leadId, compact }: { leadId: string; compact?: 
     if (!r.ok) { setErrors(r.errors); if (r.errors["_"]) toast.error(r.errors["_"]); return; }
     setEditing(false); toast.success("Additional information saved");
   };
-  const row = (d: CustomFieldDef) => <div key={d.id} className="min-w-0"><dt className="eyebrow flex items-center gap-1.5">{d.label}{d.visibility === "owner" && <Lock className="size-2.5" aria-label="Owner only" />}</dt><dd className={cn("mt-1.5 text-sm break-words", v[d.id] === undefined && "text-muted-foreground")}>{v[d.id] === undefined ? (d.required ? <span className="cf-needs">Needs completion</span> : "—") : d.type === "url" ? <a className="underline" href={String(v[d.id])} target="_blank" rel="noreferrer noopener">{String(v[d.id]).replace(/^https?:\/\//, "")}</a> : displayValue(d, v[d.id])}</dd></div>;
+  const row = (d: CustomFieldDef) => <div key={d.id} className="min-w-0"><dt className="eyebrow flex items-center gap-1.5">{d.label}{d.visibility === "owner" && <Lock className="size-2.5" aria-label="Owner only" />}</dt><dd className={cn("mt-1.5 text-sm break-words", v[d.id] === undefined && "text-muted-foreground")}>{v[d.id] === undefined ? (d.required ? <span className="cf-needs">Needs completion</span> : "—") : d.type === "url" ? (safeHref(v[d.id]) ? <a className="underline" href={safeHref(v[d.id])!} target="_blank" rel="noreferrer noopener">{String(v[d.id]).replace(/^https?:\/\//, "")}</a> : <span>{String(v[d.id])}</span>) : displayValue(d, v[d.id])}</dd></div>;
   return <section aria-label="Additional information" className={cn("border-t pt-5", compact ? "mt-5" : "mt-7")}>
     <div className="flex flex-wrap items-center gap-2">
       <button type="button" className="flex items-center gap-1.5 text-sm font-semibold" aria-expanded={open} onClick={() => setOpen(!open)}><ChevronDown className={cn("size-4 transition-transform", !open && "-rotate-90")} />Additional information</button>
