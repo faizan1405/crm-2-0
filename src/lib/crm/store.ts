@@ -7,7 +7,7 @@ import { editSummary, mergePatch, QUICK_LABEL, type QuickStatus } from "./leadto
 let suppressEditHistory = false; // merges record their own single "merged" entry
 import type { ParsedLead } from "./parse";
 import { isPending, activeFollowUp } from "./followups";
-import { isConnectedOutcome, outcomeQuick, type CallOutcome } from "./calllog";
+import { isConnectedOutcome, quickAfterCall, type CallOutcome } from "./calllog";
 import { PersistError, recordSave, strBytes, notifyPersistFailure } from "./persistStatus";
 import { revisionOf, StaleRecordError, type VoidResult, type FollowUpOutcome } from "./crossTab";
 
