@@ -32,9 +32,11 @@ export function onRovingKeyDown(e: KeyboardEvent<HTMLElement>) {
   const enabled = items.map((el) => !(el as HTMLButtonElement).disabled && el.getAttribute("aria-disabled") !== "true");
   const i = nextIndex(items.length, current, e.key, enabled);
   if (i === current || i < 0) return;
+  const target = items[i];
+  if (!target) return;
   e.preventDefault();
-  items[i].focus();
-  items[i].click();
+  target.focus();
+  target.click();
 }
 
 /** tabIndex for roving focus: only the selected item sits in the Tab order. */
