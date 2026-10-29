@@ -536,3 +536,24 @@ Real test browser, isolated synthetic data (E11B employees A–D, deals ₹73,33
 - Tests 480 pass (2 new), typecheck clean, production build OK. No page errors.
 - Limits: all checks are in-browser rules, not real security; the backend must enforce the same.
 - Still open: Owner quotation packages; E1.2 input/injection; E2 accessibility; F end-to-end; secure backend.
+
+## Checkpoint E1.2A — Input safety, content injection & link validation (2026-10-29)
+
+**Inputs reviewed:** lead name/company/phone/email, client notes, call logs, custom fields (incl. URL type), tags, quotation/WhatsApp text, Sales Studio demo links, project links and delivery link, payment amounts, payment-proof file names.
+
+**Rendering:** no `dangerouslySetInnerHTML` on user data (only shadcn chart CSS). All user text renders as React text. Personal Notes use Tiptap's schema-based parsing (no raw HTML insertion).
+
+**Defects fixed (shared helpers in `validation.ts`):**
+- Stored links (custom URL fields, demos, project links, delivery URL) were used as `href` as-is; tampered/imported data could hold `javascript:`. Now `safeHref` allows only http(s); anything else shows as plain text.
+- Email check `\S+@\S+\.\S+` let `?cc=`/`&body=`/`#` change the mailto link. New `validEmail` (form + edit + store); `mailtoHref` hides the Email button for an unsafe value; emails are trimmed.
+- Call links: `telHref` keeps digits and a leading + only; an undialable number gives no link and opens no call log.
+- `addLead` had no store-level validation; now `leadCreateError` refuses empty name, invalid phone/email, negative amounts.
+
+**Browser Passed (test browser, synthetic data):** HTML/script-like lead name saved exactly and shown as text on lead page, Leads list, Pipeline (no injected elements, no dialogs, no page errors); script-like client note shown as text after refresh; invalid phone/email refused with messages and nothing saved; email trimmed; WhatsApp custom message with & ? # ₹ Hindi, HTML and 900+ chars → `wa.me/<number>`, single `text` param decoding to the exact message, no fragment, opening added 0 history entries (request intercepted, nothing sent); payment amounts 0, −500, empty, 1e15 → "Enter a valid amount", huge value → "exceeds outstanding", 0 payments created; .exe proof not attached; proof named `<img src=x onerror=alert(1)> proof ✓ & "q" #1.png` displayed as text and stored with exact name linked to its payment; tampered `javascript:` custom field and demo links rendered with no javascript href, tag with HTML-like name shown as text.
+**Browser note:** a negative budget on Add lead is dropped (field left empty), existing behaviour.
+**Automated-only:** `inputSafety.e12.test.ts` (6 tests).
+**Not tested in browser this round:** project task title and quotation description special characters (fresh test browser has no projects), Employee Preview proof-modification regression (covered by E1.1B tests), employee permission vs. untrusted text.
+
+**Status:** 486 tests pass, typecheck clean, production build OK.
+**Server-side needed later:** validation and URL/permission checks must be repeated on the future backend; browser storage stays readable by anyone with local access.
+**Open:** E1.2B (browser reruns above), E2 accessibility, F end-to-end, Owner quotation-package manual check, future secure backend.
