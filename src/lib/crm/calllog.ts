@@ -38,6 +38,14 @@ export function isConnectedOutcome(o: CallOutcome): boolean {
   return o !== "Not picked" && o !== "Busy";
 }
 
+/** Quick status after a call: the outcome's own status, else a connected call clears a stale "unreachable" marker (Not picked / Busy). */
+export function quickAfterCall(o: CallOutcome, current: QuickStatus | undefined): { set: boolean; value: QuickStatus | undefined } {
+  const q = outcomeQuick(o);
+  if (q) return { set: true, value: q };
+  if (isConnectedOutcome(o) && (current === "not_picked" || current === "busy")) return { set: true, value: undefined };
+  return { set: false, value: current };
+}
+
 /** Moving to Won or Lost from a call needs an explicit confirmation step. */
 export function needsStageConfirm(stage: LeadStatus, current: LeadStatus): boolean {
   return stage !== current && (stage === "won" || stage === "lost");

@@ -836,11 +836,11 @@ export const useCRM = create<CRMState>()(
         if (i.followUp && !Number.isFinite(new Date(i.followUp.dueAt).getTime())) return { ok: false, error: "Choose a valid follow-up time" };
         const at = new Date().toISOString();
         const before: LeadSnap = { status: lead.status, lostReason: lead.lostReason, lastContact: lead.lastContact, nextFollowUp: lead.nextFollowUp, quickStatus: lead.quickStatus };
-        const q = outcomeQuick(i.outcome);
+        const qa = quickAfterCall(i.outcome, lead.quickStatus);
         const patch: Partial<Lead> = {
           ...(i.stage !== lead.status ? { status: i.stage, ...(i.stage === "lost" ? { lostReason: i.lostReason!.trim() } : {}) } : {}),
           ...(isConnectedOutcome(i.outcome) ? { lastContact: at } : {}),
-          ...(q ? { quickStatus: q } : {}),
+          ...(qa.set ? { quickStatus: qa.value } : {}),
         };
         const next = { ...lead, ...patch, ...(patch.status && patch.status !== "lost" ? { lostReason: undefined } : {}) };
         const editErr = leadEditError(get().leads, lead.id, next);
