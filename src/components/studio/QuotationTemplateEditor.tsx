@@ -27,6 +27,9 @@ export function QuotationTemplateEditor({ initial, previewLeadId, onClose, onSav
   const dirty = JSON.stringify(t) !== JSON.stringify(start);
   const err = quotationTemplateError(t);
   const mismatch = priceMismatch(t);
+  // Which field the current error belongs to, so keyboard and screen-reader users hear it on that field.
+  const errField = !err ? null : err.startsWith("Add a package name") ? "name" : err.startsWith("Enter a price") ? "price" : "body";
+  const errProps = (k: string) => (errField === k ? { "aria-invalid": true as const, "aria-describedby": "qt-err" } : {});
   const set = (patch: Partial<QuotationTemplate>) => setT((s) => ({ ...s, ...patch }));
   const lead = leads.find((l) => l.id === leadId);
   const preview = lead ? renderQuotation(t, lead, { owner, business, dealName: deals.find((d) => d.leadId === lead.id && d.status !== "cancelled")?.name }) : "";
@@ -54,12 +57,12 @@ export function QuotationTemplateEditor({ initial, previewLeadId, onClose, onSav
         {stale && latest && <div role="alert" className="flex flex-col gap-2 rounded-lg border border-destructive/30 bg-destructive-soft/50 p-3 text-xs"><span className="flex items-center gap-2 font-semibold text-destructive"><AlertTriangle className="size-4 shrink-0" />This package was changed in another tab. Nothing was saved — your edits are still below.</span><span className="text-muted-foreground">Latest saved: “{latest.name}” · {formatPackagePrice(latest)}</span><span className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => { setT(latest); setBase(latest.updatedAt); setStale(false); }}>Load latest (discard my edits)</Button><Button size="sm" variant="outline" onClick={() => { if (window.confirm("Replace the newer saved package with your edits?")) { setBase(latest.updatedAt); setStale(false); } }}>Keep my edits</Button></span></div>}
         <div className="grid gap-4">
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_240px]">
-            <label className="q-field"><span>Package name</span><Input autoFocus value={t.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Premium 3D Website" /></label>
+            <label className="q-field"><span>Package name</span><Input autoFocus {...errProps("name")} value={t.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Premium 3D Website" /></label>
             <div className="q-field"><span>Price</span>
               <div className="flex gap-2">
                 <select aria-label="Price type" className={selectCls} value={t.priceType} onChange={(e) => set({ priceType: e.target.value as QuotationTemplate["priceType"] })}><option value="fixed">₹ Fixed</option><option value="custom">Custom</option></select>
                 {t.priceType === "fixed"
-                  ? <Input aria-label="Package price" type="number" min={0} step="any" inputMode="numeric" value={t.priceAmount ?? ""} placeholder="45000" onChange={(e) => set({ priceAmount: e.target.value.trim() === "" ? undefined : Number(e.target.value) })} />
+                  ? <Input aria-label="Package price" {...errProps("price")} type="number" min={0} step="any" inputMode="numeric" value={t.priceAmount ?? ""} placeholder="45000" onChange={(e) => set({ priceAmount: e.target.value.trim() === "" ? undefined : Number(e.target.value) })} />
                   : <Input aria-label="Price label" value={t.priceLabel ?? ""} placeholder="On request" onChange={(e) => set({ priceLabel: e.target.value })} />}
               </div>
             </div>
@@ -73,7 +76,7 @@ export function QuotationTemplateEditor({ initial, previewLeadId, onClose, onSav
           {view === "write" ? (
             <div className="grid gap-2">
               <label htmlFor="qt-body" className="text-xs font-semibold">Quotation message</label>
-              <Textarea id="qt-body" ref={ref} rows={12} value={t.messageBody} onChange={(e) => set({ messageBody: e.target.value })} className="min-h-64 text-sm leading-relaxed" placeholder="Describe the package: what's included, timeline, support, payment terms…" />
+              <Textarea id="qt-body" {...errProps("body")} ref={ref} rows={12} value={t.messageBody} onChange={(e) => set({ messageBody: e.target.value })} className="min-h-64 text-sm leading-relaxed" placeholder="Describe the package: what's included, timeline, support, payment terms…" />
               <div className="flex flex-wrap items-center gap-1.5" aria-label="Insert placeholder"><span className="text-[11px] text-muted-foreground">Insert:</span>{QUOTATION_PLACEHOLDERS.map((k) => <button key={k} type="button" className="ph-chip" onClick={() => insert(k)}>{`{${k}}`}</button>)}</div>
               <p className="text-[11px] text-muted-foreground">Use {"{packagePrice}"} instead of typing the price, so the message always matches the saved price. Lines with details a client doesn't have are left out.</p>
             </div>
@@ -91,7 +94,7 @@ export function QuotationTemplateEditor({ initial, previewLeadId, onClose, onSav
           )}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2 border-t pt-4">
-          {err && <span className="mr-auto text-xs text-muted-foreground">{err}</span>}
+          <span id="qt-err" aria-live="polite" className="mr-auto text-xs text-muted-foreground">{err ?? ""}</span>
           <Button variant="ghost" onClick={tryClose}>Cancel</Button>
           <Button variant="outline" onClick={() => setView(view === "write" ? "preview" : "write")}><Eye />{view === "write" ? "Preview" : "Back to editing"}</Button>
           <Button onClick={save} disabled={!!err}>Save template</Button>
