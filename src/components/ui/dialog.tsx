@@ -32,7 +32,11 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+>(({ className, children, onOpenAutoFocus, onCloseAutoFocus, ...props }, ref) => {
+  // Most CRM dialogs are opened from state, not a Radix Trigger, so Radix has nothing to return focus to.
+  // Remember the control that had focus when the dialog opened and put focus back there on close.
+  const returnTo = React.useRef<HTMLElement | null>(null);
+  return (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -41,6 +45,8 @@ const DialogContent = React.forwardRef<
         "fixed left-[50%] top-[50%] z-50 grid w-[calc(100%-2rem)] max-h-[90dvh] overflow-y-auto max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-card p-6 shadow-pop duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 rounded-lg",
         className,
       )}
+      onOpenAutoFocus={(e) => { const a = document.activeElement; returnTo.current = a instanceof HTMLElement && a !== document.body ? a : null; onOpenAutoFocus?.(e); }}
+      onCloseAutoFocus={(e) => { onCloseAutoFocus?.(e); const t = returnTo.current; returnTo.current = null; if (!e.defaultPrevented && t?.isConnected) { e.preventDefault(); t.focus(); } }}
       {...props}
     >
       {children}
@@ -50,7 +56,8 @@ const DialogContent = React.forwardRef<
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPortal>
-));
+  );
+});
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
