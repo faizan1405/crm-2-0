@@ -117,7 +117,7 @@ function Pipeline() {
       </section>
 
       <div className="mb-3 flex items-center gap-2">
-        <div className="max-w-full overflow-x-auto md:hidden"><div className="seg w-max" role="tablist" aria-label="Jump to stage">{LEAD_STATUSES.map((s) => <button key={s} type="button" role="tab" onClick={() => jump(s)}>{STATUS_LABEL[s]}</button>)}</div></div>
+        <div className="max-w-full overflow-x-auto md:hidden"><div className="seg w-max" role="group" aria-label="Jump to stage">{LEAD_STATUSES.map((s) => <button key={s} type="button" onClick={() => jump(s)}>{STATUS_LABEL[s]}</button>)}</div></div>
         <div className="ml-auto hidden gap-1 md:flex"><Button variant="outline" size="icon" className="rounded-full" aria-label="Previous stages" onClick={() => board.current?.scrollBy({ left: -(board.current?.clientWidth ?? 300) / 2, behavior: smooth() })}><ChevronLeft /></Button><Button variant="outline" size="icon" className="rounded-full" aria-label="Next stages" onClick={() => board.current?.scrollBy({ left: (board.current?.clientWidth ?? 300) / 2, behavior: smooth() })}><ChevronRight /></Button></div>
       </div>
 

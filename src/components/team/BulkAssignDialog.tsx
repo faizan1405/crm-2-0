@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { onRovingKeyDown, roving } from "@/lib/a11y/tabKeys";
 
 type Method = "equal" | "custom" | "balanced";
 
@@ -67,9 +68,9 @@ export function BulkAssignDialog({ open, leadIds, scope, onClose, onDone }: { op
 
     <div className="ba-break" aria-label="Current assignees">{Object.entries(breakdown).sort((a, b) => b[1] - a[1]).map(([k, n]) => <span key={k} className="ba-pill"><b className="num">{n}</b> {name(k)}</span>)}</div>
 
-    <div className="seg w-full" role="tablist" aria-label="Assignment mode">
-      <button type="button" role="tab" aria-pressed={mode === "one"} aria-selected={mode === "one"} onClick={() => { setMode("one"); setAck(false); }}><Users className="size-3.5" />One employee</button>
-      <button type="button" role="tab" aria-pressed={mode === "split"} aria-selected={mode === "split"} disabled={total < 2} onClick={() => { setMode("split"); setAck(false); }}><Split className="size-3.5" />Distribute</button>
+    <div className="seg w-full" role="radiogroup" aria-label="Assignment mode" onKeyDown={onRovingKeyDown}>
+      <button type="button" role="radio" aria-checked={mode === "one"} data-active={mode === "one"} tabIndex={roving(mode === "one")} onClick={() => { setMode("one"); setAck(false); }}><Users className="size-3.5" />One employee</button>
+      <button type="button" role="radio" aria-checked={mode === "split"} data-active={mode === "split"} tabIndex={roving(mode === "split")} disabled={total < 2} onClick={() => { setMode("split"); setAck(false); }}><Split className="size-3.5" />Distribute</button>
     </div>
 
     {mode === "one" ? <div role="radiogroup" aria-label="Choose employee" className="grid max-h-[34vh] gap-1.5 overflow-y-auto">

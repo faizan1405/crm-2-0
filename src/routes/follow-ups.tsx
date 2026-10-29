@@ -18,6 +18,7 @@ import { FOLLOWUP_LABEL, STATUS_LABEL, type FollowUp, type Lead } from "@/lib/cr
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { onRovingKeyDown, roving } from "@/lib/a11y/tabKeys";
 
 export const Route = createFileRoute("/follow-ups")({
   head: () => ({
@@ -65,8 +66,8 @@ function FollowUps() {
         ))}
       </div>
 
-      <div role="tablist" aria-label="Follow-up views" className="fu-tabs mb-4">
-        {TABS.map(([t, label]) => <button key={t} role="tab" type="button" aria-selected={tab === t} onClick={() => setTab(t)} className="fu-tab">{label}<span className={cn("num fu-count", t === "overdue" && counts.overdue && "is-danger")}>{counts[t]}</span></button>)}
+      <div role="tablist" aria-label="Follow-up views" onKeyDown={onRovingKeyDown} className="fu-tabs mb-4">
+        {TABS.map(([t, label]) => <button key={t} role="tab" type="button" aria-selected={tab === t} tabIndex={roving(tab === t)} onClick={() => setTab(t)} className="fu-tab">{label}<span className={cn("num fu-count", t === "overdue" && counts.overdue && "is-danger")}>{counts[t]}</span></button>)}
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">

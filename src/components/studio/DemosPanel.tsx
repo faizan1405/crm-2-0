@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Empty, selectCls } from "@/components/crm/Shell";
 import { cn } from "@/lib/utils";
+import { onRovingKeyDown, roving } from "@/lib/a11y/tabKeys";
 
 export function DemosPanel() {
   const { demos, demoCategories, saveDemo, deleteDemo, moveDemo, addDemoCategory } = useCRM();
@@ -26,9 +27,9 @@ export function DemosPanel() {
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="fu-tabs" role="tablist" aria-label="Demo categories">
-          <button type="button" role="tab" aria-selected={cat === "all"} className="fu-tab" onClick={() => setCat("all")}>All<span className="fu-count num">{demos.length}</span></button>
-          {demoCategories.map((c) => <button key={c} type="button" role="tab" aria-selected={cat === c} className="fu-tab" onClick={() => setCat(c)}>{c}<span className="fu-count num">{demos.filter((d) => d.category === c).length}</span></button>)}
+        <div className="fu-tabs" role="tablist" aria-label="Demo categories" onKeyDown={onRovingKeyDown}>
+          <button type="button" role="tab" aria-selected={cat === "all"} tabIndex={roving(cat === "all")} className="fu-tab" onClick={() => setCat("all")}>All<span className="fu-count num">{demos.length}</span></button>
+          {demoCategories.map((c) => <button key={c} type="button" role="tab" aria-selected={cat === c} tabIndex={roving(cat === c)} className="fu-tab" onClick={() => setCat(c)}>{c}<span className="fu-count num">{demos.filter((d) => d.category === c).length}</span></button>)}
         </div>
         <Button variant="ghost" size="sm" onClick={newCategory}><Plus />Category</Button>
         <Button className="ml-auto" onClick={() => setEditing(fresh())}><Plus />Add demo</Button>

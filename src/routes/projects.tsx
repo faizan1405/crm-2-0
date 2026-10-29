@@ -78,7 +78,7 @@ function ProjectDesk() {
   const icon: Record<Tab, typeof LayoutGrid> = { overview: LayoutGrid, all: ListChecks, board: FolderKanban, templates: Settings2 };
   return (
     <Shell title="Project Desk" subtitle="Won deal → booking → delivery → support. Money always comes from Deals & Payments.">
-      <nav className="mb-6 max-w-full overflow-x-auto" aria-label="Project Desk sections"><div className="seg w-max">{TABS.filter((t) => t !== "templates" || v.owner).map((t) => { const I = icon[t]; return <Link key={t} to="/projects" search={{ tab: t }} role="tab" aria-pressed={tab === t} className="seg-link" data-active={tab === t}><I className="size-3.5" />{label[t]}</Link>; })}</div></nav>
+      <nav className="mb-6 max-w-full overflow-x-auto" aria-label="Project Desk sections"><div className="seg w-max">{TABS.filter((t) => t !== "templates" || v.owner).map((t) => { const I = icon[t]; return <Link key={t} to="/projects" search={{ tab: t }} aria-current={tab === t ? "page" : undefined} className="seg-link" data-active={tab === t}><I className="size-3.5" />{label[t]}</Link>; })}</div></nav>
       {tab === "overview" && <Overview onCreate={setDeal} />}
       {tab === "all" && <AllProjects />}
       {tab === "board" && <Board />}

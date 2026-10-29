@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { onRovingKeyDown, roving } from "@/lib/a11y/tabKeys";
 
 type Search = { employee?: string };
 export const Route = createFileRoute("/team")({
@@ -63,7 +64,7 @@ function Team() {
       <div className="tm-summary">
         {([["Total employees", sum.total], ["Active", sum.active], ["Pending setup", sum.pending], ["Inactive", sum.inactive]] as const).map(([l, v]) => <div key={l} className="tm-sum"><span className="eyebrow">{l}</span><span className="num tm-sum-v">{v}</span></div>)}
       </div>
-      <div className="seg mb-4" role="tablist" aria-label="Team sections"><button type="button" role="tab" aria-selected={view === "directory"} aria-pressed={view === "directory"} onClick={() => setView("directory")}><Users className="size-3.5" />Directory</button><button type="button" role="tab" aria-selected={view === "rules"} aria-pressed={view === "rules"} onClick={() => setView("rules")}><Workflow className="size-3.5" />Assignment rules</button></div>
+      <div className="seg mb-4" role="tablist" aria-label="Team sections" onKeyDown={onRovingKeyDown}><button type="button" role="tab" aria-selected={view === "directory"} aria-pressed={view === "directory"} tabIndex={roving(view === "directory")} onClick={() => setView("directory")}><Users className="size-3.5" />Directory</button><button type="button" role="tab" aria-selected={view === "rules"} aria-pressed={view === "rules"} tabIndex={roving(view === "rules")} onClick={() => setView("rules")}><Workflow className="size-3.5" />Assignment rules</button></div>
       {view === "rules" ? <RulesPanel /> : <div className={cn("tm-layout", selected && "has-panel")}>
         <section className="surface tm-dir" aria-label="Employee directory">
           <div className="tm-owner"><span className="tm-avatar tm-avatar-owner"><Crown className="size-4" /></span><div className="min-w-0 flex-1"><div className="text-sm font-semibold">{owner}</div><div className="truncate text-xs text-muted-foreground">{email || "Owner email not set"}</div></div><span className="tm-role-owner">Owner · Super admin</span></div>

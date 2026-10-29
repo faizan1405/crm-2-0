@@ -16,6 +16,7 @@ import { selectCls } from "./Shell";
 import { cn } from "@/lib/utils";
 import { FieldForm, TagPicker, toDraft, useViewer, type Draft } from "./Customize";
 import { activeFields, fieldEditable, validateLeadValues } from "@/lib/crm/customize";
+import { onRovingKeyDown, roving } from "@/lib/a11y/tabKeys";
 
 interface Form {
   name: string; phone: string; email: string; company: string; requirement: string;
@@ -100,9 +101,9 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
           <DialogTitle>Add lead</DialogTitle>
           <DialogDescription>A new opportunity starts here.</DialogDescription>
         </DialogHeader>
-        <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1" role="tablist">
+        <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1" role="tablist" aria-label="Entry method" onKeyDown={onRovingKeyDown}>
           {([["ai", "Quick AI Entry", Sparkles], ["manual", "Manual Entry", PenLine]] as const).map(([m, label, Icon]) => (
-            <Button variant="ghost" key={m} role="tab" aria-selected={mode === m} onClick={() => setMode(m)} className={cn("flex items-center justify-center gap-2 rounded-md py-1.5 text-sm font-medium transition-colors", mode === m ? "bg-card text-foreground shadow-card" : "text-muted-foreground hover:text-foreground")}>
+            <Button variant="ghost" key={m} role="tab" aria-selected={mode === m} tabIndex={roving(mode === m)} onClick={() => setMode(m)} className={cn("flex items-center justify-center gap-2 rounded-md py-1.5 text-sm font-medium transition-colors", mode === m ? "bg-card text-foreground shadow-card" : "text-muted-foreground hover:text-foreground")}>
               <Icon className="size-4" />{label}
             </Button>
           ))}

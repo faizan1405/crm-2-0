@@ -5,6 +5,7 @@ import { useCRM } from "@/lib/crm/store";
 import { QuotationsPanel } from "@/components/studio/QuotationsPanel";
 import { TemplatesPanel } from "@/components/studio/TemplatesPanel";
 import { DemosPanel } from "@/components/studio/DemosPanel";
+import { onRovingKeyDown, roving } from "@/lib/a11y/tabKeys";
 
 type Tab = "quotations" | "templates" | "demos";
 const TABS: { key: Tab; label: string; icon: typeof FileText }[] = [
@@ -40,8 +41,8 @@ function SalesStudio() {
   const counts: Record<Tab, number> = { quotations: quotationTemplates.length, templates: waTemplates.length, demos: demos.length };
   return (
     <Shell title="Sales Studio" subtitle="One place for quotation packages, message templates and demo links — used by every WhatsApp message in the CRM">
-      <div role="tablist" aria-label="Sales Studio areas" className="fu-tabs mb-5">
-        {TABS.map((t) => <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} className="fu-tab" onClick={() => go({ tab: t.key })}><t.icon className="size-4" />{t.label}<span className="fu-count num">{counts[t.key]}</span></button>)}
+      <div role="tablist" aria-label="Sales Studio areas" onKeyDown={onRovingKeyDown} className="fu-tabs mb-5">
+        {TABS.map((t) => <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} tabIndex={roving(tab === t.key)} className="fu-tab" onClick={() => go({ tab: t.key })}><t.icon className="size-4" />{t.label}<span className="fu-count num">{counts[t.key]}</span></button>)}
       </div>
       <div role="tabpanel" className="studio-pane" key={tab}>
         {tab === "quotations" && <QuotationsPanel client={client} />}
