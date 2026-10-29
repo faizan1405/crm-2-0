@@ -648,3 +648,21 @@ Open: E2.2B (screen-reader semantics, contrast, touch targets, tab-role arrow ke
 **Screen reader: Not Tested** (none available in the test environment). Accessibility tree + axe only.
 Tests: 505 (5 new arrow-key rules), typecheck clean.
 Open: E2.2B.2 (contrast, touch targets, responsive visual a11y); F; Owner quotation packages (manual); future Hostinger backend auth/permissions/storage/transactions/restoration.
+
+## E2.2B.2 — contrast, touch targets, focus visibility (isolated test browser, demo data)
+Tool: axe-core 4.10.2 (`color-contrast` rule, plus WCAG 2 A/AA set on key screens), Playwright Chromium; custom tap-size / focus / overflow probes.
+**Contrast — fixed**
+- Bulk Assignment (light): mode pill + unselected "Distribute" option, `--muted-foreground` #626c65 on `--muted` #ece9e1 = 4.49:1 (need 4.5). Muted text token darkened one step (L 0.52→0.505) → passes; axe on the dialog: 0 violations.
+- Sidebar group labels (dark theme, all pages): #77827b on #1b221e = 4.06:1 (need 4.5, 9.5px text). Label opacity .75→.9 → passes; axe: 0.
+- Light theme: Dashboard, Prospects, Pipeline, Follow-ups, Sales Studio, Finance, Projects, Team, Notes, Data Vault — 0 contrast violations. Dark theme: 0 after fix.
+- Exceptions: disabled controls (exempt by WCAG), axe "needs review" items over gradients/images not counted.
+**Touch targets (390/360, touch emulation)**
+- Prospect selection checkboxes 16×16 → invisible 44×44 tap area (visual unchanged); tap 13px outside the box ticks it — Passed.
+- Pipeline stage distribution bar 10px tall → 44px tall tap area; tap 15px below hits the stage — Passed.
+- Finance Void was ~22px tall → 44px on phones (48×44 measured), labelled "Void payment of ₹…"; confirm + void logic unchanged.
+- Remaining small items are inline text links in sentences/lists ("All leads →", lead names in Dashboard lists, "Preview the login screen") — inline exception under WCAG 2.5.8; left as is.
+**Focus visibility (dark theme, 15 Tab presses at 1440/1024/768/390/360)**: visible ring on 15/15, none covered by fixed bars, no sideways overflow — Passed.
+**Regression**: Follow-ups arrow/Home/End, Bulk Assignment radio arrows, dialog labels — Passed; axe WCAG A/AA on 6 screens incl. contrast: 0.
+**Small-screen forms**: not re-run this round beyond overflow probes (verified in E2.1/E2.2A/E2.2A.2).
+Screen reader: Not Tested (unavailable).
+Open: F; Owner's 3 real quotation packages (manual); real screen-reader acceptance; future Hostinger backend (secure auth, server-side authorization, central storage, atomic transactions, restoration).
