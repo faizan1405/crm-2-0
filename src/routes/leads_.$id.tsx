@@ -16,7 +16,7 @@ import { QUICK_STATUSES, QUICK_LABEL, staleDays, type QuickStatus } from "@/lib/
 import { useNavigate } from "@tanstack/react-router";
 import { SuggestionList } from "@/components/crm/Suggestions";
 import { useAccess, STAGE_DENIED } from "@/lib/crm/session";
-import { leadEditError } from "@/lib/crm/validation";
+import { leadEditError, leadEditFieldErrors, type LeadFieldErrors } from "@/lib/crm/validation";
 import { revisionOf, isStaleError, changedKeys, externalKeys, rebaseDraft } from "@/lib/crm/crossTab";
 import { isPersistError } from "@/lib/crm/persistStatus";
 import { Button } from "@/components/ui/button";
@@ -146,16 +146,25 @@ function EditLead({ lead, onDone }: { lead: Lead; onDone: () => void }) {
   const [baseRev, setBaseRev] = useState(() => revisionOf(lead));
   const [f, setF] = useState(() => formOf(lead));
   const [review, setReview] = useState(false);
+  const [errs, setErrs] = useState<LeadFieldErrors>({});
+  const [askDiscard, setAskDiscard] = useState(false);
   const latest = formOf(lead);
   const stale = revisionOf(lead) !== baseRev;
   const theirs = stale ? externalKeys(start, latest) : [];
   const mine = changedKeys(start, f);
-  const set = (k: string) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  const set = (k: string) => (e: { target: { value: string } }) => { setF({ ...f, [k]: e.target.value }); if (errs[k as keyof LeadFieldErrors]) setErrs({ ...errs, [k]: undefined }); };
+  // Leaving the page (link, back button, refresh) with unsaved edits asks first — the inline form never discards silently.
+  useBlocker({ shouldBlockFn: () => mine.length > 0 && !window.confirm("Discard your unsaved changes to this lead?"), enableBeforeUnload: () => mine.length > 0 });
+  const cancel = () => { if (mine.length) setAskDiscard(true); else onDone(); };
   const keepDraft = () => { setF(rebaseDraft(start, f, latest)); setStart(latest); setBaseRev(revisionOf(lead)); setReview(false); toast("Draft kept — the other tab's changes to fields you didn't edit were brought in"); };
   const reload = () => { setF(latest); setStart(latest); setBaseRev(revisionOf(lead)); setReview(false); toast("Loaded the latest saved lead"); };
   const save = () => {
     if (stale) { setReview(true); toast.error("This lead was updated in another tab. Review the latest changes before saving."); return; }
     if (!mine.length) { onDone(); return; }
+    const fieldErrs = leadEditFieldErrors(leads, lead.id, f);
+    const firstBad = (["name", "phone", "email", "budget", "quotedAmount"] as const).find((k) => fieldErrs[k]);
+    setErrs(fieldErrs);
+    if (firstBad) { toast.error("Fix the highlighted fields — nothing was saved"); document.getElementById(`edit-${firstBad}`)?.focus(); return; }
     const error = leadEditError(leads, lead.id, { ...f, budget: Number(f["budget"]), quotedAmount: Number(f["quotedAmount"]) } as never);
     if (error) { toast.error(error); return; }
     const patch: Record<string, unknown> = {};
@@ -169,7 +178,7 @@ function EditLead({ lead, onDone }: { lead: Lead; onDone: () => void }) {
     }
     toast.success("Lead updated"); onDone();
   };
-  const inp = (k: string, label: string, type = "text") => <div className="grid gap-1.5"><Label htmlFor={`edit-${k}`}>{label}</Label><Input id={`edit-${k}`} type={type} value={f[k]} onChange={set(k)} /></div>;
+  const inp = (k: string, label: string, type = "text") => { const er = errs[k as keyof LeadFieldErrors]; return <div className="grid gap-1.5"><Label htmlFor={`edit-${k}`}>{label}</Label><Input id={`edit-${k}`} type={type} value={f[k]} onChange={set(k)} aria-invalid={er ? true : undefined} aria-describedby={er ? `edit-${k}-error` : undefined} />{er && <p id={`edit-${k}-error`} className="text-xs text-destructive">{er}</p>}</div>; };
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {stale && (
@@ -192,10 +201,11 @@ function EditLead({ lead, onDone }: { lead: Lead; onDone: () => void }) {
       {inp("name", "Name")}{inp("phone", "Phone")}{inp("email", "Email", "email")}{inp("company", "Company")}
       <div className="sm:col-span-2">{inp("requirement", "Requirement")}</div>
       {inp("budget", "Budget (₹)", "number")}{inp("quotedAmount", "Quoted (₹)", "number")}
-      <div className="grid gap-1.5"><Label>Source</Label><select className={selectCls} value={f["source"]} onChange={set("source")}>{LEAD_SOURCES.map((s) => <option key={s}>{s}</option>)}</select></div>
-      <div className="grid gap-1.5"><Label>Priority</Label><select aria-label="Priority" className={selectCls} value={f["priority"]} onChange={set("priority")}><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option></select></div>
-      <div className="grid gap-1.5 sm:col-span-2"><Label>Notes</Label><Textarea value={f["notes"]} onChange={set("notes")} /></div>
-      <div className="flex justify-end gap-2 sm:col-span-2"><Button variant="ghost" onClick={onDone}>Cancel</Button><Button onClick={save}>Save changes</Button></div>
+      <div className="grid gap-1.5"><Label htmlFor="edit-source">Source</Label><select id="edit-source" className={selectCls} value={f["source"]} onChange={set("source")}>{LEAD_SOURCES.map((s) => <option key={s}>{s}</option>)}</select></div>
+      <div className="grid gap-1.5"><Label htmlFor="edit-priority">Priority</Label><select id="edit-priority" className={selectCls} value={f["priority"]} onChange={set("priority")}><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option></select></div>
+      <div className="grid gap-1.5 sm:col-span-2"><Label htmlFor="edit-notes">Notes</Label><Textarea id="edit-notes" value={f["notes"]} onChange={set("notes")} /></div>
+      {askDiscard && <div role="alert" className="grid gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm sm:col-span-2"><p className="font-medium">Discard unsaved changes?</p><p className="text-xs text-muted-foreground">Your edits to this lead haven't been saved.</p><div className="flex flex-wrap gap-2"><Button size="sm" autoFocus onClick={() => setAskDiscard(false)}>Keep editing</Button><Button size="sm" variant="outline" className="text-destructive" onClick={() => { setAskDiscard(false); setF(start); onDone(); }}>Discard changes</Button></div></div>}
+      <div className="flex justify-end gap-2 sm:col-span-2"><Button variant="ghost" onClick={cancel}>Cancel</Button><Button onClick={save}>Save changes</Button></div>
     </div>
   );
 }

@@ -43,3 +43,18 @@ export function leadEditError(leads: Lead[], id: string, patch: Partial<Lead>) {
   if ([next.budget, next.quotedAmount].some((amount) => amount !== undefined && (!Number.isFinite(amount) || amount < 0))) return "Amounts must be zero or greater";
   return undefined;
 }
+export type LeadFieldErrors = Partial<Record<"name" | "phone" | "email" | "budget" | "quotedAmount", string>>;
+/** Per-field errors for the inline Edit Lead form, so each message can sit next to (and be linked to) its own field. */
+export function leadEditFieldErrors(leads: Lead[], id: string, f: Record<string, string>): LeadFieldErrors {
+  const e: LeadFieldErrors = {};
+  if (!(f.name ?? "").trim()) e.name = "Name is required";
+  const phone = f.phone ?? "";
+  if (!validPhone(phone)) e.phone = "Enter a valid 10-digit mobile number";
+  else if (leads.some((l) => l.id !== id && l.phone.replace(/\D/g, "").slice(-10) === phone.replace(/\D/g, "").slice(-10))) {
+    const cur = leads.find((l) => l.id === id);
+    if (!cur || cur.phone.replace(/\D/g, "").slice(-10) !== phone.replace(/\D/g, "").slice(-10)) e.phone = "This phone already belongs to another lead";
+  }
+  if ((f.email ?? "").trim() && !validEmail(f.email.trim())) e.email = "Enter a valid email address";
+  for (const k of ["budget", "quotedAmount"] as const) { const m = amountFieldError(f[k] ?? ""); if (m) e[k] = m; }
+  return e;
+}
