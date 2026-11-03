@@ -93,25 +93,25 @@ const BENEFITS: Record<ProjectType, string[]> = {
 };
 const OPTIONAL: Record<ProjectType, string[]> = {
   business: ["Google Business Profile link", "Testimonials section"],
-  ecommerce: ["Discount-code support", "Order notification on WhatsApp"],
+  ecommerce: ["Product reviews section", "Order notification on WhatsApp"],
   portfolio: ["Client testimonials", "Downloadable resume / profile"],
   redesign: ["Speed review of the current site"],
   "3d": ["Fallback layout for older phones"],
   unknown: [],
 };
-type H = { overview: string; deliver: string; features: string; benefits: string; client: string; excl: string; support: string; terms: string; optional: string };
+type H = { kept: string; overview: string; deliver: string; features: string; benefits: string; client: string; excl: string; support: string; terms: string; optional: string };
 const HEAD: Record<QuoteLang, H[]> = {
   en: [
-    { overview: "Project overview", deliver: "Deliverables (included)", features: "Functional features", benefits: "Business benefits", client: "Client responsibilities", excl: "Exclusions", support: "Technical support", terms: "Timeline & payment terms", optional: "Optional recommendations (not included in the price)" },
-    { overview: "About the project", deliver: "What's included", features: "Features", benefits: "How it helps your business", client: "What we'll need from you", excl: "Not included", support: "Support", terms: "Timeline & payment", optional: "Optional add-ons (not included in the price)" },
+    { kept: "Also in your package (kept as written)", overview: "Project overview", deliver: "Deliverables (included)", features: "Functional features", benefits: "Business benefits", client: "Client responsibilities", excl: "Exclusions", support: "Technical support", terms: "Timeline & payment terms", optional: "Optional recommendations (not included in the price)" },
+    { kept: "Also in your package (kept as written)", overview: "About the project", deliver: "What's included", features: "Features", benefits: "How it helps your business", client: "What we'll need from you", excl: "Not included", support: "Support", terms: "Timeline & payment", optional: "Optional add-ons (not included in the price)" },
   ],
   hinglish: [
-    { overview: "Project ke baare mein", deliver: "Kya included hai", features: "Features", benefits: "Business ko fayda", client: "Aapki taraf se", excl: "Included nahi hai", support: "Support", terms: "Timeline aur payment", optional: "Optional suggestions (price mein included nahi)" },
-    { overview: "Project overview", deliver: "Deliverables (included)", features: "Features", benefits: "Fayde", client: "Client se chahiye", excl: "Exclusions", support: "Technical support", terms: "Timeline aur payment terms", optional: "Optional add-ons (price mein included nahi)" },
+    { kept: "Package mein yeh bhi (jaisa likha)", overview: "Project ke baare mein", deliver: "Kya included hai", features: "Features", benefits: "Business ko fayda", client: "Aapki taraf se", excl: "Included nahi hai", support: "Support", terms: "Timeline aur payment", optional: "Optional suggestions (price mein included nahi)" },
+    { kept: "Also in your package (kept as written)", overview: "Project overview", deliver: "Deliverables (included)", features: "Features", benefits: "Fayde", client: "Client se chahiye", excl: "Exclusions", support: "Technical support", terms: "Timeline aur payment terms", optional: "Optional add-ons (price mein included nahi)" },
   ],
   hi: [
-    { overview: "परियोजना विवरण", deliver: "शामिल कार्य", features: "सुविधाएँ", benefits: "व्यवसाय के लाभ", client: "ग्राहक की ज़िम्मेदारियाँ", excl: "शामिल नहीं", support: "तकनीकी सहायता", terms: "समय-सीमा और भुगतान शर्तें", optional: "वैकल्पिक सुझाव (मूल्य में शामिल नहीं)" },
-    { overview: "परियोजना के बारे में", deliver: "क्या शामिल है", features: "सुविधाएँ", benefits: "लाभ", client: "आपसे आवश्यक", excl: "शामिल नहीं", support: "सहायता", terms: "समय और भुगतान", optional: "वैकल्पिक (मूल्य में शामिल नहीं)" },
+    { kept: "पैकेज में यह भी (जैसा लिखा)", overview: "परियोजना विवरण", deliver: "शामिल कार्य", features: "सुविधाएँ", benefits: "व्यवसाय के लाभ", client: "ग्राहक की ज़िम्मेदारियाँ", excl: "शामिल नहीं", support: "तकनीकी सहायता", terms: "समय-सीमा और भुगतान शर्तें", optional: "वैकल्पिक सुझाव (मूल्य में शामिल नहीं)" },
+    { kept: "पैकेज में यह भी (जैसा लिखा)", overview: "परियोजना के बारे में", deliver: "क्या शामिल है", features: "सुविधाएँ", benefits: "लाभ", client: "आपसे आवश्यक", excl: "शामिल नहीं", support: "सहायता", terms: "समय और भुगतान", optional: "वैकल्पिक (मूल्य में शामिल नहीं)" },
   ],
 };
 
@@ -133,10 +133,16 @@ export function draftScope(body: string, requirements: string, lang: QuoteLang, 
   const feats: string[] = [];
   for (const [re, label] of FEATURES) { const m = requirements.match(re); if (m) { const f = label.replace("$1", m[1] ?? ""); if (!feats.includes(f)) feats.push(f); } }
   const reqLines = requirements.split(/\n|;|(?<=\.)\s/).map((x) => x.trim()).filter(Boolean);
-  const termLines = [...new Set([...body.split("\n"), ...reqLines].map((x) => x.trim().replace(/^[-•*]\s*/, "")).filter((x) => x && (COMMERCIAL_LINE.test(x) || /\d|₹/.test(x)) && !/\{clientName\}/.test(x) && !/^investment:/i.test(x)))];
-  const pick = (re: RegExp) => termLines.filter((x) => re.test(x));
-  const support = pick(/support|maintenance|warranty/i);
+  const clean = (x: string) => x.trim().replace(/^[-•*]\s*/, "");
+  const bodyLines = body.split("\n").map(clean).filter((x) => x && !/\{clientName\}|\{packageName\}|\{packagePrice\}/.test(x) && !/^investment:/i.test(x));
+  // Terms: the Owner's own commercial lines (body, or a requirement line that states a figure).
+  const isTerm = (x: string) => COMMERCIAL_LINE.test(x) && !/payment gateway|online payment/i.test(x);
+  const reqTerms = reqLines.map(clean).filter((x) => isTerm(x) && /\d|₹|%/.test(x));
+  const termLines = [...new Set([...bodyLines.filter(isTerm), ...reqTerms])];
+  const support = termLines.filter((x) => /support|maintenance|warranty/i.test(x));
   const terms = termLines.filter((x) => !support.includes(x));
+  // Other figures in the package (e.g. "5 pages") are kept verbatim so nothing agreed disappears.
+  const kept = bodyLines.filter((x) => !termLines.includes(x) && /\d|₹|%/.test(x));
   const clientNeeds = reqLines.filter((x) => /\b(client|you|they) (will )?(provide|send|share)|logo|content|photos|images\b/i.test(x));
   const list = (xs: string[]) => (xs.length ? xs.map((x) => `- ${x}`).join("\n") : `- ${NOT_SPECIFIED}`);
   const greet = body.split("\n").find((x) => /\{clientName\}/.test(x));
@@ -149,6 +155,7 @@ export function draftScope(body: string, requirements: string, lang: QuoteLang, 
     `*${h.excl}*\n- ${NOT_SPECIFIED}`,
     `*${h.support}*\n${list(support)}`,
     `*${h.terms}*\n${list(terms)}`,
+    ...(kept.length ? [`*${h.kept}*\n${kept.map((x) => `- ${x}`).join("\n")}`] : []),
     ...(/\{packagePrice\}/.test(body) ? ["Investment: {packagePrice}"] : []),
     ...(OPTIONAL[type].length ? [`*${h.optional}*\n${OPTIONAL[type].map((x) => `- ${x}`).join("\n")}`] : []),
   ];
@@ -169,7 +176,7 @@ export function demoQuote(req: QuoteRequest): QuoteResult {
   const supported = d.type !== "unknown" && d.features > 0 && !tooComplex;
   const notes: string[] = [];
   if (!supported) notes.push("Demo Mode only handles short briefs for business, e-commerce, portfolio, redesign and 3D websites. Full intelligent drafting of this brief needs the live AI connection, which isn't switched on yet. Sections it couldn't fill say “Not specified”.");
-  else notes.push(`Fixed sample structure for a ${PROJECT_LABEL[d.type].toLowerCase()}. Deliverables are only the features you typed; your terms, support and payment lines are copied as written.`);
+  else notes.push(`Fixed sample structure: ${PROJECT_LABEL[d.type]}. Deliverables are only the features you typed; your terms, support and payment lines are copied as written.`);
   if (req.lang !== "en") notes.push("Only the section headings are in " + QUOTE_LANG_LABEL[req.lang] + " — your own lines aren't translated.");
   return { mode: "draft_scope", text: d.text, label: QUOTE_DEMO_LABEL, simulated: true, projectType: d.type, supported, notice: notes.join(" ") };
 }
