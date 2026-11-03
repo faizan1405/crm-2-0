@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-type S = { period?: string; from?: string; to?: string };
+type S = { period?: string | undefined; from?: string | undefined; to?: string | undefined };
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
 const OWNER_PERIODS: { id: PeriodKey; label: string }[] = [
   { id: "today", label: "Today" }, { id: "thisWeek", label: "This week" }, { id: "thisMonth", label: "This month" }, { id: "custom", label: "Custom range" },

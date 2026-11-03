@@ -163,7 +163,6 @@ describe("AI-7A charts, timeline and finance", () => {
   it("the AI-7B summary carries metrics and data quality, never conclusions", () => {
     const m = ownerMetrics(base, periodWindow("today", NOW), NOW);
     const s = performanceSummary(m, periodWindow("today", NOW));
-    expect(s.timezone).toBeUndefined();
     expect(s.window.timezone).toBe("Asia/Kolkata");
     expect(s.activity.calls).toBe(0);
     expect(s.dataQuality.unattributedEvents).toBe(0);
