@@ -198,7 +198,6 @@ function TaskRow({ t, late, assignee, people, canEdit, canDone, onDone, onMove, 
       {canEdit ? <>{conflict && <div className="pd-note" role="alert"><b>These task notes were updated in another tab.</b> Your draft is kept. Latest saved notes: “{t.notes || "(empty)"}”<div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={loadLatest}>Load latest (discard draft)</Button><Button size="sm" variant="outline" onClick={() => setBase({ version: t.version, notes: t.notes ?? "" })}>Keep my draft</Button></div></div>}<div className="flex gap-2"><Textarea aria-label="Task notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" /><Button variant="outline" onClick={saveNotes}>Save</Button></div></> : t.notes && <p className="text-sm">{t.notes}</p>}
       <ul className="text-[11px] text-muted-foreground">{t.history.slice(-5).reverse().map((h, i) => <li key={i}>{formatDateTime(h.at)} · {h.change}</li>)}</ul>
     </div>}
-    {owner && aiOpen && <SupportAssistPanel key={id} requestId={id} {...(x.assigneeId ? { assigneeName: assignee } : {})} onClose={() => onToggleAi?.()} onOpenResolution={() => { const el = actionsRef.current; el?.scrollIntoView({ block: "center", behavior: "smooth" }); el?.querySelector<HTMLElement>("textarea, button")?.focus(); }} />}
   </li>;
 }
 
