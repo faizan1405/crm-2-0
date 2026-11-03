@@ -57,8 +57,31 @@ Status key: **Demo** = rule-based/sample output labelled as such · **Local** = 
 | History not duplicated | **Browser Passed** — opened / started / resolved each logged once |
 | Page errors | None |
 
-Observations (not defects): the Project editor has no unsaved-edit warning — leaving discards the form (intentional limit, listed in §5). "Reload latest" replaces the typed text; "Apply my change" is the way to keep it.
-**Defects found: 0. Code changes: none.**
+Historical AI-9B observations: the Project editor had no unsaved-edit warning, and Support's "Reload latest" replaced the typed draft. AI-9C below repairs Project draft protection and makes the Support replacement explicit.
+**AI-9B defects found: 0. AI-9B code changes: none. Superseded by the requested AI-9C usability repair.**
+
+### AI-9C — Project unsaved changes protection (3 Nov 2026 UTC)
+- Project Overview's explicit-save fields now compare against their saved draft baseline. Sidebar links, Project Desk, section links and same-document browser Back show **Discard unsaved changes?** with **Keep editing** and **Discard changes**. Closing the warning keeps the draft.
+- Keep editing retains exact typed values without writes; Discard only permits navigation. Save changes is disabled for untouched/saved drafts and successful Save resets the baseline, preventing a repeated save of the same draft.
+- Browser refresh/tab-close protection uses native `beforeunload`; browser wording is controlled by the browser, not custom buttons. Refresh cancel and accept were exercised. Actual tab closure was not separately exercised.
+- Autosaved status/stage/tags/checklists remain unchanged and do not trigger this Overview guard. Other explicit-save editors (delivery, support terms, tasks and templates) were not redesigned or given additional guards in this checkpoint.
+- Support conflict now explains that Reload latest replaces unsaved resolution notes; the action reads **Reload latest (discard draft)**. Apply my change retains its existing behavior.
+
+| AI-9C check | Actual result |
+|---|---|
+| Automated tests | **706 / 706 passed, 75 files** — original 701 preserved plus 5 new navigation regressions |
+| Production build signal | Harness reports **build OK** after source edits; no manual production build or standalone typecheck was run (platform manages these checks) |
+| Synthetic Project: sidebar → Keep editing | Passed; exact smart-quote draft retained and saved snapshot unchanged |
+| Sidebar → Discard | Passed; navigation to Notes, saved snapshot unchanged |
+| Explicit Save + refresh | Passed; name persisted; version and history increased exactly once; repeat Save disabled |
+| Browser Back in one document | Passed; Keep editing retained draft; Discard returned to Project Desk without saving |
+| Browser refresh | Passed; native beforeunload appeared, cancel retained draft, accept reloaded saved name |
+| Linked finance and delivery | Passed; ₹40,000 agreed, ₹15,000 received, ₹25,000 remaining; stored delivery and financial records unchanged by editing/navigation |
+| Two-tab Support conflict → reload | Passed; stale Resolve kept typed draft; warning stated replacement; Reload latest cleared draft to latest saved empty notes, without resolving |
+| Desktop 1280px / phone 390px | Passed; warning and both choices readable; phone Keep/Discard worked; no horizontal overflow |
+| Browser page errors | None |
+
+Evidence: isolated fresh Playwright browser, synthetic records only; `/tmp/browser/ai9c/check_project.py`, `results.log`, `keep-desktop.png`, `mobile-prompt.png`, `support-warning.png`. Regression tests retained in `src/test/project-draft.ai9c.test.tsx`. No genuine Owner records, backend, production site or deployment were touched. **AI-9C complete; stopped.**
 
 ## 4. Owner Quotation Package Verification — **Owner Manual Verification Pending**
 The three real packages exist only in the Owner's browser; Lovable has **not** inspected them. Synthetic samples must not overwrite them.
@@ -84,7 +107,7 @@ The three real packages exist only in the Owner's browser; Lovable has **not** i
 | Project Board drag interaction not fully accepted | Untested (select + Undo path tested) |
 | Older task history may show employee IDs | Genuine minor defect (historic entries only; fixed for new ones in F2A) |
 | Support Requests cannot be deleted | Intentional product limit |
-| Project editor has no unsaved-edit warning | Intentional current behaviour |
+| Project Overview unsaved-edit warning | Fixed in AI-9C; other explicit-save Project forms remain outside this checkpoint |
 | Employee financial visibility needs correction before Team CRM | Genuine deferred Team CRM requirement — **not fixed** |
 
 ## 6. Final Owner acceptance checklist
@@ -106,7 +129,7 @@ The three real packages exist only in the Owner's browser; Lovable has **not** i
 
 ## 7. Summary
 - **Completed:** every module in §2.
-- **Verified:** items marked Browser Passed in §3 and §6; 701 automated tests; typecheck; build.
+- **Verified:** items marked Browser Passed in §3 and §6; AI-9C adds draft protection and 706 passing automated tests. Standalone typecheck/full manual build results above belong to AI-9B; AI-9C uses the platform build signal.
 - **Unverified:** Owner's real quotation packages, screen reader, Board drag, employee-preview on newest Owner pages.
 - **Needs the secure backend:** login, sessions, server permissions, central database, proof storage, sync, atomic payments, real restore, real AI.
 - **Unresolved frontend blockers:** none for Owner review. Employee financial visibility blocks Team CRM, not Owner review.
