@@ -49,9 +49,9 @@ export function tidy(draft: string): string {
   return s;
 }
 
-const isDevanagari = (s: string) => /[\u0900-\u097F]/.test(s);
+
 const HINGLISH = /\b(hai|hain|kya|aap|ap|kar|karo|karna|nahi|bhi|ji|haan|kal|abhi|thoda|bata|batao|dijiye|kijiye)\b/i;
-export function detectLang(s: string): Exclude<RewriteLang, "keep"> { return isDevanagari(s) ? "hi" : HINGLISH.test(s) ? "hinglish" : "en"; }
+export function detectLang(s: string): Exclude<RewriteLang, "keep"> { const dev = (s.match(/[\u0900-\u097F]/g) ?? []).length, lat = (s.match(/[A-Za-z]/g) ?? []).length; return dev > lat ? "hi" : HINGLISH.test(s) ? "hinglish" : "en"; }
 
 type Frame = { hi: string; open: string[]; close: string[] };
 const FRAMES: Record<Exclude<RewriteLang, "keep">, Record<RewriteTone, Frame>> = {
