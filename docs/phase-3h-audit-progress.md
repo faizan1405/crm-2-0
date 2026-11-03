@@ -809,3 +809,10 @@ See docs/ai-copilot-architecture.md. Not tested: screen readers, employee previe
 - AI-6B Owner Support AI Assistant complete (Demo Mode, read-only). 652 tests. Targeted WhatsApp sent-history regression passed (count unchanged).
 
 - AI-6C Owner Finance AI Assistant complete (Demo Mode, read-only). Finance figures reconcile with Finance Studio and Project Finance; WhatsApp sent count unchanged.
+
+## AI-7A — Owner My Performance (2026-11-03)
+- Owner dashboard at /my-performance: period selector (today/week Mon–Sun/month/custom, IST), sales-work and results stats, daily charts (calls, follow-ups, leads), 6-month Won trend, targets (or "Target not configured"), Company Finance Snapshot, and an Owner-only activity timeline.
+- Attribution verified: demo seed history and other actors' events are never credited to the Owner; unattributed events are surfaced with an explanation.
+- Browser acceptance (synthetic data): 4 calls/2 connected/50%, 1 follow-up completed, 2 leads created, 1 Won deal at ₹50K, voided ₹20,000 payment excluded from collections, refresh persistence, empty states, N/A on zero denominators, 390px layout without overflow, no page errors, no CRM record mutations.
+- 675 automated tests pass (15 new in ownerPerformance.ai7a.test.ts); typecheck and production build clean.
+- Deferred: AI-7B coaching, screen-reader acceptance, employee preview check for this page.

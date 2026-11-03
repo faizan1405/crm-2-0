@@ -40,7 +40,7 @@ const NAV = [
   { to: "/analytics", label: "Analytics", mobile: "Analytics", icon: BarChart3, section: "Insights" },
   { to: "/daily-briefing", label: "Daily Briefing", mobile: "Briefing", icon: Sunrise, section: "" },
   { to: "/team-activity", label: "Team Activity", mobile: "Activity", icon: Activity, section: "" },
-  { to: "/my-performance", label: "My Performance", mobile: "My goals", icon: Target, section: "" },
+  { to: "/my-performance", label: "My Performance", mobile: "Performance", icon: Target, section: "" },
   { to: "/team-performance", label: "Team Performance", mobile: "Performance", icon: Gauge, section: "" },
   { to: "/team", label: "Team Management", mobile: "Team", icon: ShieldCheck, section: "Admin" },
   { to: "/automation", label: "Automation Studio", mobile: "Automation", icon: Workflow, section: "" },
@@ -88,7 +88,7 @@ const COLLAPSE_KEY = "scale-flow-sidebar-collapsed";
 function SideNav({ path, collapsed, badge, onNavigate }: { path: string; collapsed: boolean; badge: number; onNavigate?: () => void }) {
   const preview = useSession((s) => s.preview);
   return <nav aria-label="Main navigation" className="sb-nav">
-    {GROUPS.map(g => ({ ...g, items: g.items.filter(to => routeAllowed(preview, to) && (to !== "/my-performance" || !!preview)) })).filter(g => g.items.length).map(g => <div key={g.label} className="sb-group">
+    {GROUPS.map(g => ({ ...g, items: g.items.filter(to => routeAllowed(preview, to)) })).filter(g => g.items.length).map(g => <div key={g.label} className="sb-group">
       <div className="sb-group-label" aria-hidden={collapsed}>{g.label}</div>
       {g.items.map(to => { const n = NAV.find(x => x.to === to)!; const active = isActive(path, to);
         return <Link key={to} to={to} onClick={onNavigate} aria-current={active ? "page" : undefined} title={collapsed ? n.label : undefined} aria-label={collapsed ? n.label : undefined} className="sb-link">
@@ -109,7 +109,7 @@ export function Shell({ title, subtitle, actions, children }: { title: string; s
   usePreferenceEffects();
   const { preview, can } = useAccess();
   const navigate = useNavigate();
-  const nav = NAV.filter(n => routeAllowed(preview, n.to) && (n.to !== "/my-performance" || !!preview));
+  const nav = NAV.filter(n => routeAllowed(preview, n.to));
   const owner_ = preview ? preview.name : owner;
   const leave = () => { const id = preview?.employeeId; exitPreview(); void navigate({ to: "/team", search: id ? { employee: id } : {} }); };
   const [mounted, setMounted] = useState(false);
