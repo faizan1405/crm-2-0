@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider, useRouter } from "@tanstack/react-router";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createBrowserHistory, createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider, useRouter } from "@tanstack/react-router";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { ProjectDraftGuard } from "@/components/projects/ProjectDraftGuard";
 
 afterEach(cleanup);
 
-function setup() {
+function setup(browserHistory = false) {
   const record = { name: "Synthetic Project", saves: 0 };
   function Editor() {
     const router = useRouter();
@@ -22,7 +22,8 @@ function setup() {
   const root = createRootRoute({ component: Outlet });
   const editor = createRoute({ getParentRoute: () => root, path: "/projects", component: Editor });
   const away = createRoute({ getParentRoute: () => root, path: "/notes", component: () => <div>Notes page</div> });
-  const history = createMemoryHistory({ initialEntries: ["/notes", "/projects"] });
+  if (browserHistory) { window.history.replaceState(null, "", "/notes"); window.history.pushState(null, "", "/projects"); }
+  const history = browserHistory ? createBrowserHistory() : createMemoryHistory({ initialEntries: ["/notes", "/projects"] });
   const router = createRouter({ routeTree: root.addChildren([editor, away]), history });
   render(<RouterProvider router={router} />);
   return { record, router, history };
@@ -46,7 +47,7 @@ describe("AI-9C Project explicit-save navigation protection", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Discard changes" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/notes"));
     expect(record).toEqual({ name: "Synthetic Project", saves: 0 });
-    await router.navigate({ to: "/projects" });
+    await act(() => router.navigate({ to: "/projects" }));
     expect((await screen.findByLabelText("Project name") as HTMLInputElement).value).toBe("Synthetic Project");
   });
   it("an unchanged or reverted draft leaves immediately", async () => {
@@ -65,12 +66,12 @@ describe("AI-9C Project explicit-save navigation protection", () => {
     fireEvent.click(screen.getByText("Save"));
     fireEvent.click(screen.getByText("Leave"));
     await waitFor(() => expect(router.state.location.pathname).toBe("/notes"));
-    await router.navigate({ to: "/projects" });
+    await act(() => router.navigate({ to: "/projects" }));
     expect((await screen.findByLabelText("Project name") as HTMLInputElement).value).toBe("Saved Project");
     expect(record.saves).toBe(1);
   });
   it("Back can be cancelled without losing the draft, then explicitly discarded", async () => {
-    const { router, history, record } = setup();
+    const { router, history, record } = setup(true);
     fireEvent.change(await screen.findByLabelText("Project name"), { target: { value: "Back draft" } });
     history.back();
     fireEvent.click(await screen.findByRole("button", { name: "Keep editing" }));
@@ -80,5 +81,7 @@ describe("AI-9C Project explicit-save navigation protection", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Discard changes" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/notes"));
     expect(record.saves).toBe(0);
+    cleanup();
+    history.destroy();
   });
 });
