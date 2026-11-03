@@ -1,4 +1,5 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { offerNoteDraft } from "@/lib/ai/noteDraft";
 import { useMemo, useState } from "react";
 import { Copy, FlaskConical, Database, BookOpen, Info, MessageSquareQuote, ListChecks, CheckCircle2, XCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -25,8 +26,9 @@ const CopyBtn = ({ text, label }: { text: string; label: string }) => (
 );
 
 /** Read-only Owner Sales Coach. Buttons only open existing forms; nothing is saved, called or sent. */
-export function SalesCoachPanel({ lead, canFollowUp, onFollowUp }: { lead: LeadContext; canFollowUp: boolean; onFollowUp: () => void }) {
+export function SalesCoachPanel({ lead, canFollowUp, onFollowUp, canNote = true }: { lead: LeadContext; canFollowUp: boolean; onFollowUp: () => void; canNote?: boolean }) {
   const provider = getCoachProvider();
+  const navigate = useNavigate();
   const prep = useMemo(() => provider.run({ kind: "call_prep", lead }) as CallPrep, [provider, lead]);
   const [obj, setObj] = useState<ObjectionId>("price");
   const coaching = provider.run({ kind: "objection", lead, objection: obj }) as ObjectionCoaching;
@@ -110,13 +112,14 @@ export function SalesCoachPanel({ lead, canFollowUp, onFollowUp }: { lead: LeadC
         <h2 id="coach-after-h" className="text-base font-semibold">After Call — What's Next?</h2>
         <label htmlFor="coach-summary" className="sr-only">What happened on the call</label>
         <Textarea id="coach-summary" rows={2} maxLength={600} value={summary} onChange={(e) => { setSummary(e.target.value); setNext(null); }} placeholder="e.g. Liked the idea, wants a quotation for 5 pages" />
-        <div><Button size="sm" variant="outline" onClick={() => setNext(provider.run({ kind: "after_call", lead, summary }) as AfterCallSuggestion)}>Suggest next step</Button></div>
+        <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => setNext(provider.run({ kind: "after_call", lead, summary }) as AfterCallSuggestion)}>Suggest next step</Button>
+          {canNote && <Button size="sm" variant="outline" disabled={!summary.trim()} onClick={() => { offerNoteDraft(lead.leadId, summary.trim()); void navigate({ to: "/leads/$id", params: { id: lead.leadId }, hash: "lead-note" }); }}>Prepare Lead Note</Button>}</div>
         {next && <div className="rounded-xl border p-3" data-testid="after-call" data-kind={next.kind} aria-live="polite">
           <div className="mb-1 flex flex-wrap items-center gap-2"><span className="text-sm font-semibold">{next.label}</span><SrcTag s={next.source} /></div>
           <p className="text-xs text-muted-foreground">Why: {next.why}{next.matched ? ` (matched “${next.matched}”)` : ""}</p>
           <div className="mt-2">{nextAction(next)}</div>
         </div>}
-        <p className="text-[11px] text-muted-foreground">This summary isn't saved. Nothing is logged, called, sent or changed — use Log call or the forms that open to record anything.</p>
+        <p className="text-[11px] text-muted-foreground">This summary isn't saved. Prepare Lead Note only opens it as a draft on the lead page. Nothing is logged, called, sent or changed — use Log call or the forms that open to record anything.</p>
       </section>
     </div>
   );

@@ -97,7 +97,7 @@ function CopilotPage() {
           <button type="button" role="tab" aria-selected={!coach} tabIndex={roving(!coach)} onClick={() => setTab(false)}>Copilot</button>
           <button type="button" role="tab" aria-selected={coach} tabIndex={roving(coach)} onClick={() => setTab(true)}>Sales Coach</button>
         </div>
-        {coach ? (lead ? <SalesCoachPanel key={lead.leadId} lead={lead} canFollowUp={allows(preview, "followups.create")} onFollowUp={() => setFuFor(lead.leadId)} />
+        {coach ? (lead ? <SalesCoachPanel key={lead.leadId} lead={lead} canNote={allows(preview, "leads.edit")} canFollowUp={allows(preview, "followups.create")} onFollowUp={() => setFuFor(lead.leadId)} />
           : <div className="surface p-4"><Empty icon={<Sparkles />} title="Pick a lead to prepare a call" hint={ctx && !ctx.ok ? (ctx.reason === "not_permitted" ? "You don't have access to that lead." : "That lead wasn't found.") : "Choose a lead in Lead context, or use Prepare Call with AI on a lead."} /></div>) : <>
         {lead && <LeadIntelligencePanel key={lead.leadId} lead={lead} phone={src.leads.find((x) => x.id === lead.leadId)?.phone} canFollowUp={allows(preview, "followups.create")} onFollowUp={() => setFuFor(lead.leadId)} />}
         <section className="surface flex min-h-[60dvh] flex-col p-0" aria-label="Conversation">
