@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { AddLeadDialog } from "./AddLeadDialog";
 import { FollowUpDialog } from "./Dialogs";
+import { NAV_GROUPS, GROUPS_KEY, effectiveOpen, parseOpenGroups, toggleGroup, visibleGroups, type GroupId } from "@/lib/crm/navGroups";
 
 const NAV = [
   { to: "/", label: "Dashboard", mobile: "Home", icon: LayoutDashboard, section: "Workspace" },
@@ -76,26 +77,28 @@ export function ScaleMark({ className }: { className?: string }) {
   return <svg viewBox="0 0 32 32" fill="none" aria-hidden="true" className={cn("size-8", className)}><path d="M5 23V14l7-5v9l-7 5Zm10-5V9l7-5v9l-7 5Zm0 10v-7l12-8v7l-12 8Z" fill="currentColor" /></svg>;
 }
 
-const GROUPS = [
-  { label: "Workspace", items: ["/", "/my-performance", "/inbox", "/leads", "/pipeline", "/follow-ups", "/ai-copilot"] },
-  { label: "Business", items: ["/deals", "/projects", "/sales-studio", "/analytics", "/daily-briefing"] },
-  { label: "Personal", items: ["/notes"] },
-  { label: "Owner admin", items: ["/team", "/team-performance", "/team-activity", "/automation", "/crm-config", "/data-vault"] },
-  { label: "System", items: ["/settings"] },
-] as const;
 const COLLAPSE_KEY = "scale-flow-sidebar-collapsed";
 
 function SideNav({ path, collapsed, badge, onNavigate }: { path: string; collapsed: boolean; badge: number; onNavigate?: () => void }) {
   const preview = useSession((s) => s.preview);
+  const [open, setOpen] = useState<GroupId[]>(() => NAV_GROUPS.map(g => g.id));
+  useEffect(() => { setOpen(parseOpenGroups(localStorage.getItem(GROUPS_KEY))); }, []);
+  const toggle = (id: GroupId) => setOpen(o => { const n = toggleGroup(o, id); try { localStorage.setItem(GROUPS_KEY, JSON.stringify(n)); } catch { /* layout preference only */ } return n; });
+  const shown = effectiveOpen(open, path);
   return <nav aria-label="Main navigation" className="sb-nav">
-    {GROUPS.map(g => ({ ...g, items: g.items.filter(to => routeAllowed(preview, to)) })).filter(g => g.items.length).map(g => <div key={g.label} className="sb-group">
-      <div className="sb-group-label" aria-hidden={collapsed}>{g.label}</div>
+    {visibleGroups(to => routeAllowed(preview, to)).map(g => { const expanded = collapsed || shown.includes(g.id); const listId = `sb-grp-${g.id}${onNavigate ? "-m" : ""}`;
+      return <div key={g.id} className="sb-group">
+      <button type="button" className="sb-group-label sb-group-btn" aria-expanded={expanded} aria-controls={listId} onClick={() => toggle(g.id)} tabIndex={collapsed ? -1 : 0} aria-hidden={collapsed || undefined}>
+        <span>{g.label}</span><ChevronRight className={cn("size-3 transition-transform", expanded && "rotate-90")} aria-hidden />
+      </button>
+      <div id={listId} hidden={!expanded}>
       {g.items.map(to => { const n = NAV.find(x => x.to === to)!; const active = isActive(path, to);
         return <Link key={to} to={to} onClick={onNavigate} aria-current={active ? "page" : undefined} title={collapsed ? n.label : undefined} aria-label={collapsed ? n.label : undefined} className="sb-link">
           <n.icon className="sb-icon" /><span className="sb-label">{n.label}</span>
           {to === "/follow-ups" && badge > 0 && <span className="sb-badge num">{badge}</span>}
         </Link>; })}
-    </div>)}
+      </div>
+    </div>; })}
   </nav>;
 }
 
