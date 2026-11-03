@@ -7,7 +7,8 @@ import { useAccess } from "@/lib/crm/session";
 import { formatDateTime } from "@/lib/crm/format";
 import { FOLLOWUP_LABEL, type FollowUp } from "@/lib/crm/types";
 import { CallButton } from "@/components/crm/CallButton";
-import { WhatsAppButton } from "@/components/crm/WhatsAppComposer";
+import { WhatsAppButton, openWhatsApp } from "@/components/crm/WhatsAppComposer";
+import { allows, useSession } from "@/lib/crm/session";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getSmartFollowUpProvider, GROUP_LABEL, GROUP_ORDER, NEXT_LABEL, type SmartGroup, type SmartRec } from "@/lib/ai/smartFollowups";
@@ -65,6 +66,7 @@ export function SmartFollowUps({ onSchedule, onReschedule }: { onSchedule: (lead
                     {r.followUp && can("followups.create") && <Button size="sm" variant="outline" className="rounded-full" onClick={() => { const f = src.followUps.find((x) => x.id === r.followUp!.id); if (f) onReschedule(f); }}><CalendarSync className="size-3.5" />Reschedule</Button>}
                     {!r.followUp && can("followups.create") && <Button size="sm" variant="outline" className="rounded-full" onClick={() => onSchedule(r.leadId)}><CalendarPlus className="size-3.5" />Schedule follow-up</Button>}
                     <WhatsAppButton leadId={r.leadId} name={r.name} source="Smart Follow-ups" label />
+                    {allows(useSession.getState().preview, "clients.whatsapp") && <Button size="sm" variant="outline" className="rounded-full" aria-label={`AI Draft Message for ${r.name}`} onClick={() => openWhatsApp(r.leadId, "Smart Follow-ups", { purpose: "followup", aiDraft: true })}><Sparkles className="size-3.5" />AI Draft Message</Button>}
                     <Button size="sm" variant="ghost" className="rounded-full" asChild><Link to="/ai-copilot" search={{ lead: r.leadId }}><Sparkles className="size-3.5" />Lead Intelligence</Link></Button>
                     <Button size="sm" variant="ghost" className="rounded-full" asChild><Link to="/leads/$id" params={{ id: r.leadId }}><ArrowUpRight className="size-3.5" />Open lead</Link></Button>
                   </div>

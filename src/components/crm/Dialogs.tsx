@@ -80,7 +80,7 @@ function FollowUpForm({ open, onOpenChange, leadId, initial, rescheduleId }: { o
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent dirty={dirty}>
-        <DialogHeader><DialogTitle>{rescheduleId ? "Reschedule follow-up" : "Schedule follow-up"}</DialogTitle>{initial?.at && <DialogDescription>Suggested time — review and change before saving. Times are India time (IST).</DialogDescription>}</DialogHeader>
+        <DialogHeader><DialogTitle>{rescheduleId ? "Reschedule follow-up" : "Schedule follow-up"}</DialogTitle>{leadId && <p className="text-sm" data-testid="fu-for" data-lead={leadId}>For <span className="font-semibold">{leads.find((l) => l.id === leadId)?.name ?? "Unknown lead"}</span></p>}{initial?.at && <DialogDescription>Suggested time — review and change before saving. Times are India time (IST).</DialogDescription>}</DialogHeader>
         <div className="grid gap-3">
           {!leadId && (
             <div className="grid gap-1.5"><Label htmlFor="fu-lead">Lead</Label>
