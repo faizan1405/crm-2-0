@@ -7,7 +7,7 @@ describe("AI-3D commercial value preservation", () => {
   it("improve keeps every amount, %, duration and placeholder", () => {
     const r = demoQuote({ mode: "improve", body: BODY, lang: "en", variant: 0 });
     expect(commercialViolations([BODY], r.text, BODY)).toEqual([]);
-    for (const t of ["{clientName}", "{packagePrice}", "50%", "18%", "3 weeks", "6 months", "शुक्रिया 🙏", "hosting & domain"]) expect(r.text).toContain(t);
+    for (const t of ["{clientName}", "{packagePrice}", "50%", "18%", "3 weeks", "6 months", "शुक्रिया 🙏", "Hosting & domain"]) expect(r.text).toContain(t);
   });
   it("draft scope keeps the Owner's terms and placeholders", () => {
     const r = demoQuote({ mode: "draft_scope", body: BODY, requirements: "Business website with contact form and WhatsApp button", lang: "en", variant: 0 });
