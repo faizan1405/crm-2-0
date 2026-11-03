@@ -7,7 +7,7 @@ export const AI_MODULES: AIModuleInfo[] = [
   { id: "lead_intelligence", label: "Lead intelligence", needsLead: true, available: true },
   { id: "next_best_action", label: "Next best action", needsLead: true, available: true },
   { id: "call_preparation", label: "Call preparation", needsLead: true, available: true },
-  { id: "objection_handling", label: "Objection handling", needsLead: false, available: false },
+  { id: "objection_handling", label: "Objection handling", needsLead: false, available: true },
   { id: "whatsapp_drafting", label: "WhatsApp drafting", needsLead: true, available: false },
   { id: "followup_recommendations", label: "Follow-up advice", needsLead: true, available: false },
   { id: "performance_insights", label: "Performance insights", needsLead: false, available: false },

@@ -8,6 +8,8 @@ import { useAccess, allows } from "@/lib/crm/session";
 import { openWhatsApp } from "@/components/crm/WhatsAppComposer";
 import { openCallLog } from "@/components/crm/PostCallDialog";
 import { FollowUpDialog } from "@/components/crm/Dialogs";
+import { SalesCoachPanel } from "@/components/ai/SalesCoachPanel";
+import { onRovingKeyDown, roving } from "@/lib/a11y/tabKeys";
 import { LeadIntelligencePanel } from "@/components/ai/LeadIntelligencePanel";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,10 +20,10 @@ import { getProvider, SUGGESTED_QUESTIONS, AI_MODULES } from "@/lib/ai/demoProvi
 import { useCopilot, selectLead, clearConversation } from "@/lib/ai/copilotStore";
 import type { AIError, AIModuleId, SuggestedAction } from "@/lib/ai/types";
 
-type CopilotSearch = { lead?: string };
+type CopilotSearch = { lead?: string; tab?: "coach" };
 
 export const Route = createFileRoute("/ai-copilot")({
-  validateSearch: (s: Record<string, unknown>): CopilotSearch => (typeof s["lead"] === "string" ? { lead: s["lead"] } : {}),
+  validateSearch: (s: Record<string, unknown>): CopilotSearch => ({ ...(typeof s["lead"] === "string" ? { lead: s["lead"] } : {}), ...(s["tab"] === "coach" ? { tab: "coach" as const } : {}) }),
   head: () => ({
     meta: [
       { title: "AI Sales Copilot · Scale Flow Sales OS" },
@@ -36,7 +38,8 @@ export const Route = createFileRoute("/ai-copilot")({
 });
 
 function CopilotPage() {
-  const { lead: leadParam } = Route.useSearch();
+  const { lead: leadParam, tab } = Route.useSearch();
+  const coach = tab === "coach";
   const navigate = useNavigate();
   const { preview } = useAccess();
   const src = useCRM(useShallow((s) => ({ leads: s.leads, activities: s.activities, followUps: s.followUps, deals: s.deals, payments: s.payments, assignments: s.assignments })));
@@ -52,7 +55,8 @@ function CopilotPage() {
 
   const ctx = useMemo(() => (leadId ? buildLeadContext(src, leadId, preview) : null), [src, leadId, preview]);
   const lead = ctx?.ok ? ctx.lead : undefined;
-  const setLead = (id: string | null) => void navigate({ to: "/ai-copilot", search: id ? { lead: id } : {}, replace: true });
+  const setLead = (id: string | null) => void navigate({ to: "/ai-copilot", search: { ...(id ? { lead: id } : {}), ...(coach ? { tab: "coach" as const } : {}) }, replace: true });
+  const setTab = (c: boolean) => void navigate({ to: "/ai-copilot", search: { ...(leadId ? { lead: leadId } : {}), ...(c ? { tab: "coach" as const } : {}) }, replace: true });
 
   const ask = async (question: string, module: AIModuleId | "general" = "general") => {
     const text = question.trim();
@@ -89,6 +93,12 @@ function CopilotPage() {
       </div>
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="grid min-w-0 content-start gap-5">
+        <div role="tablist" aria-label="Copilot view" className="seg w-fit" onKeyDown={onRovingKeyDown}>
+          <button type="button" role="tab" aria-selected={!coach} tabIndex={roving(!coach)} onClick={() => setTab(false)}>Copilot</button>
+          <button type="button" role="tab" aria-selected={coach} tabIndex={roving(coach)} onClick={() => setTab(true)}>Sales Coach</button>
+        </div>
+        {coach ? (lead ? <SalesCoachPanel key={lead.leadId} lead={lead} canFollowUp={allows(preview, "followups.create")} onFollowUp={() => setFuFor(lead.leadId)} />
+          : <div className="surface p-4"><Empty icon={<Sparkles />} title="Pick a lead to prepare a call" hint={ctx && !ctx.ok ? (ctx.reason === "not_permitted" ? "You don't have access to that lead." : "That lead wasn't found.") : "Choose a lead in Lead context, or use Prepare Call with AI on a lead."} /></div>) : <>
         {lead && <LeadIntelligencePanel key={lead.leadId} lead={lead} phone={src.leads.find((x) => x.id === lead.leadId)?.phone} canFollowUp={allows(preview, "followups.create")} onFollowUp={() => setFuFor(lead.leadId)} />}
         <section className="surface flex min-h-[60dvh] flex-col p-0" aria-label="Conversation">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
@@ -124,6 +134,7 @@ function CopilotPage() {
             <p className="mt-2 text-[11px] text-muted-foreground">AI-generated content can be wrong. Check details before acting — suggestions never change your CRM until you choose to.</p>
           </form>
         </section>
+        </>}
         </div>
         <aside className="grid content-start gap-4">
           <div className="surface p-4">

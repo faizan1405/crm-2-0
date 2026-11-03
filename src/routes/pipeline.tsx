@@ -223,6 +223,7 @@ function PipeInspector({ lead: l, canMove, onClose, onStage, onFollowUp }: { lea
         {can("clients.calls") && <Button variant="outline" size="sm" className="rounded-full" onClick={() => openCallLog(l.id, "Pipeline")}><PhoneCall className="size-3.5" />Log call</Button>}
         <WhatsAppButton leadId={l.id} name={l.name} source="Pipeline" label />
         <Button variant="outline" size="sm" className="rounded-full" asChild><Link to="/ai-copilot" search={{ lead: l.id }}><Sparkles className="size-3.5" />Ask AI</Link></Button>
+        <Button variant="outline" size="sm" className="rounded-full" asChild><Link to="/ai-copilot" search={{ lead: l.id, tab: "coach" }}><Sparkles className="size-3.5" />Prepare Call with AI</Link></Button>
         {can("followups.create") && <Button variant="outline" size="sm" className="rounded-full" onClick={onFollowUp}><CalendarPlus className="size-3.5" />Follow-up</Button>}
         <Button variant="outline" size="sm" className="rounded-full" onClick={() => setNoting((v) => !v)} aria-expanded={noting}><NotebookPen className="size-3.5" />Note</Button>
       </div>

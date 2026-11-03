@@ -48,6 +48,7 @@ export function buildLeadContext(src: ContextSource, leadId: string, preview: Pr
       ...(interaction ? { lastInteraction: { at: interaction.at, type: interaction.type, text: scrubSecrets(interaction.text + (interaction.outcome ? ` · ${interaction.outcome}` : "")).slice(0, 160) } } : {}),
       ...(nextDue ? { nextFollowUpDue: nextDue } : {}),
       ...(own[0] ? { lastActivityAt: own[0].at } : {}),
+      ...(calls.length ? { callOutcomes: calls.slice(0, 5).map((c) => c.outcome ?? "Outcome not recorded") } : {}),
       ...(l.lostReason ? { lostReason: scrubSecrets(l.lostReason) } : {}),
     },
     ...(l.company ? { company: l.company } : {}),
