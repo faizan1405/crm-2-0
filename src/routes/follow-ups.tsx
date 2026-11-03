@@ -1,5 +1,6 @@
 import { followUpBucket, isPending, activeFollowUp } from "@/lib/crm/followups";
 import { runFollowUp, runVoid } from "@/components/crm/conflictFeedback";
+import { SmartFollowUps } from "@/components/ai/SmartFollowUps";
 import { RemindersPanel } from "@/components/automation/RemindersPanel";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -44,6 +45,7 @@ function FollowUps() {
   const { followUps, leads, deals, activities, completeFollowUp, rescheduleFollowUp } = useCRM();
   const [tab, setTab] = useState<Tab>("today");
   const [add, setAdd] = useState(false);
+  const [addFor, setAddFor] = useState<string | null>(null);
   const { can } = useAccess();
   const [resched, setResched] = useState<FollowUp | null>(null);
   const [inspect, setInspect] = useState<string | null>(null);
@@ -60,6 +62,7 @@ function FollowUps() {
   return (
     <Shell title="Follow-ups" subtitle={`${counts.overdue + counts.today} need attention today · India time (IST)`} actions={can("followups.create") ? <Button onClick={() => setAdd(true)}><Plus className="size-4" />Schedule</Button> : undefined}>
       <RemindersPanel />
+      <SmartFollowUps onSchedule={setAddFor} onReschedule={setResched} />
       <div className="fu-overview mb-6">
         {([["Pending", counts.overdue + counts.today + counts.upcoming, ListTodo, "upcoming"], ["Overdue", counts.overdue, AlertCircle, "overdue"], ["Left today", counts.today, Clock, "today"], ["Hot clients", hot, Flame, "today"]] as const).map(([label, n, Icon, t]) => (
           <button type="button" key={label} onClick={() => setTab(t)} className="fu-metric" data-tone={label === "Overdue" && n ? "danger" : label === "Hot clients" && n ? "hot" : undefined}><Icon className="size-4" /><span className="num text-2xl font-semibold">{n}</span><span className="text-xs text-muted-foreground">{label}</span></button>
@@ -104,6 +107,7 @@ function FollowUps() {
       </div>
 
       <FollowUpDialog open={add} onOpenChange={setAdd} />
+      {addFor && <FollowUpDialog open onOpenChange={(o) => !o && setAddFor(null)} leadId={addFor} />}
       {resched && <FollowUpDialog open onOpenChange={(o) => !o && setResched(null)} leadId={resched.leadId} rescheduleId={resched.id} initial={{ type: resched.type, at: new Date(new Date(resched.dueAt).getTime() + 330 * 60_000).toISOString().slice(0, 16), ...(resched.note ? { note: resched.note } : {}) }} />}
       <Inspector lead={inspect ? lead(inspect) : undefined} onClose={() => setInspect(null)} followUps={followUps} deals={deals} activities={activities} onReschedule={setResched} />
     </Shell>
