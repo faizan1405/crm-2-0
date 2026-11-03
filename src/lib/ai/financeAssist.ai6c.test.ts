@@ -3,8 +3,8 @@ import { buildDealContext, collectionPriorities, demoReminder, explainFinances, 
 import type { Deal, Payment } from "@/lib/crm/types";
 
 const now = new Date("2026-11-03T10:00:00Z");
-const D = (id: string, amt: number, o: Partial<Deal> = {}): Deal => ({ id, clientType: "other", clientName: `${id.toUpperCase()} Client`, name: `Deal ${id}`, quotedAmount: amt, finalAmount: amt, status: "active", milestones: [], createdAt: "2026-11-01T05:00:00Z", wonAt: "2026-11-01T05:00:00Z", ...o });
-const P = (id: string, dealId: string, amount: number, o: Partial<Payment> = {}): Payment => ({ id, dealId, amount, date: "2026-11-02", method: "UPI", type: "advance", reference: id, ...o });
+const D = (id: string, amt: number, o: { [K in keyof Deal]?: Deal[K] | undefined } = {}): Deal => ({ id, clientType: "other", clientName: `${id.toUpperCase()} Client`, name: `Deal ${id}`, quotedAmount: amt, finalAmount: amt, status: "active", milestones: [], createdAt: "2026-11-01T05:00:00Z", wonAt: "2026-11-01T05:00:00Z", ...o } as Deal);
+const P = (id: string, dealId: string, amount: number, o: Partial<Payment> = {}): Payment => ({ id, dealId, amount, date: "2026-11-02", method: "UPI", type: "advance", reference: id, ...o } as Deal);
 const deals = [D("a", 40000), D("b", 30000), D("c", 25000, { wonAt: undefined })];
 const pays = [P("p1", "a", 4000), P("p2", "a", 16000, { date: "2026-11-03" }), P("p3", "a", 5000, { voided: true }), P("p4", "b", 30000)];
 const r = (id: string, purpose: Parameters<typeof demoReminder>[0]["purpose"]) => demoReminder({ ctx: buildDealContext(deals.find((d) => d.id === id)!, pays, now), purpose, tone: "professional", lang: "en", variant: 0, priorReminder: false });
