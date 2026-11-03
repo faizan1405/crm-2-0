@@ -115,20 +115,9 @@ export function wonTrend(events: ActivityEvent[], deals: Deal[], months = 6, now
   const idx = indexEvents(events, false);
   const wonLeadIds = new Set<string>();
   for (const evs of idx.byDay.values()) for (const e of evs) if (isOwnerEvent(e) && e.eventType === "deal.won" && e.relatedLeadId) wonLeadIds.add(e.relatedLeadId);
-  const startMonth = dayKey(now).slice(0, 8) + "01";
   const out: WonMonth[] = [];
-  let cursor = startMonth;
-  for (let i = months - 1; i >= 0; i--) {
-    const m = shiftDay(startMonth, 0).slice(0, 7);
-    void i;
-    out.push({ month: m, count: 0, value: 0 });
-    cursor = shiftDay(cursor, -1);
-    cursor = cursor.slice(0, 8) + "01";
-    if (out.length < months) { /* walk backwards below */ }
-  }
-  // Simpler deterministic walk: rebuild the month list backwards from this month.
-  out.length = 0;
-  let d = startMonth;
+  // Walk backwards from this month, first of each month.
+  let d = dayKey(now).slice(0, 8) + "01";
   const keys: string[] = [];
   for (let i = 0; i < months; i++) { keys.unshift(d.slice(0, 7)); d = shiftDay(d, -1).slice(0, 8) + "01"; }
   for (const k of keys) out.push({ month: k, count: 0, value: 0 });
