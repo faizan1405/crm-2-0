@@ -36,7 +36,7 @@ export function LeadIntelligencePanel({ lead, phone, canFollowUp, onFollowUp }: 
         <div>
           <div className="eyebrow mb-1.5">Why this attention level <span className="normal-case">(suggestion)</span></div>
           <ul className="grid gap-1 text-xs">{a.attentionWhy.map((w) => <li key={w}>{w}</li>)}</ul>
-          {a.signals.length > 0 && <ul className="mt-2 grid gap-1 text-xs" data-testid="signals">{a.signals.map((s) => <li key={s.id} className="flex items-start gap-1.5">{s.tone === "risk" ? <AlertTriangle className="mt-0.5 size-3 shrink-0 text-destructive" /> : s.tone === "positive" ? <CheckCircle2 className="mt-0.5 size-3 shrink-0" /> : <Info className="mt-0.5 size-3 shrink-0" />}{s.text}</li>)}</ul>}
+          {a.signals.some((s) => !a.attentionWhy.includes(s.text)) && <ul className="mt-2 grid gap-1 text-xs" data-testid="signals">{a.signals.filter((s) => !a.attentionWhy.includes(s.text)).map((s) => <li key={s.id} className="flex items-start gap-1.5">{s.tone === "risk" ? <AlertTriangle className="mt-0.5 size-3 shrink-0 text-destructive" /> : s.tone === "positive" ? <CheckCircle2 className="mt-0.5 size-3 shrink-0" /> : <Info className="mt-0.5 size-3 shrink-0" />}{s.text}</li>)}</ul>}
         </div>
         <div>
           <div className="eyebrow mb-1.5">Buying-intent signals</div>
