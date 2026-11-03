@@ -19,3 +19,4 @@
 - Shared CRM presentation belongs in Shell and semantic global CSS; page components preserve store actions and pure calculations so visual redesigns cannot change business behavior.
 - The pipeline uses native drag-and-drop with named stage targets plus per-card stage selects for touch; clicking a card opens an inspector selected via the `?lead=` search param (docked at ≥1280px, portaled overlay/bottom sheet below); stage age and stall flags come only from recorded stage-change activity via pure `pipeline.ts` — no invented ages.
 - Subdirectories have their own `AGENTS.md` (e.g. `src/lib/crm/`); read it before changing files there.
+- AI Sales Copilot (`src/lib/ai/`): screens use only `types.ts` contracts and `getProvider()`; context comes from pure permission-aware `buildLeadContext`; conversation is in-memory only and AI never writes CRM data — the Demo provider can be swapped for a server-side endpoint without UI changes.

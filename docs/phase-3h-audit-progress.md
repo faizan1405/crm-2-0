@@ -731,3 +731,15 @@ Tests: 518 (5 new), typecheck clean, production build OK.
 - Browser (two tabs, same storage, synthetic project `prj_ztyvbbf` "F2C Conflict Test (synthetic)", request "F2C two-tab request"): Tab B typed notes; Tab A started + reassigned (v3); Tab B Resolve → alert shown, draft kept, saved record still in_progress v3 — Passed. "Apply my change" → resolved v4 with Tab B notes, one request, one history line per real change — Passed. Reopen from Tab A; Tab B updated live. Deals 4 / payments 4 unchanged. "Reload latest" button covered by code path only, not clicked in browser.
 - Automated: 519 tests (1 new F2C store test), typecheck clean.
 - Limit: browser-local version check only; not an atomic cross-device transaction (needs the future backend).
+
+## AI-1 — Sales Copilot foundation (Demo Mode)
+Architecture: `docs/ai-copilot-architecture.md`. 6 new tests (`src/lib/ai/copilot.ai1.test.ts`); 525 total pass.
+Browser (isolated test browser, demo data only, Owner data untouched):
+1–3. `/ai-copilot` general question → answer labelled "Demo Mode · simulated example, not a live AI model" — Passed.
+4–5. Pipeline inspector "Mira Shah" → Ask AI → `/ai-copilot?lead=lead_12`, indicator "Analysing Mira Shah", answer uses that lead — Passed.
+6–7. Switched to "Rohan Kapoor" → indicator updated, previous answers cleared (0 left) — Passed.
+Error state: "simulate error" → alert + Try again — Passed.
+8–9. Synthetic employee `emp_ai1test` (salesperson, assigned-only, finance none, assigned `lead_1`): own lead loaded with "Amounts: Hidden" and amounts/proofs/personal notes/other leads/login details listed as excluded; `lead_2` → "You don't have access to that lead."; lead picker showed only their lead — Passed.
+No mutation: leads/deals/payments/activities 12/4/4/12 before and after — Passed. No external requests except fonts.
+10. 1280px and 390px: no sideways scroll — Passed.
+Not done: real OpenRouter (deliberately), screen reader.
