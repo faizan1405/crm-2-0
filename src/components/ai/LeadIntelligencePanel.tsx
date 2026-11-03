@@ -9,7 +9,7 @@ import type { LeadContext } from "@/lib/ai/types";
 import { cn } from "@/lib/utils";
 
 /** Read-only Demo Analysis. Actions only open existing CRM forms; nothing is saved here. */
-export function LeadIntelligencePanel({ lead, phone, canFollowUp, onFollowUp }: { lead: LeadContext; phone?: string; canFollowUp: boolean; onFollowUp: () => void }) {
+export function LeadIntelligencePanel({ lead, phone, canFollowUp, onFollowUp }: { lead: LeadContext; phone?: string | undefined; canFollowUp: boolean; onFollowUp: () => void }) {
   const a = useMemo(() => analyzeLead(lead), [lead]);
   const act = (n: NextAction, primary: boolean) => {
     const v = primary ? "default" : "outline";
