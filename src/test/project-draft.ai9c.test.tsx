@@ -22,7 +22,7 @@ function setup(browserHistory = false) {
   const root = createRootRoute({ component: Outlet });
   const editor = createRoute({ getParentRoute: () => root, path: "/projects", component: Editor });
   const away = createRoute({ getParentRoute: () => root, path: "/notes", component: () => <div>Notes page</div> });
-  if (browserHistory) { window.history.replaceState(null, "", "/notes"); window.history.pushState(null, "", "/projects"); }
+  if (browserHistory) { window.history.replaceState({ __TSR_index: 0, __TSR_key: "notes" }, "", "/notes"); window.history.pushState({ __TSR_index: 1, __TSR_key: "project" }, "", "/projects"); }
   const history = browserHistory ? createBrowserHistory() : createMemoryHistory({ initialEntries: ["/notes", "/projects"] });
   const router = createRouter({ routeTree: root.addChildren([editor, away]), history });
   render(<RouterProvider router={router} />);
@@ -36,6 +36,8 @@ describe("AI-9C Project explicit-save navigation protection", () => {
     const exact = (screen.getByLabelText("Project name") as HTMLInputElement).value;
     fireEvent.click(screen.getByText("Leave"));
     fireEvent.click(await screen.findByRole("button", { name: "Keep editing" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await new Promise((resolve) => setTimeout(resolve, 50));
     expect(router.state.location.pathname).toBe("/projects");
     expect((screen.getByLabelText("Project name") as HTMLInputElement).value).toBe(exact);
     expect(record).toEqual({ name: "Synthetic Project", saves: 0 });
