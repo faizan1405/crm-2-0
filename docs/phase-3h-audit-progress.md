@@ -805,3 +805,5 @@ Browser (separate test browser, clock fixed at 23:30 IST on 3 Nov 2026; syntheti
 
 ### AI-6A Owner Project AI Assistant — done (demo only)
 See docs/ai-copilot-architecture.md. Not tested: screen readers, employee preview (the button is Owner-only).
+
+- AI-6B Owner Support AI Assistant complete (Demo Mode, read-only). 652 tests. Targeted WhatsApp sent-history regression passed (count unchanged).

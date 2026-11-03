@@ -110,7 +110,7 @@ export function troubleshoot(c: SupportAIContext): TroubleshootResult {
   if (isDone(c)) notices.unshift(`This request is ${c.statusText.toLowerCase()} — reopen it first if the problem is back.`);
   if (kind === "unknown") return {
     kind, label: ISSUE_LABEL.unknown, steps: [], staticExample: false,
-    questions: ["What exactly is not working, and on which page?", "What does the client see (error message, screenshot)?", "When did it start, and did anything change around then?", "Does it happen on every device and browser?"],
+    questions: ["What exactly is not working, and on which page?", "Could you share a screenshot or the exact error message?", "When did it start, and did anything change around then?", "Does it happen on every device and browser?"],
     notices: ["Demo Mode recognises only a few common website issues and does not understand this one. Ask the client these questions instead of guessing.", ...notices],
   };
   return { kind, label: ISSUE_LABEL[kind], ...STEPS[kind], staticExample: true, notices: [`Recognised as “${ISSUE_LABEL[kind]}” from the request wording. Steps are a static checklist for this kind of issue, not a diagnosis.`, ...notices] };
