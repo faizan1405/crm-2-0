@@ -72,6 +72,7 @@ describe("AI-6A violation guard", () => {
   const c = ctxOf(base(), four);
   it.each([
     ["Hi Asha, your website is complete.", "complete"],
+    ["Hi Asha, 2 of 4 tasks complete. Your website is complete.", "complete after honest line"],
     ["Hi Asha, all tasks are completed.", "all tasks"],
     ["Hi Asha, payment received, thanks.", "payment"],
     ["Hi Asha, delivery is tomorrow.", "tomorrow"],
@@ -107,7 +108,7 @@ describe("AI-6A requirements and task suggestions", () => {
     const s = suggestTasks(c).suggestions;
     expect(s.find((x) => x.title === "Gallery page")?.duplicateOf).toBe("Gallery page");
     expect(s.find((x) => x.title === "Payment gateway integration")?.duplicateOf).toBeUndefined();
-    expect(findDuplicate("SEO setup for site", four)).toBe("SEO setup");
+    expect(findDuplicate("SEO setup", four)).toBe("SEO setup");
     expect(findDuplicate("5 page website with contact form", four)).toBeUndefined();
   });
   it("generation never mutates the input project or tasks", () => {

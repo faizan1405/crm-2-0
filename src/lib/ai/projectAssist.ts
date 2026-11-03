@@ -139,7 +139,7 @@ export function matchTask(title: string, existing: { title: string }[]): { dup?:
     const b = words(t.title);
     if (!a.size || !b.size) { if (t.title.trim().toLowerCase() === title.trim().toLowerCase()) return { dup: t.title }; continue; }
     let inter = 0; for (const w of a) if (b.has(w)) inter++;
-    if (inter / Math.max(a.size, b.size) >= 0.5 && inter / Math.min(a.size, b.size) >= 0.99) return { dup: t.title };
+    if (inter / Math.max(a.size, b.size) >= 0.75) return { dup: t.title };
     if (!similar && inter / Math.min(a.size, b.size) >= 0.6) similar = t.title;
   }
   return similar ? { similar } : {};
@@ -299,12 +299,13 @@ export function updateViolations(c: ProjectAIContext, original: string, text: st
   const t = text.toLowerCase();
   const s = taskStats(c);
   const allDone = s.total > 0 && s.open === 0;
-  if (!isDelivered(c) && /\b(is|are|has been|have been|was|got)\s+(now\s+)?(complete|completed|finished|live|launched|delivered)\b|\bwent live\b|डिलीवर (हो गया|कर दिया)|\b(ho gaya|deliver ho)\b/i.test(text) && !/\btasks?\b[^.]*\b(complete|completed)\b/i.test(text)) out.push("Says the project is complete, live or delivered — that isn't recorded.");
+  const sentences = text.split(/(?<=[.!?।])\s+|\n+/);
+  if (!isDelivered(c) && sentences.some((x) => /\b(is|are|has been|have been|was|got)\s+(now\s+)?(complete|completed|finished|live|launched|delivered)\b|\bwent live\b|डिलीवर (हो गया|कर दिया)|\b(ho gaya|deliver ho)\b/i.test(x) && !/\btasks?\b|काम/i.test(x))) out.push("Says the project is complete, live or delivered — that isn't recorded.");
   if (!allDone && /\ball (the )?(recorded )?tasks( and checks)?( for [^.]*)? (are|is|have been) (now )?(complete|completed|done|finished)\b|सभी (दर्ज )?काम[^।]*पूरी? हो/i.test(text)) out.push("Says all tasks are complete — some are still open.");
   if (/\bpayment[s]?\b[^.]*\b(received|cleared|credited)\b|\breceived your payment\b|\bpaid in full\b|भुगतान (मिल|प्राप्त)/i.test(text)) out.push("Mentions a received payment — payments aren't part of this assistant's facts.");
   if (/\bdiscount\b|\bfree of cost\b|\bcomplimentary\b|\bextra (feature|page)s? (at no|for free)\b|छूट/i.test(text) && !/discount|complimentary|free of cost|छूट/i.test(original)) out.push("Offers a discount or free extra — not approved in the records.");
   if (/\b(tomorrow|tonight|today|next week|this week|by monday|by friday)\b|\b(kal|aaj)\b|(^|\s)(कल|आज)(\s|$)/i.test(text) && !/\b(tomorrow|tonight|today|next week|this week|kal|aaj)\b|कल|आज/i.test(original)) out.push("Uses a relative deadline (e.g. “tomorrow”) that isn't an agreed date.");
-  const allowed = new Set([...contextUsed(c).join(" ").matchAll(/\d+/g)].map((m) => m[0]).concat([...original.matchAll(/\d+/g)].map((m) => m[0])));
+  const allowed = new Set([String(s.open), ...[...contextUsed(c).join(" ").matchAll(/\d+/g)].map((m) => m[0])].concat([...original.matchAll(/\d+/g)].map((m) => m[0])));
   for (const tk of [...c.tasks.map((x) => x.title), ...c.waitingOnClient, ...c.milestones.map((m) => m.title), c.name, c.delivery?.url ?? "", ...c.milestones.map((m) => (m.dueDate ? dayLabel(m.dueDate) : ""))].join(" ").matchAll(/\d+/g)) allowed.add(tk[0]);
   const extra = [...text.matchAll(/\d+/g)].map((m) => m[0]).filter((n) => !allowed.has(n));
   if (extra.length) out.push(`Adds numbers or dates not in the records: ${[...new Set(extra)].slice(0, 5).join(", ")}.`);
