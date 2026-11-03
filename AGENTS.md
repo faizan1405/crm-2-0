@@ -21,3 +21,4 @@
 - Subdirectories have their own `AGENTS.md` (e.g. `src/lib/crm/`); read it before changing files there.
 - AI Sales Copilot (`src/lib/ai/`): screens use only `types.ts` contracts and `getProvider()`; context comes from pure permission-aware `buildLeadContext`; conversation is in-memory only and AI never writes CRM data — the Demo provider can be swapped for a server-side endpoint without UI changes.
 - Project AI Assist (`src/lib/ai/projectAssist.ts`) reads a minimised per-project context and only hands drafts to existing forms/composer (task drafts via in-memory `projectTaskDraft.ts`); it never writes project, task, deal or payment records.
+- Explicit-save Project overview fields use a saved draft baseline and ProjectDraftGuard (TanStack resolver plus beforeunload); autosaved controls remain outside this guard so unrelated updates cannot clear or trigger draft protection.
