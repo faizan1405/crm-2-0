@@ -792,3 +792,13 @@ Browser (separate test browser, clock fixed at 23:30 IST on 3 Nov 2026; syntheti
 - Keep original unchanged draft; Try again changed wording; edit adding ₹9,999 and 15/11 blocked; Use suggestion inserted exact text incl. emoji/&; Undo restored; wa.me URL text exactly equalled final draft; no history entry before confirmation; no CRM mutations overall.
 - Switching Neha → Usha: unsaved guard appeared; no Neha text in Usha's composer. Lead page entry targets correct lead. 390px: no horizontal overflow. No external requests.
 - Not tested: employee preview; screen readers; a URL added inside the suggestion is blocked (by design — add it in the final message).
+
+## AI-5A browser acceptance (synthetic X5/C5/P5/T5 leads, script /tmp/browser/ai5a/run_ai5a.py)
+- Cancel → no records; .pdf rejected; sample CSV downloaded.
+- CSV 10 rows (quoted commas, "" quotes, ₹): 10 ready; double-click Import created exactly 10. Re-import: 0 ready, all "Already in CRM".
+- XLSX 10 rows: Name/Mobile/Email/Company/Requirement/Budget auto-matched, City left unmapped; mapping changed and restored; 10 created.
+- Pasted CSV: +91 duplicate in batch, 0-prefixed match to existing lead, missing name, invalid phone 12345, negative budget all flagged correctly; row edited (name added) became Ready; row excluded.
+- Simulated storage-full: "Nothing was imported… Created 0 · Failed 2", existing leads unchanged, preview kept; Retry created exactly 2.
+- Pasted tab-separated table (Full Name/WhatsApp/Company, Hindi company) → 2 created.
+- After refresh: all 24 created IDs present, counts identical; 0 follow-ups/deals/payments. Hindi name and "<b>bold</b> & "quoted" — नमस्ते" stored as plain text, not rendered as HTML. 390px: no page overflow. No external requests.
+- Not tested: screen readers; employee preview.

@@ -77,3 +77,13 @@ Planned (not built): AI-3B call prep, coaching, objections · AI-3C writing help
 - Opening WhatsApp and "Log to history" are unchanged; no automatic sends, logs, follow-ups, stage, deal or payment changes.
 - Follow-up form opened for a specific lead now shows "For <lead name>".
 - Tests: `followupWriter.ai4b.test.ts` (8). 595 tests total.
+
+## AI-5A — Owner Bulk Lead Import (CSV / XLSX / pasted tables)
+
+- Third Add Lead method "Bulk AI Import" (`BulkImportPanel.tsx`); Quick AI Entry and Manual Entry unchanged. Labelled as deterministic file reading, not live AI.
+- Pure rules in `src/lib/crm/bulkImport.ts`: RFC-style CSV/TSV/semicolon parser (quotes, embedded commas/newlines, BOM, Unicode), 1 MB / 50-row limits, exact-alias header pre-mapping (unknown columns → "Don't import", shown for review, never saved), budget parsing (₹, commas, k/L/Cr; never inferred from unmapped numbers), validation via existing `validPhone`/`validEmail`/`leadCreateError`, duplicates by Smart Inbox `normalizePhone` (+91 / 0-prefixed / bare).
+- XLSX is read in the browser via `read-excel-file` (dynamic import); legacy .xls, PDF and other types are rejected. Files are never uploaded.
+- Only rows marked Ready can be ticked; duplicates (in-batch or already in CRM) are never merged or overwritten.
+- Store `importLeads` creates each lead through `addLead` inside one outer `atomic` action and re-checks phones against the latest saved leads — a storage failure rolls the whole batch back (this tab) and throws `PersistError`; retry cannot duplicate. This is browser-local all-or-nothing, not a server transaction.
+- Results show processed / created / duplicates / invalid / excluded / failed counts and created IDs. No follow-ups, calls, deals or payments are created. Outside clicks don't close the window while in Bulk mode.
+- Tests: `bulkImport.ai5a.test.ts` (14). 609 tests total.
