@@ -53,13 +53,13 @@ describe("AI-5A validation and duplicates", () => {
   const t = T("Name,Phone,Budget\nA,9123456780,\nB,+91 91234 56780,\n,9000000001,\nD,12345,\nE,9000000002,-5\nF,9876500000,");
   const rows = buildRows(t, ["name", "phone", "budget"]);
   const c = checkRows(rows, [{ id: "lead_x", name: "Existing", phone: "098765 00000" }]);
-  it("flags in-batch duplicate with and without +91", () => { expect(c.r2!.status).toBe("ready"); expect(c.r3!.status).toBe("duplicate_batch"); });
+  it("flags in-batch duplicate with and without +91", () => { expect(c["r2"]!.status).toBe("ready"); expect(c["r3"]!.status).toBe("duplicate_batch"); });
   it("flags missing name, invalid phone and negative budget", () => {
-    expect(c.r4!.problems).toContain("Name is missing");
-    expect(c.r5!.problems).toContain("Phone isn't a valid 10-digit Indian mobile");
-    expect(c.r6!.problems).toContain("Budget can't be negative");
+    expect(c["r4"]!.problems).toContain("Name is missing");
+    expect(c["r5"]!.problems).toContain("Phone isn't a valid 10-digit Indian mobile");
+    expect(c["r6"]!.problems).toContain("Budget can't be negative");
   });
-  it("flags an existing CRM lead by normalized phone", () => { expect(c.r7!.status).toBe("duplicate_crm"); expect(c.r7!.existing!.id).toBe("lead_x"); });
+  it("flags an existing CRM lead by normalized phone", () => { expect(c["r7"]!.status).toBe("duplicate_crm"); expect(c["r7"]!.existing!.id).toBe("lead_x"); });
 });
 
 describe("AI-5A store import", () => {
