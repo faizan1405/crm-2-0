@@ -822,3 +822,27 @@ See docs/ai-copilot-architecture.md. Not tested: screen readers, employee previe
 - Browser acceptance (synthetic Owner data): 8 calls/1 connected flagged as low-connection; qualified-without-next-step and stale-proposal bottlenecks with correct lead links; overdue plan items; employee events (2 connected calls) never credited; empty custom period shows "Insufficient information"; previous-period comparison honestly unavailable; "Target not configured"; refresh consistency; zero record mutations on viewing; 390px layout clean; no page errors. Metrics reconcile with the My Performance stats on the same page.
 - 694 automated tests pass (19 new in perfCoach.ai7b.test.ts: period math, attribution, each bottleneck rule, insufficient-data, lead association, no-mutation); typecheck and production build clean.
 - Deferred: final Owner AI polish, screen-reader acceptance, secure OpenRouter via the future backend.
+
+## AI-8A — Owner AI Workflow Integration acceptance (2026-11-03)
+Real browser acceptance with isolated synthetic records (lead f8A, deals f8D1/f8D2, project f8PR, support request f8S1):
+
+| Workflow | Result |
+| --- | --- |
+| My Performance recommendation → correct Lead | Passed |
+| Lead → Prepare Call with AI (context, discovery questions) | Passed |
+| After Call summary → Prepare Lead Note → unsaved draft notice → explicit save | Passed |
+| Schedule Follow-up (correct lead name, saved record) | Passed |
+| AI Draft Message → WhatsApp composer (correct recipient, draft text, no send) | Passed |
+| Composer open/close adds no history entries | Passed |
+| Quotation message handoff (package draft, no share logged without confirm) | Passed |
+| Project client update → composer (exact approved text) | Passed |
+| Support reply isolation (only the selected request's context) | Passed |
+| Finance reminder handoff (₹25,000 outstanding = ₹40,000 − ₹15,000; exact text in composer) | Passed |
+| Switching deals clears previous draft/amounts | Passed |
+| My Performance ↔ AI Briefing period consistency | Passed |
+| Unicode/smart-quote text intact in composer | Passed |
+| 390px mobile: composer and coach layouts | Passed |
+| Undo/Cancel consistency | Automated-only (covered by module tests) |
+| Screen-reader behaviour | Not Tested (deferred) |
+
+No defects found; no code changes required. 694 automated tests, typecheck and production build remain clean. No records were mutated by viewing or drafting; nothing was sent.
