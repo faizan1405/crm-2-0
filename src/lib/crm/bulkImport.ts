@@ -8,7 +8,7 @@ import { normalizePhone } from "./inbox";
 
 export const MAX_IMPORT_ROWS = 50;
 export const MAX_FILE_BYTES = 1_000_000;
-export const ACCEPTED_EXT = [".csv", ".tsv", ".txt", ".xlsx"];
+export const ACCEPTED_EXT = [".csv", ".tsv", ".txt", ".xlsx"]; // PDFs go through docExtract.pdfFileProblem
 
 export type ImportField = "name" | "phone" | "email" | "company" | "source" | "requirement" | "notes" | "budget" | "priority" | "ignore";
 export const FIELD_LABEL: Record<ImportField, string> = { name: "Name", phone: "Phone", email: "Email", company: "Company", source: "Source", requirement: "Requirement", notes: "Notes", budget: "Budget", priority: "Priority", ignore: "Don't import (keep for review)" };
@@ -85,7 +85,7 @@ export function fileProblem(name: string, size: number): string | undefined {
 }
 
 /** Editable preview row. Values are plain strings exactly as shown to the Owner. */
-export interface PreviewRow { key: string; line: number; name: string; phone: string; email: string; company: string; source: string; requirement: string; notes: string; budget: string; priority: string; extra: Record<string, string>; selected: boolean }
+export interface PreviewRow { key: string; line: number; name: string; phone: string; email: string; company: string; source: string; requirement: string; notes: string; budget: string; priority: string; extra: Record<string, string>; selected: boolean; review?: string[]; reviewNotes?: string[]; sourceText?: string }
 export function buildRows(t: ParsedTable, mapping: ImportField[]): PreviewRow[] {
   return t.rows.map((r, i) => {
     const row: PreviewRow = { key: `r${i + 2}`, line: i + 2, name: "", phone: "", email: "", company: "", source: "", requirement: "", notes: "", budget: "", priority: "", extra: {}, selected: true };
@@ -136,6 +136,7 @@ export function checkRows(rows: PreviewRow[], leads: Pick<Lead, "id" | "name" | 
     if (b !== undefined && Number.isNaN(b)) p.push("Budget isn't a number");
     else if (b !== undefined && b < 0) p.push("Budget can't be negative");
     if (parsePriority(r.priority) === null) p.push("Priority must be Hot, Warm or Cold");
+    if (r.review?.length) p.push(...(r.reviewNotes?.length ? r.reviewNotes : []), `Needs Review: ${r.review.map((f) => FIELD_LABEL[f as ImportField] ?? f).join(", ")}`);
     if (p.length) { out[r.key] = { status: "invalid", problems: p }; continue; }
     // First row with a phone keeps it; later rows with the same normalized phone are batch duplicates (selection doesn't change this).
     if (seen.has(k)) { out[r.key] = { status: "duplicate_batch", problems: [`Same phone as row ${seen.get(k)} in this import`], firstLine: seen.get(k)! }; continue; }
