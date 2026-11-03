@@ -20,6 +20,8 @@ import { useProofIndex } from "@/lib/crm/proofRepo";
 import { Paperclip, CalendarCheck } from "lucide-react";
 import { useSession } from "@/lib/crm/session";
 import { verifiedWonDayError, verifiedWonIso } from "@/lib/crm/analytics";
+import { FinanceAssistPanel } from "@/components/ai/FinanceAssistPanel";
+import { Sparkles } from "lucide-react";
 
 export const Route = createFileRoute("/deals")({
   head: () => ({
@@ -45,12 +47,14 @@ function Deals() {
   const [pay, setPay] = useState<Deal | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "due" | "overdue" | "paid">("all");
+  const [ai, setAi] = useState(false);
+  const isOwner = !useSession((st) => st.preview);
   const list = deals.filter((d) => { const s = dealPaymentStatus(d, payments); return filter === "all" || (filter === "due" ? s === "partial" || s === "unpaid" || s === "overdue" : s === filter); });
 
   const sel = list.find((d) => d.id === openId) ?? list[0];
   const rate = Math.min((fin.collectionRate ?? 0) * 100, 100);
   return (
-    <Shell title="Finance studio" subtitle={`${deals.length} deals across CRM clients and other clients · every figure comes from recorded payments`} actions={<Button onClick={() => setAddDeal(true)} className="rounded-full"><Plus className="size-4" />New deal</Button>}>
+    <Shell title="Finance studio" subtitle={`${deals.length} deals across CRM clients and other clients · every figure comes from recorded payments`} actions={<>{isOwner && <Button variant="outline" className="rounded-full" aria-expanded={ai} onClick={() => setAi(!ai)}><Sparkles className="size-4" />AI Assist</Button>}<Button onClick={() => setAddDeal(true)} className="rounded-full"><Plus className="size-4" />New deal</Button></>}>
       <section className="panel-ink grid gap-8 p-6 sm:p-8 lg:grid-cols-[1.2fr_2fr]">
         <div><div className="eyebrow">Total booked</div><div className="num mt-3 text-[48px] leading-none">{formatINR(fin.totalValue)}</div><div className="mt-2 text-xs opacity-70">Excludes cancelled deals</div></div>
         <div className="grid content-end gap-5">
@@ -58,6 +62,7 @@ function Deals() {
           <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">{([["Received", formatINRCompact(fin.collected), "bg-lime"], ["Outstanding", formatINRCompact(fin.outstanding), "bg-[var(--hero-muted)]"], ["Overdue", formatINRCompact(fin.overdue), "bg-clay"], ["Collection rate", formatPct(fin.collectionRate), ""]] as const).map(([k, v, dot]) => <div key={k}><dt className="eyebrow flex items-center gap-1.5">{dot && <span className={cn("size-2 rounded-full", dot)} />}{k}</dt><dd className="num mt-1 text-2xl">{v}</dd></div>)}</dl>
         </div>
       </section>
+      {isOwner && ai && <FinanceAssistPanel dealId={sel?.id ?? openId} onSelectDeal={(id) => { setFilter("all"); setOpenId(id); }} onClose={() => setAi(false)} />}
       <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(320px,1fr)_1.35fr]">
         <div>
           <div className="mb-3 flex items-center justify-between gap-2"><div className="eyebrow">Ledger</div><div className="seg" role="group" aria-label="Filter deals">{(["all", "due", "overdue", "paid"] as const).map((f) => <button type="button" key={f} aria-pressed={filter === f} onClick={() => setFilter(f)} className="capitalize">{f === "all" ? "All" : f === "due" ? "Due" : f}</button>)}</div></div>
