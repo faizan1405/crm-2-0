@@ -46,12 +46,11 @@ function LeadDetail() {
   const { id } = Route.useParams();
   const { leads, activities, followUps, deals, updateLead, completeFollowUp, addActivity, setQuickStatus, wasteLead, deleteLead } = useCRM();
   const navigate = useNavigate();
-  const { can } = useAccess();
+  const { can, preview } = useAccess();
   const lead = leads.find((l) => l.id === id);
   const [edit, setEdit] = useState(false);
   const [fu, setFu] = useState(false);
   const [lost, setLost] = useState(false);
-  const { preview } = useAccess();
   const ctxSrc = useCRM(useShallow((s) => ({ leads: s.leads, activities: s.activities, followUps: s.followUps, deals: s.deals, payments: s.payments, assignments: s.assignments })));
   const noteCtx = useMemo(() => buildLeadContext(ctxSrc, id, preview), [ctxSrc, id, preview]);
   if (!lead) return <Shell title="Lead not found"><Link to="/leads" className="text-primary">Back to leads</Link></Shell>;
@@ -93,8 +92,8 @@ function LeadDetail() {
           </section>
           <section className="surface p-5">
             <h2 className="mb-3 font-semibold">Activity</h2>
-            {can("leads.edit") && <LeadNoteEditor key={id} leadId={id} lead={noteCtx?.ok ? noteCtx.lead : undefined} canFollowUp={can("followups.create")} onFollowUp={() => setFu(true)}
-              onSave={(t) => { if (addActivity(id, t) === false) { toast.error("You don't have permission to add client notes."); return false; } toast.success("Note saved to history"); return true; }} />}
+            <LeadNoteEditor key={id} leadId={id} lead={noteCtx?.ok ? noteCtx.lead : undefined} canFollowUp={can("followups.create")} onFollowUp={() => setFu(true)}
+              onSave={(t) => { if (addActivity(id, t) === false) { toast.error("You don't have permission to add client notes."); return false; } toast.success("Note saved to history"); return true; }} />
             <ol className="relative grid gap-4 border-l pl-5">
               {acts.map((a) => (
                 <li key={a.id} className="text-sm"><span className="absolute -left-[5px] mt-1.5 size-2.5 rounded-full border-2 border-card bg-primary" /><div className="whitespace-pre-line break-words">{a.text}</div><div className="text-xs text-muted-foreground">{formatDateTime(a.at)}</div></li>
