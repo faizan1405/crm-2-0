@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Upload, FileSpreadsheet, ClipboardPaste, Download, Table2, Check, AlertTriangle, RotateCcw, Loader2, Info } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
@@ -96,6 +96,9 @@ export function BulkImportPanel({ onDirty, onClose }: { onDirty: (d: boolean) =>
   };
   const reset = () => { setPaste(""); setTable(null); setRows(null); setResult(null); setProblem(null); markDirty(false); };
 
+  // A double-click on Import must not land its second click on a results button that appeared in the same spot.
+  const [armed, setArmed] = useState(false);
+  useEffect(() => { if (result?.kind !== "done") { setArmed(false); return; } const t = setTimeout(() => setArmed(true), 700); return () => clearTimeout(t); }, [result]);
   if (result?.kind === "done") {
     const s = result.summary;
     return (
@@ -109,7 +112,7 @@ export function BulkImportPanel({ onDirty, onClose }: { onDirty: (d: boolean) =>
         {s.truncated > 0 && <p className="text-xs text-warning">{s.truncated} rows beyond the {MAX_IMPORT_ROWS}-row limit were not read. Import them in another batch.</p>}
         {s.created.length > 0 && <details className="text-xs"><summary className="cursor-pointer text-muted-foreground">Created lead IDs ({s.created.length})</summary><ul className="mt-1 grid gap-0.5 font-mono" data-testid="created-ids">{s.created.map((id) => <li key={id}><Link to="/leads/$id" params={{ id }} onClick={onClose} className="hover:underline">{id}</Link></li>)}</ul></details>}
         <p className="text-[11px] text-muted-foreground">No follow-ups, calls, deals or payments were created.</p>
-        <div className="flex flex-wrap gap-2"><Button asChild><Link to="/leads" onClick={onClose}>Open Leads</Link></Button><Button variant="outline" onClick={reset}>Import another file</Button></div>
+        <div className="flex flex-wrap gap-2"><Button disabled={!armed} onClick={() => { onClose(); void import("@/router").catch(() => undefined); window.history.pushState(null, "", "/leads"); window.dispatchEvent(new PopStateEvent("popstate")); }}>Open Leads</Button><Button variant="outline" disabled={!armed} onClick={reset}>Import another file</Button></div>
       </section>
     );
   }
