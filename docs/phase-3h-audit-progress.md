@@ -757,3 +757,19 @@ Isolated test browser, 6 synthetic leads (`ai2_*`), demo data only; Owner data u
 - Records 18/4/4/15/7 (leads/deals/payments/activities/follow-ups) and manual priorities unchanged — Passed.
 - Employee preview (assigned-only, no finance): own lead analysed without Opportunity amount; another lead refused; after the assignment was removed, analysis blocked immediately — Passed.
 - 390px: no sideways scroll — Passed.
+
+## AI-2 regression check (before AI-3A)
+Production build OK; Lead Intelligence tests pass; browser re-run on 6 synthetic leads: same attention levels and actions as AI-2, permissions unchanged (other lead refused, revoked access blocked), no sideways scroll at 390px. Found one real repeat: the thin lead listed "Ask a qualification question" twice as alternatives → fixed (no duplicate alternatives) + regression test.
+
+## AI-3A — WhatsApp AI Improve (Demo Mode)
+Isolated test browser, synthetic leads `ai3_aaa` "Zoë Kapoor" and `ai3_bbb` "Ravi Mehta"; Owner data untouched. 9 new tests (`rewrite.ai3a.test.ts`).
+1–3. Rough draft with ₹40,000, &, ?, #web, 12/11, 🙏, नमस्ते, Zoë → Professional + English suggestion shown separately, labelled Demo Mode; draft unchanged — Passed.
+4. Keep original → draft unchanged — Passed. 5. Try again → different wording — Passed.
+6. Use improved → draft replaced, every special character/figure kept; manual edit afterwards works — Passed. 7. Undo improvement → exact original restored — Passed.
+8. Hinglish and Hindi → greeting/closing in that language, own sentences kept, notice that Demo Mode can't translate — Passed. Error + Retry shown — Passed.
+9–10. Open in WhatsApp (intercepted, nothing sent): wa.me/919876500111, decoded text identical to draft — Passed.
+11. Switch to Ravi Mehta → fresh draft, no Zoë text, AI panel and Undo closed; suggestion greets Ravi — Passed.
+12. No-finance employee (assigned only Zoë): suggestion contained no amount; Ravi's composer didn't open — Passed. Note: the composer's existing client chip still shows the lead's quoted amount to this employee (pre-existing, same as Pipeline; not AI context).
+13. Leads/activities/quotation shares/follow-ups/deals/payments 14/12/0/5/4/4 before and after — nothing logged or saved — Passed.
+14. Escape with an edited draft → "Discard unsaved changes?" — Passed.
+15. 390px: no sideways scroll; tone/language pickers were cut off on the right → fixed to fit.

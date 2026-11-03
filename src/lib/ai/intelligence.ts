@@ -88,7 +88,7 @@ export function analyzeLead(l: LeadContext, now = new Date()): LeadIntelligence 
   else if (f.statusKey === "qualified") { primary = A.quote("They're qualified, a follow-up is booked and the requirement is known."); alt.push(A.review("Check the last conversation before writing the quotation.")); }
   else if (f.nextFollowUpDue) { primary = A.none("A follow-up is already booked and nothing is overdue."); alt.push(A.review("Review the last conversation before the follow-up.")); }
   else { primary = A.fu("No next step is booked."); }
-  if (!closed && missing.length && primary.kind !== "qualify" && alt.length < 2) alt.push(A.qualify(`Missing: ${missing[0]}.`));
+  if (!closed && missing.length && primary.kind !== "qualify" && !alt.some((x) => x.kind === "qualify") && alt.length < 2) alt.push(A.qualify(`Missing: ${missing[0]}.`));
 
   const factsOut = [
     { label: "Stage", value: l.stage },
