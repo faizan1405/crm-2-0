@@ -22,7 +22,9 @@ export function parseOpenGroups(raw: string | null): GroupId[] {
   try {
     const v: unknown = JSON.parse(raw);
     if (!Array.isArray(v)) return [...IDS] as GroupId[];
-    return [...new Set(v.filter((x): x is GroupId => typeof x === "string" && IDS.includes(x)))];
+    const ok = [...new Set(v.filter((x): x is GroupId => typeof x === "string" && IDS.includes(x)))];
+    // A non-empty list with no recognisable group is corrupted, not "all closed" — recover to every group open.
+    return v.length > 0 && ok.length === 0 ? [...IDS] as GroupId[] : ok;
   } catch { return [...IDS] as GroupId[]; }
 }
 
