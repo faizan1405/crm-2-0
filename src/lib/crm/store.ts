@@ -66,6 +66,7 @@ const statusOnly = (patch: object) => Object.keys(patch).every((k) => k === "sta
 type Guard = [perm: string | ((...a: never[]) => string | string[]), denied: unknown, event?: CrmEventType];
 const GUARDS: Record<string, Guard> = {
   addLead: ["leads.create", "", "lead.created"],
+  importLeads: ["leads.create", { created: [], skipped: [] }],
   updateLead: [((_id: string, patch: object) => (statusOnly(patch) ? ["pipeline.edit", "leads.edit"] : "leads.edit")) as never, false, "lead.updated"],
   deleteLead: ["leads.delete", undefined], wasteLead: ["leads.delete", undefined], restoreLead: ["leads.delete", DENIED], purgeBin: ["leads.delete", undefined], emptyBin: ["leads.delete", undefined],
   addActivity: [((_id: string, _t: string, type?: string) => (type === undefined || type === "note" ? "leads.edit" : type === "whatsapp" ? "clients.whatsapp" : "leads.view")) as never, false, "client.note_added"], mergeIntoLead: ["leads.edit", false], setQuickStatus: ["leads.edit", undefined],
@@ -238,6 +239,9 @@ interface CRMState extends Prefs, ProjectSlice, ProjectCustomSlice, AnalyticsSli
   briefingDone: string[];
   briefingDate: string;
   addLead: (lead: Omit<Lead, "id" | "createdAt" | "updatedAt">) => string;
+  /** Bulk import (AI-5A): creates each lead via addLead in one outer action, re-checking phone duplicates against the
+   *  latest saved leads and within the batch. A failed save rolls the whole batch back and throws PersistError. */
+  importLeads: (leads: Omit<Lead, "id" | "createdAt" | "updatedAt">[]) => { created: string[]; skipped: { index: number; reason: string }[] };
   /** `base` = revision the editor started from; if the saved lead changed since, throws StaleRecordError and writes nothing. */
   updateLead: (id: string, patch: Partial<Lead>, base?: string) => boolean;
   /** Soft delete into Recently Deleted. */
@@ -710,6 +714,20 @@ export const useCRM = create<CRMState>()(
         if (pv) set((s) => ({ assignments: { ...s.assignments, [id]: { employeeId: pv.employeeId, assignedAt: at, source: "Created by employee", manual: true } } }));
         else autoAssign(id, "lead_created");
         return id;
+      },
+      importLeads: (rows) => {
+        const created: string[] = [], skipped: { index: number; reason: string }[] = [];
+        const taken = new Set(get().leads.map((l) => digits(l.phone).slice(-10)));
+        rows.forEach((lead, index) => {
+          const k = digits(lead.phone).slice(-10);
+          if (taken.has(k)) { skipped.push({ index, reason: "duplicate" }); return; }
+          if (leadCreateError(lead)) { skipped.push({ index, reason: "invalid" }); return; }
+          const id = get().addLead(lead);
+          if (!id) { skipped.push({ index, reason: "denied" }); return; }
+          taken.add(k); created.push(id);
+          set((s) => ({ activities: s.activities.map((a) => (a.leadId === id && a.type === "created" ? { ...a, text: "Lead added to Scale Flow (bulk import)" } : a)) }));
+        });
+        return { created, skipped };
       },
       updateLead: (id, patch, base) => {
         const prev = get().leads.find((l) => l.id === id);
