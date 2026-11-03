@@ -773,3 +773,6 @@ Isolated test browser, synthetic leads `ai3_aaa` "Zoë Kapoor" and `ai3_bbb` "Ra
 13. Leads/activities/quotation shares/follow-ups/deals/payments 14/12/0/5/4/4 before and after — nothing logged or saved — Passed.
 14. Escape with an edited draft → "Discard unsaved changes?" — Passed.
 15. 390px: no sideways scroll; tone/language pickers were cut off on the right → fixed to fit.
+
+## AI-3B — Owner Sales Coach
+Browser (separate test browser, synthetic leads `ai3b_new`, `ai3b_qual`, `ai3b_np`, `ai3b_prop`, `ai3b_later`, `ai3b_won`): correct facts with "Not recorded" gaps; objectives per scenario; Won lead shows no pitch/objection coach; price response copied exactly; arrow keys switch objections; discount/pressure draft → honest limitation + failed checks; after-call: objection → review, "call me next week" → follow-up form, "send details on WhatsApp" → composer, Won → no action; lead switch cleared drafts; records 18/4/4/17/5 unchanged, stages and notes unchanged; no external requests; 390px no sideways scroll. 559 tests (14 new).

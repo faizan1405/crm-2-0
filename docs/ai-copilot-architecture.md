@@ -45,3 +45,8 @@ Replace `getProvider()` with a client that calls an authenticated server functio
 - Future live model must: preserve intent, never add prices/discounts/dates/commitments/payment or delivery claims, keep names/figures/terms; the server re-runs the same violation check.
 
 Planned (not built): AI-3B call prep, coaching, objections · AI-3C writing help in Notes and Quotations · AI-4 follow-up intelligence and analytics · AI-5 Projects/Support/Finance assistance · AI-6 My/Owner Performance (daily/weekly/monthly) · AI-7 collapsible sidebar + final AI QA. Real OpenRouter only via a secure backend proxy (server-side key, permissions, data minimisation, usage limits).
+
+## AI-3B — Owner Sales Coach (Demo Mode)
+- `src/lib/ai/coach.ts`: pure contracts + demo rules — `CallPrepRequest`, `ObjectionRequest`, `ResponseReviewRequest`, `AfterCallRequest`; `prepareCall`, `OBJECTIONS` (8 categories), `reviewResponse` (honest limitation, simple checks only, no score), `suggestAfterCall`. Each item carries `ContentSource` (`crm` / `demo_rules` / `static_example`). `getCoachProvider()` is the swap point for a server-side OpenRouter coach; the key never reaches the browser.
+- UI: `SalesCoachPanel` at `/ai-copilot?lead=<id>&tab=coach`; entry "Prepare Call with AI" on the Pipeline inspector and lead page. Keyed by lead so switching clears drafts. Buttons only open existing Follow-up / WhatsApp / lead / Sales Studio screens; nothing is logged, sent or saved.
+- Context gained `facts.callOutcomes` (last 5 call outcomes of the selected lead only).
