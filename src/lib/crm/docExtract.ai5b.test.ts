@@ -105,3 +105,13 @@ describe("AI-5B PDF helpers", () => {
     expect(pdfFileProblem("a.pdf", 10, new TextEncoder().encode("%PDF-"))).toBeUndefined();
   });
 });
+
+describe("AI-5B undecodable PDF glyphs", () => {
+  it("marks fields with undecodable characters as Needs Review", () => {
+    const a = assemblePdfText([{ width: 600, items: [{ str: "रा हुल शमा\u0000", x: 40, y: 700, w: 60, h: 10 }, { str: "9876512301", x: 40, y: 686, w: 60, h: 10 }] }]);
+    expect(a.undecodable).toBe(1);
+    const [r] = extractLeadsFromText(a.text).rows;
+    expect(r!.name).toContain("\uFFFD");
+    expect(r!.review).toContain("name");
+  });
+});

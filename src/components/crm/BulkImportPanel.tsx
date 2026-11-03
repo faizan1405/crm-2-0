@@ -105,6 +105,7 @@ export function BulkImportPanel({ onDirty, onClose }: { onDirty: (d: boolean) =>
       if (a.chars < MIN_PDF_TEXT_CHARS) { setProblem(SCANNED_PDF_MESSAGE); return; }
       const warnings: string[] = [];
       if (total > MAX_PDF_PAGES) warnings.push(`Only the first ${MAX_PDF_PAGES} of ${total} pages were read.`);
+      if (a.undecodable) warnings.push("Some characters in this PDF couldn't be decoded (shown as �). This often happens with Hindi fonts — affected fields are marked Needs Review.");
       if (a.multiColumnPages.length) warnings.push(`Page ${a.multiColumnPages.join(", ")} looks like a multi-column layout. Text may be in the wrong order — check every phone number belongs to the right client.`);
       setPdf({ name: f.name, pages: Math.min(total, MAX_PDF_PAGES), text: a.text, warnings }); markDirty(true);
     } catch { setProblem("This PDF couldn't be read — it may be damaged, password-protected or not a real PDF."); }

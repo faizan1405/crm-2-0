@@ -37,7 +37,7 @@ export const tenDigits = (p: string) => p.replace(/\D/g, "").slice(-10);
 const phonesIn = (s: string) => Array.from(new Set((s.match(PHONE_RE) ?? []).map(tenDigits)));
 const looksLikeName = (s: string) => {
   const t = s.replace(SEP, "").trim();
-  return !!t && t.length <= 60 && !/\d|@/.test(t) && t.split(/\s+/).length <= 5 && /^[\p{L}\p{M}][\p{L}\p{M}.'\s]*$/u.test(t);
+  return !!t && t.length <= 60 && !/\d|@/.test(t) && t.split(/\s+/).length <= 5 && /^[\p{L}\p{M}\uFFFD][\p{L}\p{M}.'\s\uFFFD]*$/u.test(t);
 };
 const isHeaderLine = (s: string) => {
   const w = s.toLowerCase().split(/[\s|,;\t]+/).filter(Boolean);
@@ -137,6 +137,10 @@ function parseBlock(lines: string[], i: number): ExtractedRow | null {
       if (multiOnLine) { r.review.push("name"); }
     }
   }
+  for (const f of ["name", "requirement", "notes"] as const) if (r[f].includes("\uFFFD")) {
+    if (!r.review.includes(f)) r.review.push(f);
+    r.reviewNotes.push(`Some characters in ${f === "name" ? "the name" : `the ${f}`} couldn't be decoded from the PDF (shown as �) — retype it.`);
+  }
   if (!r.name) { r.review.push("name"); r.reviewNotes.push("Client name couldn't be identified — type it in."); }
   return r;
 }
@@ -185,12 +189,14 @@ export interface PdfPageText { width: number; items: PdfTextItem[] }
 
 /** Rebuild reading-order lines per page: group items by baseline, order by x, insert blank lines at large vertical gaps.
  *  Flags pages whose lines have a wide horizontal gutter (possible multi-column layout). */
-export function assemblePdfText(pages: PdfPageText[]): { text: string; chars: number; multiColumnPages: number[] } {
+export function assemblePdfText(pages: PdfPageText[]): { text: string; chars: number; multiColumnPages: number[]; undecodable: number } {
+  let undecodable = 0;
   const out: string[] = [];
   const multi: number[] = [];
   let chars = 0;
   pages.forEach((p, pi) => {
-    const items = p.items.filter((it) => it.str.trim());
+    // Fonts with incomplete Unicode maps give NUL/U+FFFD for some glyphs (common for Devanagari conjuncts) — keep a visible marker.
+    const items = p.items.filter((it) => it.str.trim()).map((it) => { const str = it.str.replace(/[\u0000\uFFFD]/g, "\uFFFD"); if (str !== it.str) undecodable++; return { ...it, str }; });
     chars += items.reduce((s, it) => s + it.str.replace(/\s/g, "").length, 0);
     const lines: { y: number; h: number; items: PdfTextItem[] }[] = [];
     for (const it of [...items].sort((a, b) => b.y - a.y || a.x - b.x)) {
@@ -218,7 +224,7 @@ export function assemblePdfText(pages: PdfPageText[]): { text: string; chars: nu
     if (lines.length && gutterLines >= Math.max(2, lines.length * 0.3)) multi.push(pi + 1);
     out.push("");
   });
-  return { text: out.join("\n").replace(/\n{3,}/g, "\n\n").trim(), chars, multiColumnPages: multi };
+  return { text: out.join("\n").replace(/\n{3,}/g, "\n\n").trim(), chars, multiColumnPages: multi, undecodable };
 }
 
 export function pdfFileProblem(name: string, size: number, head?: Uint8Array): string | undefined {
