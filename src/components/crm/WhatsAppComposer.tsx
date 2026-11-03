@@ -84,7 +84,7 @@ function ComposerBody({ lead, source, preset, close, onDirty }: { lead: Lead; so
   const pick = (p: WaPurpose) => {
     if (p === purpose) return;
     if (edited && text.trim() && !window.confirm("Replace your edited message with the new template?")) return;
-    setPurpose(p); setTemplateId(null); setEdited(false);
+    setPurpose(p); setTemplateId(null); setEdited(false); setBeforeAI(null);
   };
   const choosePackage = (id: string) => {
     if (id === pkg?.id) return;
@@ -170,7 +170,6 @@ function ComposerBody({ lead, source, preset, close, onDirty }: { lead: Lead; so
       {(purpose === "custom" || purpose === "followup") && !opened && beforeAI !== null && <div role="status" className="flex flex-wrap items-center gap-2 text-xs"><Check className="size-3.5 text-success" /><span className="flex-1">AI text is in your message — you can still edit it.</span><Button type="button" size="sm" variant="ghost" onClick={() => { setText(beforeAI); setEdited(true); setBeforeAI(null); }}><RefreshCw className="size-3.5" />Undo</Button></div>}
       {purpose === "followup" && !opened && <FollowUpWriterPanel leadId={lead.id} draft={text} initialOpen={!!preset.aiDraft} {...(typeof preset.aiDraft === "string" ? { initialPurpose: preset.aiDraft } : {})} onUse={(t) => { setBeforeAI(text); setText(t); setEdited(true); }} />}
       {purpose === "custom" && !opened && <div className="grid gap-2">
-        {false && <div role="status" className="flex flex-wrap items-center gap-2 text-xs"><Check className="size-3.5 text-success" /><span className="flex-1">Improved text is in your message — you can still edit it.</span><Button type="button" size="sm" variant="ghost" onClick={() => { setText(beforeAI); setEdited(true); setBeforeAI(null); }}><RefreshCw className="size-3.5" />Undo improvement</Button></div>}
         <AIImprovePanel draft={text} firstName={lead.name.split(/\s+/)[0]} onUse={(t) => { setBeforeAI(text); setText(t); setEdited(true); }} />
       </div>}
       {opened ? (
