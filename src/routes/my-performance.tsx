@@ -9,6 +9,7 @@ import { STATUS_LABEL, LEAD_STATUSES } from "@/lib/crm/types";
 import { dayKey, formatDate, formatDateTime, formatINR, formatINRCompact } from "@/lib/crm/format";
 import { goalProgress, goalsFor, indexEvents, periodWindow, visibleGoal, workloadFor, type PeriodKey, type Window } from "@/lib/crm/performance";
 import { companyFinanceSnapshot, ownerMetrics, ownerSeries, ownerTimeline, wonTrend } from "@/lib/crm/ownerPerformance";
+import { buildCoachReport } from "@/lib/ai/perfCoach";
 import { EVENT_LABEL } from "@/lib/crm/activity";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +59,10 @@ function OwnerPerformance() {
   const timeline = useMemo(() => ownerTimeline(st.teamEvents, win, (e) => e.summary || EVENT_LABEL[e.eventType]), [st.teamEvents, search.period, search.from, search.to]); // eslint-disable-line react-hooks/exhaustive-deps
   const trend = useMemo(() => wonTrend(st.teamEvents, st.deals, 6, now), [st.teamEvents, st.deals]); // eslint-disable-line react-hooks/exhaustive-deps
   const fin = useMemo(() => companyFinanceSnapshot(st.deals, st.payments, now), [st.deals, st.payments]); // eslint-disable-line react-hooks/exhaustive-deps
+  const coach = useMemo(() => buildCoachReport(
+    { events: st.teamEvents, leads: st.leads, followUps: st.followUps, deals: st.deals, quotationShares: st.quotationShares, activities: st.activities, goals: st.goals, goalRevisions: st.goalRevisions, employees: st.employees, payments: st.payments },
+    win, now,
+  ), [st.teamEvents, st.leads, st.followUps, st.deals, st.quotationShares, st.activities, st.goals, st.goalRevisions, st.employees, st.payments, search.period, search.from, search.to]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const idx = useMemo(() => indexEvents(st.teamEvents, false), [st.teamEvents]);
   const goals = goalsFor(st.goals, "owner").filter((g) => g.status !== "archived" && visibleGoal(g, true));
