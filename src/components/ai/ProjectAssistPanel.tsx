@@ -40,7 +40,7 @@ export function ProjectAssistPanel({ projectId, onClose }: { projectId: string; 
   const [lang, setLang] = useState<UpdateLang>("en");
   const [original, setOriginal] = useState("");
   const [up, setUp] = useState<Up>({ s: "idle" });
-  const [message, setMessage] = useState<string | null>(null);
+  const [lastPrev, setLastPrev] = useState<string | null>(null);
   const variant = useRef(0);
   if (!p || !ctx) return null;
   const s = taskStats(ctx);
@@ -126,7 +126,7 @@ export function ProjectAssistPanel({ projectId, onClose }: { projectId: string; 
           {sel("Writing style", tone, (v) => setTone(v as RewriteTone), (["professional", "friendly", "short"] as RewriteTone[]).map((x) => [x, TONE_LABEL[x]]))}
           {sel("Language", lang, (v) => setLang(v as UpdateLang), Object.entries(UPDATE_LANG_LABEL))}
         </div>
-        <label className="grid gap-1 text-[11px] font-semibold">Your draft (optional)<Textarea aria-label="Original draft" rows={2} value={message ?? original} onChange={(e) => { setMessage(null); setOriginal(e.target.value); }} /></label>
+        <label className="grid gap-1 text-[11px] font-semibold">Your draft (optional)<Textarea aria-label="Original draft" rows={2} value={original} onChange={(e) => setOriginal(e.target.value)} /></label>
         {up.s === "idle" && <Button type="button" size="sm" className="w-fit" onClick={() => void runUpdate()}><Sparkles className="size-3.5" />Draft Client Update</Button>}
         {up.s === "loading" && <p className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" />Preparing demo draft…</p>}
         {up.s === "ready" && <div className="grid gap-2">
@@ -138,7 +138,7 @@ export function ProjectAssistPanel({ projectId, onClose }: { projectId: string; 
             {issues.length > 0 && <ul className="pd-note list-disc pl-5 text-xs" role="alert" data-testid="pa-issues">{issues.map((i) => <li key={i}>{i}</li>)}</ul>}
           </>}
           <div className="flex flex-wrap gap-2">
-            {!up.res.blocked && <Button type="button" size="sm" disabled={issues.length > 0} onClick={() => { const prev = original; setOriginal(up.edited); setUp({ s: "idle" }); setMessage(null); setLastPrev(prev); toast.success("Suggestion placed in your draft. Nothing was sent."); }}><Check className="size-3.5" />Use Suggestion</Button>}
+            {!up.res.blocked && <Button type="button" size="sm" disabled={issues.length > 0} onClick={() => { const prev = original; setOriginal(up.edited); setUp({ s: "idle" }); setLastPrev(prev); toast.success("Suggestion placed in your draft. Nothing was sent."); }}><Check className="size-3.5" />Use Suggestion</Button>}
             <Button type="button" size="sm" variant="outline" onClick={() => setUp({ s: "idle" })}><X className="size-3.5" />Keep Original</Button>
             <Button type="button" size="sm" variant="outline" onClick={() => void runUpdate(true)}><RotateCcw className="size-3.5" />Try Again</Button>
           </div>
