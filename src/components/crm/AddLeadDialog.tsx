@@ -105,8 +105,8 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
         </DialogHeader>
         <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1" role="tablist" aria-label="Entry method" onKeyDown={onRovingKeyDown}>
           {([["ai", "Quick AI Entry", Sparkles], ["manual", "Manual Entry", PenLine], ["bulk", "Bulk AI Import", Layers]] as const).map(([m, label, Icon]) => (
-            <Button variant="ghost" key={m} role="tab" aria-selected={mode === m} tabIndex={roving(mode === m)} onClick={() => setMode(m)} className={cn("flex items-center justify-center gap-2 rounded-md py-1.5 text-sm font-medium transition-colors", mode === m ? "bg-card text-foreground shadow-card" : "text-muted-foreground hover:text-foreground")}>
-              <Icon className="size-4 shrink-0" /><span className="truncate">{label}</span>
+            <Button variant="ghost" key={m} role="tab" aria-selected={mode === m} tabIndex={roving(mode === m)} onClick={() => setMode(m)} className={cn("flex h-auto min-h-9 items-center justify-center gap-1.5 rounded-md px-1.5 py-1.5 text-sm font-medium transition-colors", mode === m ? "bg-card text-foreground shadow-card" : "text-muted-foreground hover:text-foreground")}>
+              <Icon className="size-4 shrink-0" /><span className="whitespace-normal text-center text-xs leading-tight sm:text-sm">{label}</span>
             </Button>
           ))}
         </div>

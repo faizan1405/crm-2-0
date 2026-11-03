@@ -171,7 +171,7 @@ export function BulkImportPanel({ onDirty, onClose }: { onDirty: (d: boolean) =>
                   const c = checks[r.key];
                   return (
                     <tr key={r.key} data-row={r.line} data-status={c?.status} className={cn("border-t align-top", !r.selected && "opacity-60")}>
-                      <td className="p-2"><input type="checkbox" aria-label={`Include row ${r.line}`} checked={r.selected} disabled={c?.status === "invalid"} onChange={(e) => edit(r.key, { selected: e.target.checked })} /></td>
+                      <td className="p-2"><input type="checkbox" aria-label={`Include row ${r.line}`} checked={r.selected} disabled={c?.status !== "ready"} onChange={(e) => edit(r.key, { selected: e.target.checked })} /></td>
                       <td className="num p-2 text-muted-foreground">{r.line}</td>
                       {EDIT.map((k) => <td key={k} className="p-1"><input aria-label={`${FIELD_LABEL[k]} row ${r.line}`} value={r[k]} onChange={(e) => edit(r.key, { [k]: e.target.value })} className="h-8 w-full min-w-[90px] rounded-md border bg-card px-2" /></td>)}
                       <td className="min-w-[150px] p-2">
@@ -186,7 +186,7 @@ export function BulkImportPanel({ onDirty, onClose }: { onDirty: (d: boolean) =>
               </tbody>
             </table>
           </div>
-          <p className="text-[11px] text-muted-foreground">Duplicates are never merged or overwritten and start unticked. Ticking one that's already in the CRM still won't create a second copy. Estimated storage needed: ~{Math.ceil(estimateBytes(ready.map(toNewLead)) / 1024)} KB.</p>
+          <p className="text-[11px] text-muted-foreground">Duplicates are never merged or overwritten and can't be imported — change the phone if it's really a different person. Only rows that are Ready can be ticked. Estimated storage needed: ~{Math.ceil(estimateBytes(ready.map(toNewLead)) / 1024)} KB.</p>
           {result?.kind === "failed" && (
             <div role="alert" className="grid gap-1 rounded-lg border border-destructive/40 bg-destructive-soft/50 p-3 text-xs text-destructive" data-testid="import-failed">
               <b>Nothing was imported.</b><span>{result.message} Created 0 · Failed {result.attempted}. Your existing leads are unchanged and this preview was kept — free some space (e.g. Data Vault backup, then empty Recently Deleted) and try again. Retrying can't create duplicates.</span>
