@@ -495,6 +495,10 @@ main input[type="checkbox"] { accent-color: var(--foreground); width: 16px; heig
 .sb-group + .sb-group { margin-top: 18px; }
 .sb-group-label { height: 22px; padding: 0 10px; font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .14em; color: var(--sidebar-muted); opacity: .9; white-space: nowrap; transition: opacity 180ms ease; }
 [data-collapsed="true"] .sb-group-label { opacity: 0; }
+.sb-group-btn { display: flex; width: 100%; align-items: center; justify-content: space-between; border-radius: 6px; cursor: pointer; }
+.sb-group-btn:hover { color: var(--sidebar-foreground); }
+.sb-group-btn:focus-visible { outline: 2px solid var(--sidebar-ring); outline-offset: 1px; }
+[data-collapsed="true"] .sb-group-btn { pointer-events: none; }
 .sb-link { position: relative; display: flex; align-items: center; gap: 12px; height: 38px; padding: 0 12px; margin-top: 2px; border-radius: 10px; font-size: 13.5px; font-weight: 500; color: var(--sidebar-muted); transition: background 150ms ease, color 150ms ease; }
 .sb-link:hover { background: var(--sidebar-accent); color: var(--sidebar-foreground); }
 .sb-link:focus-visible, .sb-collapse:focus-visible, .sb-user:focus-visible { outline: 2px solid var(--sidebar-ring); outline-offset: 1px; }

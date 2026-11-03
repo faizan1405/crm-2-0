@@ -15,7 +15,7 @@
 - Store actions enforce edit/stage and payment validation and synchronize related records; datetime-local inputs use explicit business-zone conversion — device-timezone independent.
 - CRM pages render after mount inside `Shell` — avoids render mismatches.
 - `formatINRCompact` is hand-rolled (K/L/Cr) — Intl compact differs server vs browser.
-- Navigation is a collapsible graphite left sidebar in Shell (grouped Workspace/Business/Personal/System; collapse state in its own localStorage key) plus a top utility bar; mobile uses drawer, bottom bar and More sheet — nav and global actions stay separate.
+- Navigation is a collapsible graphite left sidebar in Shell with expandable groups from pure `navGroups.ts` (collapse state and open groups in their own localStorage keys; active page group always shown) plus a top utility bar; mobile uses drawer, bottom bar and More sheet — nav and global actions stay separate.
 - Shared CRM presentation belongs in Shell and semantic global CSS; page components preserve store actions and pure calculations so visual redesigns cannot change business behavior.
 - The pipeline uses native drag-and-drop with named stage targets plus per-card stage selects for touch; clicking a card opens an inspector selected via the `?lead=` search param (docked at ≥1280px, portaled overlay/bottom sheet below); stage age and stall flags come only from recorded stage-change activity via pure `pipeline.ts` — no invented ages.
 - Subdirectories have their own `AGENTS.md` (e.g. `src/lib/crm/`); read it before changing files there.
