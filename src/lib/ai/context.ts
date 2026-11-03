@@ -32,10 +32,24 @@ export function buildLeadContext(src: ContextSource, leadId: string, preview: Pr
     .filter((a) => a.leadId === leadId && (money || a.type !== "payment"))
     .sort((a, b) => b.at.localeCompare(a.at)).slice(0, 5)
     .map((a) => scrubSecrets(a.text + (a.outcome ? ` · ${a.outcome}` : "")));
+  const own = src.activities.filter((a) => a.leadId === leadId && (money || a.type !== "payment")).sort((a, b) => b.at.localeCompare(a.at));
+  const calls = own.filter((a) => a.type === "call");
+  const connected = (a: { outcome?: string }) => !!a.outcome && a.outcome !== "Not picked" && a.outcome !== "Busy";
+  let streak = 0; for (const c of calls) { if (connected(c)) break; streak++; }
+  const interaction = own.find((a) => ["call", "whatsapp", "email", "meeting", "note"].includes(a.type));
   const pending = src.followUps.filter((f) => f.leadId === leadId && !f.completedAt && !f.cancelledAt);
+  const nextDue = pending.map((f) => f.dueAt).sort()[0];
   const ctx: LeadContext = {
     leadId: l.id, name: l.name, stage: STATUS_LABEL[l.status], priority: l.priority, source: l.source,
     recentActivity: acts, pendingFollowUps: pending.length, excluded,
+    facts: {
+      statusKey: l.status, hasEmail: !!l.email, callAttempts: calls.length, connectedCalls: calls.filter(connected).length, unsuccessfulStreak: streak,
+      overdueFollowUp: !!nextDue && new Date(nextDue).getTime() < now.getTime(),
+      ...(interaction ? { lastInteraction: { at: interaction.at, type: interaction.type, text: scrubSecrets(interaction.text + (interaction.outcome ? ` · ${interaction.outcome}` : "")).slice(0, 160) } } : {}),
+      ...(nextDue ? { nextFollowUpDue: nextDue } : {}),
+      ...(own[0] ? { lastActivityAt: own[0].at } : {}),
+      ...(l.lostReason ? { lostReason: scrubSecrets(l.lostReason) } : {}),
+    },
     ...(l.company ? { company: l.company } : {}),
     ...(l.requirement ? { requirement: scrubSecrets(l.requirement) } : {}),
     ...(l.lastContact ? { lastContact: l.lastContact } : {}),
@@ -52,6 +66,5 @@ export function buildLeadContext(src: ContextSource, leadId: string, preview: Pr
       outstanding: ds.reduce((s, d) => s + dealOutstanding(d, src.payments), 0),
     };
   }
-  void now;
   return { ok: true, lead: ctx };
 }

@@ -29,6 +29,20 @@ export interface LeadContext {
   pendingFollowUps: number;
   /** Present only when the viewer may see amounts. */
   money?: { quotedOrBudget?: number; dealsAgreed: number; received: number; outstanding: number };
+  /** Recorded facts used by the Lead Intelligence demo engine (AI-2). */
+  facts: {
+    statusKey: "new" | "contacted" | "qualified" | "proposal" | "won" | "lost";
+    hasEmail: boolean;
+    callAttempts: number;
+    connectedCalls: number;
+    /** Unsuccessful call attempts since the last connected call. */
+    unsuccessfulStreak: number;
+    lastInteraction?: { at: string; type: string; text: string };
+    nextFollowUpDue?: string;
+    overdueFollowUp: boolean;
+    lastActivityAt?: string;
+    lostReason?: string;
+  };
   /** Field groups deliberately withheld, shown to the user for transparency. */
   excluded: string[];
 }
