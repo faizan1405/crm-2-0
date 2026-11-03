@@ -850,3 +850,34 @@ No defects found; no code changes required. 694 automated tests, typecheck and p
 ## AI-8B — Collapsible sidebar groups
 - Groups (Workspace, Business, Personal, Owner, Owner admin, System) defined in pure `navGroups.ts`; each header is a button with aria-expanded; open groups saved under `scale-flow-sidebar-groups` (UI preference only); the active page's group is always shown; invalid saved values fall back safely; permission filter unchanged (`routeAllowed`).
 - Collapsed rail shows every icon with names/tooltips. Browser: group click + Enter toggle, persistence after refresh, deep link to /data-vault keeps its group visible, collapsed-icon navigation with active marker, drawer groups + Escape close, no overflow at 1440/1024/768/390/360, no page errors — Passed. Unsaved-draft prompts unchanged (not retested); employee preview and screen reader — Not tested.
+
+## AI-9A — Final Owner frontend regression & navigation acceptance (3 Nov 2026)
+
+**Quality gates (actually run, after the fix):** 701/701 tests (74 files; 699 baseline + 2 new), `tsgo --noEmit` clean, full `vite build` exit 0 (also passed before the fix).
+
+**Defect fixed (1):** a corrupted sidebar-groups preference containing only unknown/non-text entries (e.g. `["nope",5]`) collapsed every group except the active one. `parseOpenGroups` now treats a non-empty list with no recognisable group as corrupted → all six open; an empty list (user closed all) is still respected. Tests in `navGroups.ai8b.test.ts`.
+
+| Scenario | Result |
+|---|---|
+| 20 destinations present, each once (6 groups) | Browser Passed |
+| Deep link to every route: active highlight + its group shown | Browser Passed (3 slower pages needed >0.9 s to render; not a defect) |
+| Back / Forward through sidebar navigation (/leads→/deals→/notes, back×2, forward) | Browser Passed, highlight follows |
+| Invalid stored prefs (`{bad`, `"x"`, `["nope",5]`) | Browser Passed after fix |
+| Collapse persists on refresh; collapsed at 500 px height: lowest item (Settings) reachable by scroll, 20 hover titles | Browser Passed |
+| Group toggle with Space/Enter; visible focus ring on Tab | Browser Passed |
+| No horizontal overflow 1440/1024/768/390/360; mobile drawer opens, Escape closes | Browser Passed |
+| Edit Lead: sidebar nav warns, Cancel keeps draft, OK leaves without saving; Back returns to lead | Browser Passed |
+| Sales Studio package edit: Escape asks, Cancel keeps editor, OK discards, saved package unchanged; modal blocks sidebar while open | Browser Passed |
+| WhatsApp composer: typed draft → Escape shows "Discard unsaved changes?", Keep editing keeps text (smart quotes intact), Discard closes; no sent entry | Browser Passed |
+| Notes: autosave + flush on leave/beforeunload (existing) | Code inspected, Automated-only |
+| Project / Support editors | Not Tested this checkpoint (AI-8A browser-tested context isolation) |
+| Employee preview: 10 links, no Owner-only destinations, Deals hidden; direct /team, /settings, /data-vault, /analytics show "Not in this workspace"; collapsed mode same list; exit restores 20 links | Browser Passed |
+| My Performance AI Briefing labelled Demo Analysis | Browser Passed; period sync not re-run (AI-8A Browser Passed) |
+| Sales / Finance AI handoff smoke | Not repeated (AI-8A Browser Passed) |
+| Record counts (leads, follow-ups, deals, payments, activities, quotation shares) unchanged by non-mutating tests | Browser Passed |
+| No external requests except Google Fonts; no OpenRouter/secret keys in browser storage | Browser Passed |
+| Screen reader | Not Tested |
+
+**Note:** pressing Escape in the same instant as typing (automation only, <1 frame) closed the composer before the draft registered; at human speed the guard works. Not treated as a defect.
+
+**Kept open for AI-9B:** final readiness report; real verification of the 3 quotation packages; screen-reader acceptance; historical/unsupported workflow limitations; Team CRM financial-visibility correction (still deferred, not resolved); secure OpenRouter backend requirements.
