@@ -265,6 +265,7 @@ export function BulkImportPanel({ onDirty, onClose }: { onDirty: (d: boolean) =>
                         <span className={cn("rounded-full px-2 py-0.5 font-semibold", c?.status === "ready" ? "bg-success/15 text-success" : c?.status === "invalid" ? "bg-destructive/10 text-destructive" : "bg-warning/15 text-warning")}>{c ? STATUS_LABEL[c.status] : ""}</span>
                         {c?.problems.map((p) => <div key={p} className="mt-1 text-[11px] text-muted-foreground">{p}</div>)}
                         {c?.existing && <Link to="/leads/$id" params={{ id: c.existing.id }} target="_blank" className="mt-1 block text-[11px] text-primary hover:underline">View existing lead</Link>}
+                        {!!r.review?.length && <button type="button" className="mt-1 block text-[11px] font-semibold text-primary hover:underline" onClick={() => edit(r.key, { review: [], reviewNotes: [] })}>I've checked these fields</button>}
                         {r.sourceText && <details className="mt-1 text-[11px]"><summary className="cursor-pointer text-primary">Original extracted text</summary><pre className="mt-1 max-w-[260px] whitespace-pre-wrap break-words rounded bg-muted p-1.5 font-mono" data-testid="source-text">{r.sourceText}</pre></details>}
                         {Object.keys(r.extra).length > 0 && <div className="mt-1 text-[11px] text-muted-foreground" title={Object.entries(r.extra).map(([k, v]) => `${k}: ${v}`).join("\n")}>+{Object.keys(r.extra).length} unmapped (not saved)</div>}
                       </td>

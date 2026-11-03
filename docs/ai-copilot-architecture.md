@@ -87,3 +87,18 @@ Planned (not built): AI-3B call prep, coaching, objections · AI-3C writing help
 - Store `importLeads` creates each lead through `addLead` inside one outer `atomic` action and re-checks phones against the latest saved leads — a storage failure rolls the whole batch back (this tab) and throws `PersistError`; retry cannot duplicate. This is browser-local all-or-nothing, not a server transaction.
 - Results show processed / created / duplicates / invalid / excluded / failed counts and created IDs. No follow-ups, calls, deals or payments are created. Outside clicks don't close the window while in Bulk mode.
 - Tests: `bulkImport.ai5a.test.ts` (14). 609 tests total.
+
+## AI-5B — PDF & unstructured-text Bulk Lead Import (Demo Extraction)
+
+- Same Bulk AI Import tab: new "Upload PDF" button and a paste switch "A table" / "Free text". Labelled "Demo Extraction — pattern-based parsing, not a live AI model."
+- Pure `src/lib/crm/docExtract.ts`: `extractLeadsFromText` splits leads by blank lines, by table-style lines (one name + one phone per line) or by a name line followed by a phone line; extracts name, Indian mobile, email, and only *labelled* company/source/priority/budget ("Budget: …", "Budget discussed ₹40,000"). Unlabelled numbers are never budgets; date-like phrases ("Call next Friday") stay as note text — no follow-ups are created.
+- Needs Review (blocks import until the field is edited or "I've checked these fields" is clicked): no phone found, 2+ phones (extras shown, never saved), several phones on one line (possible multi-column), no name, undecodable PDF characters (shown as �). Each row has "Original extracted text".
+- Rows feed the AI-5A preview: same validation, duplicate detection (in batch + CRM), selection, storage estimate, confirmation and store `importLeads` (atomic, retry-safe). 50-lead limit.
+- `LeadExtractionRequest/Response/Provider` + `demoExtractionProvider` are the swap point for a future secure server-side AI extractor.
+- PDFs: read in-browser with pdf.js (`pdfjs-dist`, dynamic import, eval disabled), max 5 MB / first 20 pages, header must start with `%PDF-`. Extracted text is shown and editable before "Continue to Lead Review"; multi-column pages trigger a warning.
+
+### Supported PDFs
+- Supported: text-selectable PDFs (exported from Word/Docs/Sheets/browsers), multiple pages, simple text tables and name/phone/requirement lists, Hindi/Unicode **only when the PDF's fonts carry correct Unicode maps**.
+- Not supported: scanned or image-only PDFs (no OCR — shows the scanned-PDF message), password-protected or damaged PDFs (clear error), complex multi-column layouts (warned + Needs Review, never auto-associated), form fields/annotations. Some PDF generators drop Devanagari conjunct mappings — those characters appear as � and must be retyped.
+- Tests: `docExtract.ai5b.test.ts` (15). 624 tests total.
+- Browser acceptance (synthetic data): 5-lead table PDF → 5 created; 10-lead multi-page PDF → 10 Ready with labelled budgets; image-only PDF → scanned message; malformed PDF → readable error; Hindi PDF → undecodable glyphs flagged Needs Review, English lead Ready; 9-block pasted text → 3 Ready, two-phone/no-phone/multi-column/HTML rows Needs Review, batch + CRM duplicates blocked; manual edits made rows Ready; exclusion respected; simulated storage-full → "Created 0 · Failed 2", Retry (double-click) created exactly 2; after refresh all IDs present, follow-ups/calls/deals/payments unchanged; repeat import blocked as duplicates; Cancel created nothing; CSV regression 2 created; 390px no overflow; only Google Fonts requests.
