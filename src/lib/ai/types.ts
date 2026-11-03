@@ -42,6 +42,8 @@ export interface LeadContext {
     overdueFollowUp: boolean;
     lastActivityAt?: string;
     lostReason?: string;
+    /** Most recent call outcomes, newest first (AI-3B). */
+    callOutcomes?: string[];
   };
   /** Field groups deliberately withheld, shown to the user for transparency. */
   excluded: string[];
