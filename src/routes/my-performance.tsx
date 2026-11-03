@@ -82,7 +82,94 @@ function OwnerPerformance() {
 
     {empty && <div className="ta-note mt-4"><Info className="size-4 shrink-0" /><p>No recorded activity in this period yet. Numbers appear here as you log calls, complete follow-ups and move leads — nothing is estimated.</p></div>}
 
-    <section className="mt-6" aria-label="Sales work">
+    <section className="mt-6" aria-label="AI Briefing">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="editorial text-2xl">AI Briefing</h2>
+        <p className="text-xs text-muted-foreground">{coach.label}</p>
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Analyzing {formatDate(coach.window.start)} – {formatDate(coach.window.end)} (India time)
+        {coach.lastDataAt ? ` · latest recorded activity ${formatDateTime(coach.lastDataAt)}` : " · no activity recorded yet"}.
+      </p>
+
+      <div className="mt-3 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border p-4">
+          <h3 className="text-sm font-semibold">Briefing for this period</h3>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+            <li>Calls attempted: <b className="num">{coach.summary.calls}</b> · connected: <b className="num">{coach.summary.connected}</b> ({fmtRate(coach.metrics.connectionRate)})</li>
+            <li>Follow-ups completed: <b className="num">{coach.summary.followUpsCompleted}</b> · overdue now: <b className="num">{coach.summary.overdue}</b></li>
+            <li>New leads: <b className="num">{coach.summary.leadsCreated}</b> · deals won: <b className="num">{coach.summary.dealsWon}</b>{coach.metrics.unknownWonDates > 0 ? ` (${coach.metrics.unknownWonDates} won deal(s) excluded — no reliable Won date)` : ""}</li>
+          </ul>
+          {coach.summary.attentionLeads.length > 0 && <div className="mt-3">
+            <p className="text-xs font-semibold text-muted-foreground">Leads needing attention</p>
+            <ul className="mt-1 space-y-1 text-sm">{coach.summary.attentionLeads.map((a) => <li key={a.id}><Link to="/leads/$id" params={{ id: a.id }} className="font-medium underline-offset-2 hover:underline">{a.name}</Link> — <span className="text-muted-foreground">{a.reason}</span></li>)}</ul>
+          </div>}
+          {coach.focus && <p className="mt-3 rounded-lg bg-muted px-3 py-2 text-sm"><b>Today's focus:</b> {coach.focus}</p>}
+        </div>
+
+        <div className="rounded-xl border p-4">
+          <h3 className="text-sm font-semibold">My Suggested Plan <span className="font-normal text-muted-foreground">(today)</span></h3>
+          {coach.plan.length ? <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm">{coach.plan.map((p) => <li key={p.id}>
+            {p.leadId ? <Link to="/leads/$id" params={{ id: p.leadId }} className="font-medium underline-offset-2 hover:underline">{p.label}</Link> : p.label}
+            <span className="text-muted-foreground"> — {p.detail}</span>
+          </li>)}</ol> : <p className="mt-2 text-sm text-muted-foreground">Nothing scheduled or overdue right now. Log a call or add a lead and the plan builds itself from your real commitments.</p>}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border p-4">
+          <h3 className="text-sm font-semibold">Possible bottlenecks</h3>
+          {coach.insufficient ? <p className="mt-2 text-sm text-muted-foreground">Insufficient information — there is too little recorded activity in this period to judge bottlenecks. Log calls and follow-ups first.</p>
+            : coach.bottlenecks.length ? <ul className="mt-2 space-y-3">{coach.bottlenecks.map((b) => <li key={b.id} className="rounded-lg border p-3 text-sm">
+              <p className="font-medium">{b.title}</p>
+              <p className="mt-1 text-muted-foreground"><b className="text-foreground">Evidence:</b> {b.evidence}</p>
+              <p className="mt-1 text-muted-foreground"><b className="text-foreground">Why it may matter:</b> {b.why}</p>
+              <p className="mt-1"><b>Next step:</b> {b.leadId ? <Link to="/leads/$id" params={{ id: b.leadId }} className="underline-offset-2 hover:underline">{b.nextStep}</Link> : b.nextStep}</p>
+            </li>)}</ul>
+            : <p className="mt-2 text-sm text-muted-foreground">No meaningful bottlenecks detected from the recorded data in this period.</p>}
+        </div>
+
+        <div className="rounded-xl border p-4">
+          <h3 className="text-sm font-semibold">Recommended actions</h3>
+          {coach.recommendations.length ? <ul className="mt-2 space-y-2">{coach.recommendations.map((r, i) => <li key={r.id} className="flex items-start justify-between gap-3 rounded-lg border p-3 text-sm">
+            <span><b className="num">{i + 1}.</b> {r.label} <span className="text-muted-foreground">— {r.detail}</span></span>
+            {r.to === "lead" && r.leadId ? <Button asChild size="sm" variant="outline" className="shrink-0"><Link to="/leads/$id" params={{ id: r.leadId }}>Open lead</Link></Button>
+              : <Button asChild size="sm" variant="outline" className="shrink-0"><Link to="/follow-ups">Open follow-ups</Link></Button>}
+          </li>)}</ul> : <p className="mt-2 text-sm text-muted-foreground">No actions to recommend from the current records.</p>}
+          <p className="mt-3 text-xs text-muted-foreground">Buttons open the existing lead or follow-up workflow — nothing is called, messaged, created or changed automatically.</p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+        <div className="rounded-xl border p-4">
+          <h3 className="text-sm font-semibold">What went well</h3>
+          {coach.coach.wentWell.length ? <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{coach.coach.wentWell.map((t) => <li key={t}>{t}</li>)}</ul> : <p className="mt-2 text-sm text-muted-foreground">Nothing recorded in this period yet — wins appear here as you log them.</p>}
+        </div>
+        <div className="rounded-xl border p-4">
+          <h3 className="text-sm font-semibold">What needs attention</h3>
+          {coach.coach.needsAttention.length ? <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{coach.coach.needsAttention.map((t) => <li key={t}>{t}</li>)}</ul> : <p className="mt-2 text-sm text-muted-foreground">No measurable gaps in this period's records.</p>}
+        </div>
+        <div className="rounded-xl border p-4">
+          <h3 className="text-sm font-semibold">Your next move</h3>
+          {coach.coach.nextMove ? <p className="mt-2 text-sm">{coach.coach.nextMove}</p> : <p className="mt-2 text-sm text-muted-foreground">No single next move stands out from the current records.</p>}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border p-4">
+          <h3 className="text-sm font-semibold">Compared with the previous period <span className="font-normal text-muted-foreground">({formatDate(coach.prevWindow.start)} – {formatDate(coach.prevWindow.end)})</span></h3>
+          {coach.comparison.available ? <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{coach.comparison.lines.map((l) => <li key={l}>{l}</li>)}</ul>
+            : <p className="mt-2 text-sm text-muted-foreground">{coach.comparison.reason}</p>}
+        </div>
+        <div className="rounded-xl border p-4">
+          <h3 className="text-sm font-semibold">Progress against your targets</h3>
+          {coach.targets.configured ? <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{coach.targets.lines.map((l) => <li key={l}>{l}</li>)}</ul>
+            : <p className="mt-2 text-sm text-muted-foreground">Target not configured.</p>}
+        </div>
+      </div>
+    </section>
+
+    <section className="mt-8" aria-label="Sales work">
       <h2 className="editorial text-2xl">Sales work</h2>
       <dl className="pf-grid mt-3">
         <Stat label="Calls logged" value={m.calls} tip="Saved call outcomes only — every outcome, including Not picked and Busy. Opening the dialer never counts." />
