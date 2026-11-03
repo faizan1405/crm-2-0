@@ -63,3 +63,11 @@ describe("AI-2 permission safety", () => {
     expect(buildLeadContext({ ...src, assignments: { a: { employeeId: "e2" } } }, "a", emp, NOW)).toEqual({ ok: false, reason: "not_permitted" });
   });
 });
+
+describe("AI-2 regression: no duplicate alternatives", () => {
+  it("thin lead lists each alternative once", () => {
+    const a = analyzeLead(base({ stage: "New" }, { hasEmail: false }), NOW);
+    const kinds = a.alternatives.map((x) => x.kind);
+    expect(new Set(kinds).size).toBe(kinds.length);
+  });
+});
