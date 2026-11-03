@@ -97,7 +97,7 @@ function parseBlock(lines: string[], i: number): ExtractedRow | null {
       if (/source/.test(k)) { r.source = LEAD_SOURCES.find((s) => s.toLowerCase() === v.toLowerCase()) ?? v; continue; }
       if (/^(budget|बजट)$/.test(k)) { setBudget(r, v); continue; }
       if (k === "priority") { const p = PRI_WORDS[v.toLowerCase().split(/\s/)[0] ?? ""]; if (p) r.priority = p; else notes.push(line); continue; }
-      if (/^notes?|remarks?$/.test(k)) { notes.push(v); continue; }
+      if (/^(notes?|remarks?)$/.test(k)) { notes.push(v); continue; }
       req.push(v); continue;
     }
     // Explicit budget phrases without a colon ("Budget discussed ₹40,000", "budget around 50k").
@@ -138,7 +138,6 @@ function parseBlock(lines: string[], i: number): ExtractedRow | null {
     }
   }
   if (!r.name) { r.review.push("name"); r.reviewNotes.push("Client name couldn't be identified — type it in."); }
-  if (!r.name && !r.phone && !r.email) return { ...r, reviewNotes: [...r.reviewNotes] };
   return r;
 }
 
