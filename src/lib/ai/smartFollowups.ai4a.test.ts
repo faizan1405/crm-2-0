@@ -4,11 +4,11 @@ import type { FollowUp, Lead, LeadActivity } from "@/lib/crm/types";
 
 // 23:30 IST on 3 Nov 2026 = 18:00 UTC
 const NOW = new Date("2026-11-03T18:00:00Z");
-const L = (id: string, status: Lead["status"], p: Partial<Lead> = {}): Lead => ({ id, name: id, phone: "9000000000", source: "Website", status, priority: "medium", pinned: false, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z", requirement: "Website", ...p });
+const L = (id: string, status: Lead["status"], p: Partial<Lead> = {}): Lead => ({ id, name: id, phone: "9000000000", source: "Website", status, priority: "warm", pinned: false, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z", requirement: "Website", ...p });
 const F = (id: string, leadId: string, dueAt: string, p: Partial<FollowUp> = {}): FollowUp => ({ id, leadId, type: "call", dueAt, ...p });
 const A = (leadId: string, at: string): LeadActivity => ({ id: `a_${leadId}_${at}`, leadId, type: "call", text: "Call logged", at } as LeadActivity);
 
-const leads = [L("over", "contacted"), L("today", "contacted"), L("future", "qualified"), L("done", "contacted"), L("qual", "qualified"), L("prop", "proposal"), L("won", "won"), L("thin", "contacted", { requirement: undefined })];
+const leads = [L("over", "contacted"), L("today", "contacted"), L("future", "qualified"), L("done", "contacted"), L("qual", "qualified"), L("prop", "proposal"), L("won", "won"), (({ requirement: _r, ...x }) => x)(L("thin", "contacted")) as Lead];
 const fus = [
   F("f1", "over", "2026-11-01T05:00:00Z"),
   F("f2", "today", "2026-11-03T18:20:00Z"), // 23:50 IST today
