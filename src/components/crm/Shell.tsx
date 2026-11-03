@@ -11,7 +11,7 @@ import {
   LayoutDashboard, Users, KanbanSquare, CalendarClock, Wallet, StickyNote, Moon, Sun,
   BarChart3, Sunrise, Settings, MoreHorizontal, Plus, Search, Bell, ArrowUpRight, PhoneCall, Menu, ChevronRight, PanelLeftClose, PanelLeftOpen, Presentation, ShieldCheck, Activity,
   Archive, Eye, Lock, Inbox, Workflow, Target, Gauge,
-  SlidersHorizontal, FolderKanban } from "lucide-react";
+  SlidersHorizontal, FolderKanban, Sparkles } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
 import { useSession, useAccess, routeAllowed, type PreviewSession } from "@/lib/crm/session";
 import { exitPreview } from "@/lib/crm/preview";
@@ -35,6 +35,7 @@ const NAV = [
   { to: "/deals", label: "Deals & Payments", mobile: "Deals", icon: Wallet, section: "" },
   { to: "/projects", label: "Project Desk", mobile: "Projects", icon: FolderKanban, section: "" },
   { to: "/sales-studio", label: "Sales Studio", mobile: "Studio", icon: Presentation, section: "" },
+  { to: "/ai-copilot", label: "AI Sales Copilot", mobile: "Copilot", icon: Sparkles, section: "" },
   { to: "/notes", label: "Personal Notes", mobile: "Notes", icon: StickyNote, section: "" },
   { to: "/analytics", label: "Analytics", mobile: "Analytics", icon: BarChart3, section: "Insights" },
   { to: "/daily-briefing", label: "Daily Briefing", mobile: "Briefing", icon: Sunrise, section: "" },
@@ -76,7 +77,7 @@ export function ScaleMark({ className }: { className?: string }) {
 }
 
 const GROUPS = [
-  { label: "Workspace", items: ["/", "/my-performance", "/inbox", "/leads", "/pipeline", "/follow-ups"] },
+  { label: "Workspace", items: ["/", "/my-performance", "/inbox", "/leads", "/pipeline", "/follow-ups", "/ai-copilot"] },
   { label: "Business", items: ["/deals", "/projects", "/sales-studio", "/analytics", "/daily-briefing"] },
   { label: "Personal", items: ["/notes"] },
   { label: "Owner admin", items: ["/team", "/team-performance", "/team-activity", "/automation", "/crm-config", "/data-vault"] },

@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AiCopilotRouteImport } from './routes/ai-copilot'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AutomationRouteImport } from './routes/automation'
 import { Route as CrmConfigRouteImport } from './routes/crm-config'
@@ -38,6 +39,11 @@ import { Route as TeamWorkspaceIdRouteImport } from './routes/team_.workspace.$i
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AiCopilotRoute = AiCopilotRouteImport.update({
+  id: '/ai-copilot',
+  path: '/ai-copilot',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AnalyticsRoute = AnalyticsRouteImport.update({
@@ -163,6 +169,7 @@ const TeamWorkspaceIdRoute = TeamWorkspaceIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/ai-copilot': typeof AiCopilotRoute
   '/analytics': typeof AnalyticsRoute
   '/automation': typeof AutomationRoute
   '/crm-config': typeof CrmConfigRoute
@@ -190,6 +197,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/ai-copilot': typeof AiCopilotRoute
   '/analytics': typeof AnalyticsRoute
   '/automation': typeof AutomationRoute
   '/crm-config': typeof CrmConfigRoute
@@ -218,6 +226,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/ai-copilot': typeof AiCopilotRoute
   '/analytics': typeof AnalyticsRoute
   '/automation': typeof AutomationRoute
   '/crm-config': typeof CrmConfigRoute
@@ -247,6 +256,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/ai-copilot'
     | '/analytics'
     | '/automation'
     | '/crm-config'
@@ -274,6 +284,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/ai-copilot'
     | '/analytics'
     | '/automation'
     | '/crm-config'
@@ -301,6 +312,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/ai-copilot'
     | '/analytics'
     | '/automation'
     | '/crm-config'
@@ -329,6 +341,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AiCopilotRoute: typeof AiCopilotRoute
   AnalyticsRoute: typeof AnalyticsRoute
   AutomationRoute: typeof AutomationRoute
   CrmConfigRoute: typeof CrmConfigRoute
@@ -362,6 +375,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ai-copilot': {
+      id: '/ai-copilot'
+      path: '/ai-copilot'
+      fullPath: '/ai-copilot'
+      preLoaderRoute: typeof AiCopilotRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/analytics': {
@@ -537,6 +557,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AiCopilotRoute: AiCopilotRoute,
   AnalyticsRoute: AnalyticsRoute,
   AutomationRoute: AutomationRoute,
   CrmConfigRoute: CrmConfigRoute,
