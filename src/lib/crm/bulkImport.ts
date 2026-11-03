@@ -123,6 +123,10 @@ export function checkRows(rows: PreviewRow[], leads: Pick<Lead, "id" | "name" | 
   const seen = new Map<string, number>();
   const out: Record<string, RowCheck> = {};
   for (const r of rows) {
+    const k = phoneKey(r.phone);
+    // An existing CRM lead is reported even if this row's phone is written in a form the lead rules reject (e.g. 0-prefixed).
+    const hit = k ? crm.get(k) : undefined;
+    if (hit) { out[r.key] = { status: "duplicate_crm", problems: [`Same phone as existing lead ${hit.name}`], existing: hit }; continue; }
     const p: string[] = [];
     if (!r.name.trim()) p.push("Name is missing");
     if (!r.phone.trim()) p.push("Phone is missing");
@@ -133,11 +137,9 @@ export function checkRows(rows: PreviewRow[], leads: Pick<Lead, "id" | "name" | 
     else if (b !== undefined && b < 0) p.push("Budget can't be negative");
     if (parsePriority(r.priority) === null) p.push("Priority must be Hot, Warm or Cold");
     if (p.length) { out[r.key] = { status: "invalid", problems: p }; continue; }
-    const k = phoneKey(r.phone);
-    const hit = crm.get(k);
-    if (hit) { out[r.key] = { status: "duplicate_crm", problems: [`Same phone as existing lead ${hit.name}`], existing: hit }; continue; }
-    if (r.selected && seen.has(k)) { out[r.key] = { status: "duplicate_batch", problems: [`Same phone as row ${seen.get(k)} in this import`], firstLine: seen.get(k)! }; continue; }
-    if (r.selected) seen.set(k, r.line);
+    // First row with a phone keeps it; later rows with the same normalized phone are batch duplicates (selection doesn't change this).
+    if (seen.has(k)) { out[r.key] = { status: "duplicate_batch", problems: [`Same phone as row ${seen.get(k)} in this import`], firstLine: seen.get(k)! }; continue; }
+    seen.set(k, r.line);
     out[r.key] = { status: "ready", problems: [] };
   }
   return out;

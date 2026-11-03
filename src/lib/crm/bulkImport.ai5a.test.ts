@@ -85,3 +85,12 @@ describe("AI-5A store import", () => {
     expect(useCRM.getState().leads.map((l) => l.name)).toEqual(["Keep"]);
   });
 });
+
+describe("AI-5A duplicate edge cases", () => {
+  it("batch duplicate stays flagged when its row is unticked, and 0-prefixed CRM matches are reported", () => {
+    const rows = buildRows(T("Name,Phone\nA,9700011100\nB,+91 97000 11100\nC,09811122233"), ["name", "phone"]).map((r) => ({ ...r, selected: r.line === 2 }));
+    const c = checkRows(rows, [{ id: "e", name: "E", phone: "9811122233" }]);
+    expect(c["r3"]!.status).toBe("duplicate_batch");
+    expect(c["r4"]!.status).toBe("duplicate_crm");
+  });
+});
