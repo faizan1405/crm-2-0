@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { safeHref } from "@/lib/crm/validation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ArrowDown, ArrowLeft, ArrowUp, Check, ExternalLink, FolderKanban, MessageCircle, Plus, RotateCcw } from "lucide-react";
 import { Shell, Empty, selectCls } from "@/components/crm/Shell";
@@ -24,6 +24,7 @@ import { runGuarded } from "@/components/crm/conflictFeedback";
 import { ProjectAssistPanel } from "@/components/ai/ProjectAssistPanel";
 import { useProjectTaskDraft } from "@/lib/ai/projectTaskDraft";
 import { Sparkles } from "lucide-react";
+import { SupportAssistPanel } from "@/components/ai/SupportAssistPanel";
 
 type Tab = "overview" | "tasks" | "requirements" | "finance" | "activity" | "delivery";
 const TABS: Tab[] = ["overview", "tasks", "requirements", "finance", "activity", "delivery"];
@@ -272,6 +273,7 @@ function DeliveryTab({ p }: { p: Project }) {
   const [s, setS] = useState({ included: p.support.included == null ? "" : p.support.included ? "yes" : "no", months: p.support.months ? String(p.support.months) : "", start: p.support.start ?? "", end: p.support.end ?? "", description: p.support.description ?? "" });
   const [r, setR] = useState({ title: "", kind: "bug" as SupportKind, priority: "normal" as ProjectPriority, assigneeId: "", dueDate: "", description: "" });
   const reqs = supportRequests.filter((x) => x.projectId === p.id);
+  const [aiReq, setAiReq] = useState<string | null>(null);
   const end = s.start && s.months && Number(s.months) > 0 ? addMonths(s.start, Number(s.months)) : s.end;
   return <div className="grid gap-6 xl:grid-cols-2">
     <div className="grid content-start gap-6">
@@ -311,14 +313,15 @@ function DeliveryTab({ p }: { p: Project }) {
           <Textarea aria-label="Request description" rows={2} placeholder="Details" value={r.description} onChange={(e) => setR({ ...r, description: e.target.value })} />
           <Button className="justify-self-start" onClick={() => { const x = addSupportRequest({ projectId: p.id, title: r.title, kind: r.kind, priority: r.priority, assigneeId: r.assigneeId || null, dueDate: r.dueDate || undefined, description: r.description || undefined }); if (!x.ok) toast.error(x.error); else { setR({ ...r, title: "", description: "" }); toast.success("Support request opened"); } }}><Plus className="size-4" />Open request</Button>
         </div>}
-        <ul className="grid gap-2">{reqs.map((x) => <SupportRow key={x.id} id={x.id} canEdit={canSupport} owner={v.owner} assignee={people.name(x.assigneeId)} people={people.list} onUpdate={updateSupportRequest} />)}{reqs.length === 0 && <li className="text-sm text-muted-foreground">No support requests.</li>}</ul>
+        <ul className="grid gap-2">{reqs.map((x) => <SupportRow key={x.id} id={x.id} canEdit={canSupport} owner={v.owner} assignee={people.name(x.assigneeId)} people={people.list} onUpdate={updateSupportRequest} aiOpen={aiReq === x.id} onToggleAi={() => setAiReq(aiReq === x.id ? null : x.id)} />)}{reqs.length === 0 && <li className="text-sm text-muted-foreground">No support requests.</li>}</ul>
       </Card>
     </div>
   </div>;
 }
 
 type SupportPatch = Parameters<ReturnType<typeof useCRM.getState>["updateSupportRequest"]>[1];
-function SupportRow({ id, canEdit, owner, assignee, people, onUpdate }: { id: string; canEdit: boolean; owner: boolean; assignee: string; people: readonly { id: string; name: string }[]; onUpdate: ReturnType<typeof useCRM.getState>["updateSupportRequest"] }) {
+function SupportRow({ id, canEdit, owner, assignee, people, onUpdate, aiOpen = false, onToggleAi }: { id: string; canEdit: boolean; owner: boolean; assignee: string; people: readonly { id: string; name: string }[]; onUpdate: ReturnType<typeof useCRM.getState>["updateSupportRequest"]; aiOpen?: boolean; onToggleAi?: () => void }) {
+  const actionsRef = useRef<HTMLElement | null>(null);
   const x = useCRM((s) => s.supportRequests.find((r) => r.id === id))!;
   const [res, setRes] = useState(x.resolution ?? "");
   // Version this row's draft/actions are based on; a newer saved version means another tab changed it.
@@ -336,10 +339,11 @@ function SupportRow({ id, canEdit, owner, assignee, people, onUpdate }: { id: st
   const reloadLatest = () => { const cur = useCRM.getState().supportRequests.find((q) => q.id === id); if (cur) { setSeen(cur.version); setRes(cur.resolution ?? ""); } setConflict(null); };
   const applyMine = () => { const cur = useCRM.getState().supportRequests.find((q) => q.id === id); if (!cur || !conflict) return; const patch = "resolution" in conflict.patch ? { ...conflict.patch, resolution: res } : conflict.patch; run(patch, conflict.ok, cur.version); };
   return <li className="pd-task" data-done={done || undefined}>
-    <div className="flex flex-wrap items-start justify-between gap-2"><div className="min-w-0"><div className="text-sm font-medium">{x.title}</div><div className="text-xs text-muted-foreground">{SUPPORT_KIND_TEXT[x.kind]} · {x.priority} · {assignee} · opened {formatDate(x.createdAt)}{x.dueDate ? ` · due ${formatDate(x.dueDate)}` : ""} · coverage {x.coverage}</div></div><span className="pd-pill capitalize">{x.status.replace("_", " ")}</span></div>
+    <div className="flex flex-wrap items-start justify-between gap-2"><div className="min-w-0"><div className="text-sm font-medium">{x.title}</div><div className="text-xs text-muted-foreground">{SUPPORT_KIND_TEXT[x.kind]} · {x.priority} · {assignee} · opened {formatDate(x.createdAt)}{x.dueDate ? ` · due ${formatDate(x.dueDate)}` : ""} · coverage {x.coverage}</div></div><div className="flex items-center gap-2">{owner && onToggleAi && <Button type="button" size="sm" variant="outline" className="h-7 rounded-full px-2 text-xs" aria-expanded={aiOpen} aria-label={`AI Assist for ${x.title}`} onClick={onToggleAi}><Sparkles className="size-3" />AI Assist</Button>}<span className="pd-pill capitalize">{x.status.replace("_", " ")}</span></div></div>
     {x.description && <p className="mt-2 text-sm">{x.description}</p>}
     {conflict && <div role="alert" className="mt-2 grid gap-2 rounded-md border border-warning/40 bg-warning/10 p-2 text-sm"><p>This support request was updated in another tab — it's now <b>{x.status.replace("_", " ")}</b>, assigned to {assignee}, coverage {x.coverage}. Nothing of yours was saved; your typed notes are kept below.</p><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" className="touch-hit" onClick={reloadLatest}>Reload latest</Button><Button size="sm" className="touch-hit" onClick={applyMine}>Apply my change</Button></div></div>}
-    {canEdit && (!done || conflict) && <div className="mt-2 grid gap-2"><Textarea aria-label="Resolution notes" rows={2} placeholder="Resolution notes" value={res} onChange={(e) => setRes(e.target.value)} />{!done && <div className="flex flex-wrap gap-2">{x.status === "open" && <Button size="sm" variant="outline" className="touch-hit" onClick={() => run({ status: "in_progress" }, "Request started")}>Start</Button>}<Button size="sm" className="touch-hit" onClick={() => run({ status: "resolved", resolution: res }, "Request resolved")}>Resolve</Button>{owner && <select aria-label="Coverage" className={cn(selectCls, "h-8 text-xs")} value={x.coverage} onChange={(e) => run({ coverage: e.target.value as typeof x.coverage }, "Coverage updated")}><option value="undecided">Coverage undecided</option><option value="included">Included in agreement</option><option value="billable">Billable</option></select>}{owner && <select aria-label="Reassign request" className={cn(selectCls, "h-8 text-xs")} value={x.assigneeId ?? ""} onChange={(e) => run({ assigneeId: e.target.value || null }, "Request reassigned")}><option value="">Unassigned</option>{people.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>}</div>}</div>}
-    {done && x.resolution && <p className="mt-2 text-xs text-muted-foreground">Resolution: {x.resolution}{canEdit && <button type="button" className="ml-2 inline-flex items-center gap-1 underline" onClick={() => run({ status: "open" }, "Request reopened")}><RotateCcw className="size-3" />Reopen</button>}</p>}
+    {canEdit && (!done || conflict) && <div ref={(el) => { actionsRef.current = el; }} className="mt-2 grid gap-2"><Textarea aria-label="Resolution notes" rows={2} placeholder="Resolution notes" value={res} onChange={(e) => setRes(e.target.value)} />{!done && <div className="flex flex-wrap gap-2">{x.status === "open" && <Button size="sm" variant="outline" className="touch-hit" onClick={() => run({ status: "in_progress" }, "Request started")}>Start</Button>}<Button size="sm" className="touch-hit" onClick={() => run({ status: "resolved", resolution: res }, "Request resolved")}>Resolve</Button>{owner && <select aria-label="Coverage" className={cn(selectCls, "h-8 text-xs")} value={x.coverage} onChange={(e) => run({ coverage: e.target.value as typeof x.coverage }, "Coverage updated")}><option value="undecided">Coverage undecided</option><option value="included">Included in agreement</option><option value="billable">Billable</option></select>}{owner && <select aria-label="Reassign request" className={cn(selectCls, "h-8 text-xs")} value={x.assigneeId ?? ""} onChange={(e) => run({ assigneeId: e.target.value || null }, "Request reassigned")}><option value="">Unassigned</option>{people.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>}</div>}</div>}
+    {done && x.resolution && <p ref={(el) => { if (el) actionsRef.current = el; }} className="mt-2 text-xs text-muted-foreground">Resolution: {x.resolution}{canEdit && <button type="button" className="ml-2 inline-flex items-center gap-1 underline" onClick={() => run({ status: "open" }, "Request reopened")}><RotateCcw className="size-3" />Reopen</button>}</p>}
+    {owner && aiOpen && <SupportAssistPanel key={id} requestId={id} {...(x.assigneeId ? { assigneeName: assignee } : {})} onClose={() => onToggleAi?.()} onOpenResolution={() => { const el = actionsRef.current; el?.scrollIntoView({ block: "center", behavior: "smooth" }); el?.querySelector<HTMLElement>("textarea, button")?.focus(); }} />}
   </li>;
 }
