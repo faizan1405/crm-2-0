@@ -807,3 +807,5 @@ Browser (separate test browser, clock fixed at 23:30 IST on 3 Nov 2026; syntheti
 See docs/ai-copilot-architecture.md. Not tested: screen readers, employee preview (the button is Owner-only).
 
 - AI-6B Owner Support AI Assistant complete (Demo Mode, read-only). 652 tests. Targeted WhatsApp sent-history regression passed (count unchanged).
+
+- AI-6C Owner Finance AI Assistant complete (Demo Mode, read-only). Finance figures reconcile with Finance Studio and Project Finance; WhatsApp sent count unchanged.
