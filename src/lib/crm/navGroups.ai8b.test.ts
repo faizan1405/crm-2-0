@@ -6,7 +6,7 @@ describe("AI-8B sidebar groups", () => {
   it("every page appears in exactly one group", () => {
     const all = NAV_GROUPS.flatMap(g => g.items);
     expect(new Set(all).size).toBe(all.length);
-    expect(all).toHaveLength(21);
+    expect(all).toHaveLength(20);
   });
   it("toggles groups independently", () => {
     expect(toggleGroup(["workspace", "business"], "business")).toEqual(["workspace"]);

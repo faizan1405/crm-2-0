@@ -142,7 +142,7 @@ export function Shell({ title, subtitle, actions, children }: { title: string; s
   const leadName = useMemo(() => (alerts ? new Map(leads.map(l => [l.id, l.name])) : null), [alerts, leads]);
   const matches = (text: string) => text.toLowerCase().includes(query.toLowerCase());
   const current = NAV.find(n => isActive(path, n.to));
-  const group = GROUPS.find(g => current && (g.items as readonly string[]).includes(current.to))?.label ?? "Workspace";
+  const group = NAV_GROUPS.find(g => current && (g.items as readonly string[]).includes(current.to))?.label ?? "Workspace";
   const callable = !callPick ? [] : leads.filter(l => !["won","lost"].includes(l.status) && `${l.name} ${l.company ?? ""} ${l.phone}`.toLowerCase().includes(callQ.toLowerCase()));
   if (!mounted) return <div className="flex min-h-screen bg-background"><div className="hidden w-[248px] shrink-0 bg-sidebar md:block" /><div className="flex-1 p-8"><div className="h-10 w-72 animate-pulse rounded-md bg-muted" /><div className="mt-8 grid gap-4 sm:grid-cols-3">{[0,1,2].map(i => <div key={i} className="h-28 animate-pulse rounded-xl bg-muted" />)}</div><div className="mt-6 h-64 animate-pulse rounded-xl bg-muted" /></div></div>;
   return (
