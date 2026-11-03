@@ -36,8 +36,8 @@ export function AIImprovePanel({ draft, firstName, onUse }: { draft: string; fir
         <Button type="button" size="icon" variant="ghost" className="size-7" aria-label="Close AI Improve" onClick={() => { setOpen(false); setSt({ s: "idle" }); }}><X className="size-3.5" /></Button>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <label className="grid gap-1 text-[11px] font-semibold">Tone<select aria-label="Tone" className={cn(selectCls, "h-9 text-xs")} value={tone} onChange={(e) => { setTone(e.target.value as RewriteTone); setSt({ s: "idle" }); }}>{Object.entries(TONE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
-        <label className="grid gap-1 text-[11px] font-semibold">Language<select aria-label="Language" className={cn(selectCls, "h-9 text-xs")} value={lang} onChange={(e) => { setLang(e.target.value as RewriteLang); setSt({ s: "idle" }); }}>{Object.entries(LANG_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+        <label className="grid min-w-0 gap-1 text-[11px] font-semibold">Tone<select aria-label="Tone" className={cn(selectCls, "h-9 w-full min-w-0 text-xs")} value={tone} onChange={(e) => { setTone(e.target.value as RewriteTone); setSt({ s: "idle" }); }}>{Object.entries(TONE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+        <label className="grid min-w-0 gap-1 text-[11px] font-semibold">Language<select aria-label="Language" className={cn(selectCls, "h-9 w-full min-w-0 text-xs")} value={lang} onChange={(e) => { setLang(e.target.value as RewriteLang); setSt({ s: "idle" }); }}>{Object.entries(LANG_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
       </div>
       {st.s !== "ready" && st.s !== "loading" && <Button type="button" size="sm" className="w-fit" onClick={() => void run()} disabled={!draft.trim()}><Sparkles className="size-3.5" />Suggest improvement</Button>}
       {st.s === "loading" && <p className="flex items-center gap-2 text-xs text-muted-foreground" role="status"><Loader2 className="size-3.5 animate-spin" />Preparing a demo suggestion…</p>}

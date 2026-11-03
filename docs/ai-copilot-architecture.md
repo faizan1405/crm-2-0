@@ -36,3 +36,12 @@ Replace `getProvider()` with a client that calls an authenticated server functio
 - AI-7 Final AI frontend testing.
 - Owner's manual check of the 3 real quotation packages.
 - Secure OpenRouter backend integration (Antigravity + Hostinger) only after explicit approval.
+
+## AI-3A — WhatsApp AI Improve (Demo Mode)
+- `src/lib/ai/rewrite.ts`: `RewriteRequest` (draft, tone, language, variant, client first name only — no history, money or notes), `RewriteResult`, `RewriteProvider`, `getRewriteProvider()` swap point. Tones: Professional, Friendly, Short & Direct, Persuasive but respectful. Languages: Keep my language, English, Hindi, Hinglish.
+- Demo rewriter keeps the user's own sentences (only spacing/capitals/full stop tidied) and wraps them in a fixed greeting, opener and closing per tone/language; Try again switches between 2 fixed variants. It can't translate, and says so; generic text is labelled a light tidy-up. Scenarios detected for the label: quotation follow-up, not responding, pending requirements, payment reminder, introduction, general.
+- `rewriteViolations` guard: any amount, number, date, link, email or #tag dropped from or added to the suggestion blocks "Use improved".
+- `src/components/ai/AIImprovePanel.tsx` inside the WhatsApp composer for Custom messages: AI Improve → tone + language → suggestion shown separately with the original → Use improved / Keep original / Try again; loading, error + Retry. Accepting replaces the draft (still editable) and shows Undo improvement. The draft is never replaced automatically; unsaved-draft protection unchanged; nothing opens WhatsApp, logs, schedules or saves.
+- Future live model must: preserve intent, never add prices/discounts/dates/commitments/payment or delivery claims, keep names/figures/terms; the server re-runs the same violation check.
+
+Planned (not built): AI-3B call prep, coaching, objections · AI-3C writing help in Notes and Quotations · AI-4 follow-up intelligence and analytics · AI-5 Projects/Support/Finance assistance · AI-6 My/Owner Performance (daily/weekly/monthly) · AI-7 collapsible sidebar + final AI QA. Real OpenRouter only via a secure backend proxy (server-side key, permissions, data minimisation, usage limits).
