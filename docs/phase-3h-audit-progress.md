@@ -725,3 +725,9 @@ New IDs: `sr_a3iwl8p` "F2B Contact form not sending" (bug, high); `sr_lhzwbzo` "
 - Mobile 1440 / 390 / 360 (touch below 1000): create, resolve, read Activity — sideways overflow 0 at all three; all controls reachable. Support uses inline forms, so no support dialogs to close (dialog closing verified in E2.2A).
 **Not Tested**: real screen reader; two-tab stale support edit (requests carry a version but updates don't check it — documented as a remaining defect).
 Tests: 518 (5 new), typecheck clean, production build OK.
+
+## F2C — Support request conflict safety (2026-11-03)
+- Fix: `updateSupportRequest(id, patch, baseVersion)` throws `StaleRecordError("support")` when the saved request is newer than the version the row started from; nothing saved, no history line. Support row shows an inline alert with the latest status/assignee/coverage, keeps typed resolution notes, and offers "Reload latest" or "Apply my change" (explicit re-save on the latest version). Covers status (start/resolve/reopen), assignment, coverage and resolution notes.
+- Browser (two tabs, same storage, synthetic project `prj_ztyvbbf` "F2C Conflict Test (synthetic)", request "F2C two-tab request"): Tab B typed notes; Tab A started + reassigned (v3); Tab B Resolve → alert shown, draft kept, saved record still in_progress v3 — Passed. "Apply my change" → resolved v4 with Tab B notes, one request, one history line per real change — Passed. Reopen from Tab A; Tab B updated live. Deals 4 / payments 4 unchanged. "Reload latest" button covered by code path only, not clicked in browser.
+- Automated: 519 tests (1 new F2C store test), typecheck clean.
+- Limit: browser-local version check only; not an atomic cross-device transaction (needs the future backend).
