@@ -846,3 +846,7 @@ Real browser acceptance with isolated synthetic records (lead f8A, deals f8D1/f8
 | Screen-reader behaviour | Not Tested (deferred) |
 
 No defects found; no code changes required. 694 automated tests, typecheck and production build remain clean. No records were mutated by viewing or drafting; nothing was sent.
+
+## AI-8B — Collapsible sidebar groups
+- Groups (Workspace, Business, Personal, Owner, Owner admin, System) defined in pure `navGroups.ts`; each header is a button with aria-expanded; open groups saved under `scale-flow-sidebar-groups` (UI preference only); the active page's group is always shown; invalid saved values fall back safely; permission filter unchanged (`routeAllowed`).
+- Collapsed rail shows every icon with names/tooltips. Browser: group click + Enter toggle, persistence after refresh, deep link to /data-vault keeps its group visible, collapsed-icon navigation with active marker, drawer groups + Escape close, no overflow at 1440/1024/768/390/360, no page errors — Passed. Unsaved-draft prompts unchanged (not retested); employee preview and screen reader — Not tested.
