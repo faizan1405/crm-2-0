@@ -816,3 +816,9 @@ See docs/ai-copilot-architecture.md. Not tested: screen readers, employee previe
 - Browser acceptance (synthetic data): 4 calls/2 connected/50%, 1 follow-up completed, 2 leads created, 1 Won deal at ₹50K, voided ₹20,000 payment excluded from collections, refresh persistence, empty states, N/A on zero denominators, 390px layout without overflow, no page errors, no CRM record mutations.
 - 675 automated tests pass (15 new in ownerPerformance.ai7a.test.ts); typecheck and production build clean.
 - Deferred: AI-7B coaching, screen-reader acceptance, employee preview check for this page.
+
+## AI-7B — Owner AI Performance Coach (2026-11-03)
+- AI Briefing section on My Performance: period briefing, suggested daily plan, evidence-based bottlenecks, max 3 recommendations opening existing workflows, personal coach, previous-period comparison, target progress. Demo Mode labelled throughout.
+- Browser acceptance (synthetic Owner data): 8 calls/1 connected flagged as low-connection; qualified-without-next-step and stale-proposal bottlenecks with correct lead links; overdue plan items; employee events (2 connected calls) never credited; empty custom period shows "Insufficient information"; previous-period comparison honestly unavailable; "Target not configured"; refresh consistency; zero record mutations on viewing; 390px layout clean; no page errors. Metrics reconcile with the My Performance stats on the same page.
+- 694 automated tests pass (19 new in perfCoach.ai7b.test.ts: period math, attribution, each bottleneck rule, insufficient-data, lead association, no-mutation); typecheck and production build clean.
+- Deferred: final Owner AI polish, screen-reader acceptance, secure OpenRouter via the future backend.
