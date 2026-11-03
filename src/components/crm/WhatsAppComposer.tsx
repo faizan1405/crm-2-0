@@ -12,6 +12,7 @@ import { activeQuotationTemplates, composeDraft, formatPackagePrice, selectedDem
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { AIImprovePanel } from "@/components/ai/AIImprovePanel";
 import { QuotationTemplateEditor } from "@/components/studio/QuotationTemplateEditor";
 import { cn } from "@/lib/utils";
 
@@ -69,6 +70,8 @@ function ComposerBody({ lead, source, preset, close, onDirty }: { lead: Lead; so
   const [base, setBase] = useState(fresh);
   const [edited, setEdited] = useState(!!preset.text);
   const [opened, setOpened] = useState(false);
+  /** Draft before the last accepted AI improvement (Undo restores it). */
+  const [beforeAI, setBeforeAI] = useState<string | null>(null);
   // A hand-edited message is a draft worth protecting; a purpose/package-generated one can be rebuilt.
   useEffect(() => { onDirty(edited && !!text.trim()); }, [edited, text, onDirty]);
   const sync = syncDraft({ text, base, edited }, fresh);
@@ -161,6 +164,10 @@ function ComposerBody({ lead, source, preset, close, onDirty }: { lead: Lead; so
         <div className="flex items-center justify-between"><label htmlFor="wa-text" className="text-xs font-semibold">Message</label><span className="num text-[11px] text-muted-foreground">{text.length} chars</span></div>
         <Textarea id="wa-text" value={text} onChange={(e) => { setText(e.target.value); setEdited(true); }} rows={8} placeholder={purpose === "custom" ? "Write your message…" : ""} className="wa-editor min-h-40 text-sm leading-relaxed" />
       </div>
+      {purpose === "custom" && !opened && <div className="grid gap-2">
+        {beforeAI !== null && <div role="status" className="flex flex-wrap items-center gap-2 text-xs"><Check className="size-3.5 text-success" /><span className="flex-1">Improved text is in your message — you can still edit it.</span><Button type="button" size="sm" variant="ghost" onClick={() => { setText(beforeAI); setEdited(true); setBeforeAI(null); }}><RefreshCw className="size-3.5" />Undo improvement</Button></div>}
+        <AIImprovePanel draft={text} firstName={lead.name.split(/\s+/)[0]} onUse={(t) => { setBeforeAI(text); setText(t); setEdited(true); }} />
+      </div>}
       {opened ? (
         <div className="wa-after" role="status"><Check className="size-4 text-success" /><span className="flex-1 text-xs">WhatsApp opened. It isn't marked as sent — log it only if you actually sent it.</span><Button size="sm" variant="ghost" onClick={close}>Close</Button><Button size="sm" onClick={logIt}>{purpose === "quotation" && pkg ? "I sent it — log to history" : "Log to history"}</Button></div>
       ) : (
