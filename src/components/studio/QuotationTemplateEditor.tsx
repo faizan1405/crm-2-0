@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { selectCls } from "@/components/crm/Shell";
 import { onRovingKeyDown, roving } from "@/lib/a11y/tabKeys";
+import { QuotationAIPanel } from "@/components/studio/QuotationAIPanel";
+import { Undo2 } from "lucide-react";
 
 /** Create or edit one reusable package. Saving changes the global template only — never deals, payments or sent history. */
 export function QuotationTemplateEditor({ initial, previewLeadId, onClose, onSaved }: { initial?: QuotationTemplate | undefined; previewLeadId?: string | undefined; onClose: () => void; onSaved?: (id: string) => void }) {
@@ -25,6 +27,7 @@ export function QuotationTemplateEditor({ initial, previewLeadId, onClose, onSav
   const [view, setView] = useState<"write" | "preview">("write");
   const [leadId, setLeadId] = useState(previewLeadId ?? leads[0]?.id ?? "");
   const ref = useRef<HTMLTextAreaElement>(null);
+  const [beforeAI, setBeforeAI] = useState<string | null>(null);
   const dirty = JSON.stringify(t) !== JSON.stringify(start);
   const err = quotationTemplateError(t);
   const mismatch = priceMismatch(t);
@@ -79,6 +82,10 @@ export function QuotationTemplateEditor({ initial, previewLeadId, onClose, onSav
               <label htmlFor="qt-body" className="text-xs font-semibold">Quotation message</label>
               <Textarea id="qt-body" {...errProps("body")} ref={ref} rows={12} value={t.messageBody} onChange={(e) => set({ messageBody: e.target.value })} className="min-h-64 text-sm leading-relaxed" placeholder="Describe the package: what's included, timeline, support, payment terms…" />
               <div className="flex flex-wrap items-center gap-1.5" aria-label="Insert placeholder"><span className="text-[11px] text-muted-foreground">Insert:</span>{QUOTATION_PLACEHOLDERS.map((k) => <button key={k} type="button" className="ph-chip" onClick={() => insert(k)}>{`{${k}}`}</button>)}</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <QuotationAIPanel body={t.messageBody} leadRequirement={previewLeadId ? leads.find((l) => l.id === previewLeadId)?.requirement : undefined} leadName={previewLeadId ? leads.find((l) => l.id === previewLeadId)?.name : undefined} onUse={(text) => { setBeforeAI(t.messageBody); set({ messageBody: text }); }} />
+                {beforeAI !== null && <Button type="button" size="sm" variant="ghost" onClick={() => { set({ messageBody: beforeAI }); setBeforeAI(null); }}><Undo2 className="size-3.5" />Undo improvement</Button>}
+              </div>
               <p className="text-[11px] text-muted-foreground">Use {"{packagePrice}"} instead of typing the price, so the message always matches the saved price. Lines with details a client doesn't have are left out.</p>
             </div>
           ) : (
