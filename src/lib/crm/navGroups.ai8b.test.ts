@@ -28,3 +28,12 @@ describe("AI-8B sidebar groups", () => {
     expect(visibleGroups(() => false)).toEqual([]);
   });
 });
+
+describe("AI-9A: corrupted open-group preference", () => {
+  it("a list containing only unknown or non-text entries recovers to all six groups open", () => {
+    expect(parseOpenGroups('["nope",5]')).toHaveLength(6);
+  });
+  it("an empty list (user closed every group) stays empty", () => {
+    expect(parseOpenGroups("[]")).toEqual([]);
+  });
+});
