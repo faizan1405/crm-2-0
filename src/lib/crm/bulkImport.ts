@@ -4,6 +4,7 @@
 import type { Lead, LeadPriority, LeadSource } from "./types";
 import { LEAD_SOURCES } from "./types";
 import { validEmail, validPhone, leadCreateError } from "./validation";
+import { normalizePhone } from "./inbox";
 
 export const MAX_IMPORT_ROWS = 50;
 export const MAX_FILE_BYTES = 1_000_000;
@@ -97,7 +98,8 @@ export function buildRows(t: ParsedTable, mapping: ImportField[]): PreviewRow[] 
   });
 }
 
-export const phoneKey = (p: string) => { const d = p.replace(/\D/g, ""); return validPhone(p) ? d.slice(-10) : ""; };
+/** Same country-aware normalization as Smart Inbox: +91 / 0-prefixed / bare Indian mobiles collapse to one key. */
+export const phoneKey = (p: string) => normalizePhone(p) ?? "";
 
 /** Budget text → number. Accepts "₹40,000", "40000", "40k", "1.5L"; "" → undefined; anything else → NaN (invalid). */
 export function parseBudget(s: string): number | undefined {
