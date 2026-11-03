@@ -77,6 +77,8 @@ describe("AI-9C Project explicit-save navigation protection", () => {
     fireEvent.change(await screen.findByLabelText("Project name"), { target: { value: "Back draft" } });
     history.back();
     fireEvent.click(await screen.findByRole("button", { name: "Keep editing" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await new Promise((resolve) => setTimeout(resolve, 100));
     expect(router.state.location.pathname).toBe("/projects");
     expect((screen.getByLabelText("Project name") as HTMLInputElement).value).toBe("Back draft");
     history.back();
