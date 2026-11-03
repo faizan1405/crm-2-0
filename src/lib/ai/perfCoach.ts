@@ -5,10 +5,11 @@
 // Swap point: a future secure server provider can replace `buildCoachReport`
 // behind the same `CoachReport` contract; the UI never changes.
 import type { ActivityEvent } from "@/lib/crm/activity";
-import type { Deal, Employee, FollowUp, GoalDef, GoalRevision, Lead, LeadActivity, Payment } from "@/lib/crm/types";
+import type { Deal, FollowUp, Lead, LeadActivity, Payment } from "@/lib/crm/types";
+import type { Employee } from "@/lib/crm/team";
 import type { QuotationShare } from "@/lib/crm/studio";
 import { ownerMetrics, type OwnerMetrics } from "@/lib/crm/ownerPerformance";
-import { goalProgress, goalsFor, indexEvents, metricValue, PROGRESS_LABEL, visibleGoal, type Window } from "@/lib/crm/performance";
+import { goalProgress, goalsFor, indexEvents, metricValue, PROGRESS_LABEL, visibleGoal, type GoalDef, type GoalRevision, type Window } from "@/lib/crm/performance";
 import { isPending, suggestFollowUp } from "@/lib/crm/followups";
 import { dayKey } from "@/lib/crm/format";
 import { shiftDay } from "@/lib/crm/dates";
