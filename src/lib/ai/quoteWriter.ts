@@ -133,7 +133,7 @@ export function draftScope(body: string, requirements: string, lang: QuoteLang, 
   const feats: string[] = [];
   for (const [re, label] of FEATURES) { const m = requirements.match(re); if (m) { const f = label.replace("$1", m[1] ?? ""); if (!feats.includes(f)) feats.push(f); } }
   const reqLines = requirements.split(/\n|;|(?<=\.)\s/).map((x) => x.trim()).filter(Boolean);
-  const termLines = [...new Set([...body.split("\n"), ...reqLines].map((x) => x.trim().replace(/^[-•*]\s*/, "")).filter((x) => x && COMMERCIAL_LINE.test(x) && !/^hi\b/i.test(x)))];
+  const termLines = [...new Set([...body.split("\n"), ...reqLines].map((x) => x.trim().replace(/^[-•*]\s*/, "")).filter((x) => x && (COMMERCIAL_LINE.test(x) || /\d|₹/.test(x)) && !/\{clientName\}/.test(x) && !/^investment:/i.test(x)))];
   const pick = (re: RegExp) => termLines.filter((x) => re.test(x));
   const support = pick(/support|maintenance|warranty/i);
   const terms = termLines.filter((x) => !support.includes(x));
