@@ -4,7 +4,10 @@ import { runFollowUp, runVoid } from "@/components/crm/conflictFeedback";
 import { openCallLog } from "@/components/crm/PostCallDialog";
 import { CallButton } from "@/components/crm/CallButton";
 import { createFileRoute, Link, useBlocker } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
+import { LeadNoteEditor } from "@/components/ai/LeadNoteEditor";
+import { buildLeadContext } from "@/lib/ai/context";
 import { toast } from "sonner";
 import { ArrowLeft, Phone, MessageCircle, Mail, CalendarPlus, Check, Pencil, Sparkles } from "lucide-react";
 import { Shell, PriorityBadge, selectCls, Identity } from "@/components/crm/Shell";
@@ -43,12 +46,13 @@ function LeadDetail() {
   const { id } = Route.useParams();
   const { leads, activities, followUps, deals, updateLead, completeFollowUp, addActivity, setQuickStatus, wasteLead, deleteLead } = useCRM();
   const navigate = useNavigate();
-  const { can } = useAccess();
+  const { can, preview } = useAccess();
   const lead = leads.find((l) => l.id === id);
   const [edit, setEdit] = useState(false);
   const [fu, setFu] = useState(false);
   const [lost, setLost] = useState(false);
-  const [note, setNote] = useState("");
+  const ctxSrc = useCRM(useShallow((s) => ({ leads: s.leads, activities: s.activities, followUps: s.followUps, deals: s.deals, payments: s.payments, assignments: s.assignments })));
+  const noteCtx = useMemo(() => buildLeadContext(ctxSrc, id, preview), [ctxSrc, id, preview]);
   if (!lead) return <Shell title="Lead not found"><Link to="/leads" className="text-primary">Back to leads</Link></Shell>;
   const acts = activities.filter((a) => a.leadId === id);
   const fus = followUps.filter((f) => f.leadId === id).sort((a, b) => a.dueAt.localeCompare(b.dueAt));
@@ -88,12 +92,11 @@ function LeadDetail() {
           </section>
           <section className="surface p-5">
             <h2 className="mb-3 font-semibold">Activity</h2>
-            <form className="mb-4 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (!note.trim()) return; if (addActivity(id, note.trim()) === false) { toast.error("You don't have permission to add client notes."); return; } setNote(""); }}>
-              <Input placeholder="Log a note or call outcome…" value={note} onChange={(e) => setNote(e.target.value)} /><Button type="submit" variant="outline">Log</Button>
-            </form>
+            <LeadNoteEditor key={id} leadId={id} lead={noteCtx?.ok ? noteCtx.lead : undefined} canFollowUp={can("followups.create")} onFollowUp={() => setFu(true)}
+              onSave={(t) => { if (addActivity(id, t) === false) { toast.error("You don't have permission to add client notes."); return false; } toast.success("Note saved to history"); return true; }} />
             <ol className="relative grid gap-4 border-l pl-5">
               {acts.map((a) => (
-                <li key={a.id} className="text-sm"><span className="absolute -left-[5px] mt-1.5 size-2.5 rounded-full border-2 border-card bg-primary" /><div>{a.text}</div><div className="text-xs text-muted-foreground">{formatDateTime(a.at)}</div></li>
+                <li key={a.id} className="text-sm"><span className="absolute -left-[5px] mt-1.5 size-2.5 rounded-full border-2 border-card bg-primary" /><div className="whitespace-pre-line break-words">{a.text}</div><div className="text-xs text-muted-foreground">{formatDateTime(a.at)}</div></li>
               ))}
             </ol>
           </section>
