@@ -108,6 +108,7 @@ describe("AI-6A requirements and task suggestions", () => {
     expect(s.find((x) => x.title === "Gallery page")?.duplicateOf).toBe("Gallery page");
     expect(s.find((x) => x.title === "Payment gateway integration")?.duplicateOf).toBeUndefined();
     expect(findDuplicate("SEO setup for site", four)).toBe("SEO setup");
+    expect(findDuplicate("5 page website with contact form", four)).toBeUndefined();
   });
   it("generation never mutates the input project or tasks", () => {
     const p = base({ requirements: [{ id: "r", label: "Logo", done: false }] });

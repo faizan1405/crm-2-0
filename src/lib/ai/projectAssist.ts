@@ -127,18 +127,22 @@ export function structureRequirements(brief: string, ctx: ProjectAIContext): Str
 }
 
 // ---------- Task suggestions ----------
-export interface TaskSuggestion { id: string; title: string; description: string; reason: string; duplicateOf?: string }
+export interface TaskSuggestion { id: string; title: string; description: string; reason: string; duplicateOf?: string; similarTo?: string }
 const STOP = new Set(["the", "a", "an", "and", "or", "of", "for", "to", "on", "in", "with", "add", "set", "up", "setup", "create", "make", "build", "do", "page", "task", "client", "follow", "qa", "handover", "check", "review", "implement"]);
 const words = (s: string) => new Set(s.toLowerCase().normalize("NFKC").replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter((w) => w.length > 1 && !STOP.has(w)));
-export function findDuplicate(title: string, existing: { title: string }[]): string | undefined {
+export function findDuplicate(title: string, existing: { title: string }[]): string | undefined { return matchTask(title, existing).dup; }
+/** dup = effectively the same task; similar = overlapping wording worth a look (still allowed). */
+export function matchTask(title: string, existing: { title: string }[]): { dup?: string; similar?: string } {
   const a = words(title);
+  let similar: string | undefined;
   for (const t of existing) {
     const b = words(t.title);
-    if (!a.size || !b.size) { if (t.title.trim().toLowerCase() === title.trim().toLowerCase()) return t.title; continue; }
+    if (!a.size || !b.size) { if (t.title.trim().toLowerCase() === title.trim().toLowerCase()) return { dup: t.title }; continue; }
     let inter = 0; for (const w of a) if (b.has(w)) inter++;
-    if (inter / Math.min(a.size, b.size) >= 0.6) return t.title;
+    if (inter / Math.max(a.size, b.size) >= 0.5 && inter / Math.min(a.size, b.size) >= 0.99) return { dup: t.title };
+    if (!similar && inter / Math.min(a.size, b.size) >= 0.6) similar = t.title;
   }
-  return undefined;
+  return similar ? { similar } : {};
 }
 export function suggestTasks(ctx: ProjectAIContext): { suggestions: TaskSuggestion[]; notices: string[] } {
   const notices: string[] = [];
@@ -150,8 +154,8 @@ export function suggestTasks(ctx: ProjectAIContext): { suggestions: TaskSuggesti
     const t = title.replace(/\s+/g, " ").trim().slice(0, 120);
     const k = t.toLowerCase();
     if (!t || seen.has(k)) return; seen.add(k);
-    const dup = findDuplicate(t, ctx.tasks);
-    out.push({ id: `sg_${out.length}`, title: t, description, reason, ...(dup ? { duplicateOf: dup } : {}) });
+    const m = matchTask(t, ctx.tasks);
+    out.push({ id: `sg_${out.length}`, title: t, description, reason, ...(m.dup ? { duplicateOf: m.dup } : m.similar ? { similarTo: m.similar } : {}) });
   };
   for (const r of ctx.requirements.filter((x) => !x.done)) push(r.label, "Work on this recorded requirement.", "Open item in the Requirements checklist.");
   if (ctx.scope) for (const l of splitBrief(ctx.scope)) if (RX.deliverable.test(l) || RX.functional.test(l)) push(l, "Taken word-for-word from the agreed scope.", "Stated in the recorded agreed scope.");

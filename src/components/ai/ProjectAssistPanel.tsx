@@ -113,7 +113,7 @@ export function ProjectAssistPanel({ projectId, onClose }: { projectId: string; 
           <div className="text-xs text-muted-foreground">{t.description}</div>
           <div className="text-xs">Why: {t.reason}</div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            {t.duplicateOf ? <span className="pd-pill">Already a task: “{t.duplicateOf}”</span> : <span className="text-xs text-muted-foreground">No matching task yet</span>}
+            {t.duplicateOf ? <span className="pd-pill">Already a task: “{t.duplicateOf}”</span> : t.similarTo ? <span className="pd-pill">Similar to existing task “{t.similarTo}” — check before adding</span> : <span className="text-xs text-muted-foreground">No matching task yet</span>}
             <Button type="button" size="sm" variant="outline" disabled={!!t.duplicateOf} onClick={() => { setDraft({ projectId, title: t.title, reason: t.reason }); void navigate({ to: "/projects/$id", params: { id: projectId }, search: { tab: "tasks" } }); toast.message("Draft placed in Add task — review it and click Add to save."); }}><ListChecks className="size-3.5" />Open in Add task</Button>
           </div>
         </li>)}</ul>
