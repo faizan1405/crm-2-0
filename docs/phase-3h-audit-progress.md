@@ -743,3 +743,17 @@ Error state: "simulate error" → alert + Try again — Passed.
 No mutation: leads/deals/payments/activities 12/4/4/12 before and after — Passed. No external requests except fonts.
 10. 1280px and 390px: no sideways scroll — Passed.
 Not done: real OpenRouter (deliberately), screen reader.
+
+## AI-2 — Lead Intelligence (Demo Analysis)
+Isolated test browser, 6 synthetic leads (`ai2_*`), demo data only; Owner data untouched. 10 new tests (`intelligence.ai2.test.ts`).
+- Ask AI from Pipeline inspector → `/ai-copilot?lead=ai2_over`, correct lead — Passed.
+- New, no contact → Medium, "Call the lead" — Passed.
+- Overdue follow-up → High, "Call the lead" — Passed.
+- Qualified, no follow-up booked → High, "Schedule a follow-up"; interest from notes shown — Passed.
+- Proposal, last activity 12 days ago → High, "Call the lead" — Passed.
+- Won → Low, "No action currently needed" — Passed.
+- Thin lead → "Insufficient information", gaps listed, "Not enough information" shown — Passed.
+- Lead switch cleared previous answers — Passed. Follow-up form opened and closed without saving — Passed.
+- Records 18/4/4/15/7 (leads/deals/payments/activities/follow-ups) and manual priorities unchanged — Passed.
+- Employee preview (assigned-only, no finance): own lead analysed without Opportunity amount; another lead refused; after the assignment was removed, analysis blocked immediately — Passed.
+- 390px: no sideways scroll — Passed.

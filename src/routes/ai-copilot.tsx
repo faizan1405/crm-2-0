@@ -8,6 +8,7 @@ import { useAccess, allows } from "@/lib/crm/session";
 import { openWhatsApp } from "@/components/crm/WhatsAppComposer";
 import { openCallLog } from "@/components/crm/PostCallDialog";
 import { FollowUpDialog } from "@/components/crm/Dialogs";
+import { LeadIntelligencePanel } from "@/components/ai/LeadIntelligencePanel";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -87,6 +88,8 @@ function CopilotPage() {
         <span className="text-muted-foreground">Answers are simulated examples from fixed rules — no AI model, no internet, nothing sent or changed.</span>
       </div>
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="grid min-w-0 content-start gap-5">
+        {lead && <LeadIntelligencePanel key={lead.leadId} lead={lead} phone={src.leads.find((x) => x.id === lead.leadId)?.phone} canFollowUp={allows(preview, "followups.create")} onFollowUp={() => setFuFor(lead.leadId)} />}
         <section className="surface flex min-h-[60dvh] flex-col p-0" aria-label="Conversation">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
             <div className="flex min-w-0 items-center gap-2 text-sm" data-testid="ctx-indicator">
@@ -121,6 +124,7 @@ function CopilotPage() {
             <p className="mt-2 text-[11px] text-muted-foreground">AI-generated content can be wrong. Check details before acting — suggestions never change your CRM until you choose to.</p>
           </form>
         </section>
+        </div>
         <aside className="grid content-start gap-4">
           <div className="surface p-4">
             <label className="eyebrow mb-2 block" htmlFor="ai-lead">Lead context</label>

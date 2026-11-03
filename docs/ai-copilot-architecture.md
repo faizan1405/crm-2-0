@@ -21,3 +21,18 @@ Replace `getProvider()` with a client that calls an authenticated server functio
 - Request timeout + bounded retry (`timeout`/`unavailable`, `retryable`).
 - Privacy-safe logging: no prompt/response bodies or customer data in logs.
 - AI never writes Leads, Deals or Payments; suggested actions require explicit user confirmation.
+
+## AI-2 — Lead Intelligence & Next Best Action (Demo Analysis)
+- `LeadContext.facts` (built in `buildLeadContext`, same permission filtering): stage key, email present, call attempts / connected / unsuccessful streak, latest interaction, next follow-up + overdue, last activity, lost reason. Payment activity still removed for no-finance viewers.
+- `src/lib/ai/intelligence.ts` pure `analyzeLead(ctx, now)` → summary, recorded facts, suggested attention (High / Medium / Low / Insufficient information — separate from manual priority, never written), signals, buying-intent signals, missing information, one primary next action + up to 2 alternatives, each with a reason. Missing data shows "Not enough information". Quoted/budget value is never used as intent.
+- Rules: Won/Lost → Low, no action. Overdue follow-up, Qualified without a booked follow-up, or Proposal with 7+ quiet days → High. No contact, unanswered calls, or interest in notes → Medium. Too little recorded → Insufficient information. 2+ unanswered calls in a row → suggest a follow-up at another time instead of calling again.
+- `src/components/ai/LeadIntelligencePanel.tsx` (labelled "Demo Analysis · fixed rules, not a live AI model") shown in the Copilot whenever a lead is selected (Ask AI from Pipeline inspector / lead page). Buttons only open existing forms (call button, follow-up form, message composer, lead page).
+
+## Upcoming (not implemented)
+- AI-3 Sales Coaching and WhatsApp assistance.
+- AI-4 Smart Follow-ups and AI Analytics.
+- AI-5 My Performance / Owner Performance dashboard (daily, weekly, monthly).
+- AI-6 Collapsible sidebar groups: Workspace, Business, Personal, Owner, Owner Admin; whole-sidebar collapse; role-aware visibility.
+- AI-7 Final AI frontend testing.
+- Owner's manual check of the 3 real quotation packages.
+- Secure OpenRouter backend integration (Antigravity + Hostinger) only after explicit approval.
