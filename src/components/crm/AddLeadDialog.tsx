@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { Sparkles, AlertTriangle, PenLine } from "lucide-react";
+import { Sparkles, AlertTriangle, PenLine, Layers } from "lucide-react";
+import { BulkImportPanel } from "./BulkImportPanel";
 import { useCRM, duplicatePhone } from "@/lib/crm/store";
 import { amountFieldError, validEmail, validPhone } from "@/lib/crm/validation";
 import { businessDateTime } from "@/lib/crm/dates";
@@ -34,7 +35,8 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const [cf, setCf] = useState<Record<string, Draft>>(cfInit);
   const [cfErr, setCfErr] = useState<Record<string, string>>({});
   const [tagIds, setTagIds] = useState<string[]>([]);
-  const [mode, setMode] = useState<"ai" | "manual">("ai");
+  const [mode, setMode] = useState<"ai" | "manual" | "bulk">("ai");
+  const [bulkDirty, setBulkDirty] = useState(false);
   const [raw, setRaw] = useState("");
   const [f, setF] = useState<Form>(blank);
   const [structured, setStructured] = useState(false);
@@ -42,10 +44,10 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const [allowDup, setAllowDup] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof Form, string>>>({});
   const dup = duplicatePhone(leads, f.phone);
-  const dirty = !!raw.trim() || (Object.keys(f) as (keyof Form)[]).some((k) => String(f[k] ?? "") !== String(blank[k] ?? "")) || tagIds.length > 0 || JSON.stringify(cf) !== JSON.stringify(cfInit());
+  const dirty = (mode === "bulk" && bulkDirty) || !!raw.trim() || (Object.keys(f) as (keyof Form)[]).some((k) => String(f[k] ?? "") !== String(blank[k] ?? "")) || tagIds.length > 0 || JSON.stringify(cf) !== JSON.stringify(cfInit());
   const set = (k: keyof Form) => (e: { target: { value: string } }) => setF((p) => ({ ...p, [k]: e.target.value }));
 
-  const close = () => { setCf(cfInit()); setCfErr({}); setTagIds([]); onOpenChange(false); setF(blank); setRaw(""); setStructured(false); setHint(undefined); setAllowDup(false); setErrors({}); };
+  const close = () => { setBulkDirty(false); setMode("ai"); setCf(cfInit()); setCfErr({}); setTagIds([]); onOpenChange(false); setF(blank); setRaw(""); setStructured(false); setHint(undefined); setAllowDup(false); setErrors({}); };
 
   const structure = () => {
     if (!raw.trim()) { toast.error("Paste some lead details first"); return; }
@@ -92,22 +94,24 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const field = (k: keyof Form, label: string, props: React.ComponentProps<typeof Input> = {}) => (
     <div className="grid gap-1.5"><Label htmlFor={`f-${k}`}>{label}</Label><Input id={`f-${k}`} value={f[k]} onChange={set(k)} aria-invalid={!!errors[k]} {...(errors[k] ? { "aria-describedby": `f-${k}-error` } : {})} {...props} />{err(k)}</div>
   );
-  const showForm = mode === "manual" || structured;
+  const showForm = mode === "manual" || (mode === "ai" && structured);
 
   return (
     <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : close())}>
-      <DialogContent dirty={dirty} className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent dirty={dirty} className="max-h-[92vh] overflow-y-auto sm:max-w-2xl data-[bulk=true]:sm:max-w-5xl" data-bulk={mode === "bulk"}>
         <DialogHeader>
           <DialogTitle>Add lead</DialogTitle>
           <DialogDescription>A new opportunity starts here.</DialogDescription>
         </DialogHeader>
-        <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1" role="tablist" aria-label="Entry method" onKeyDown={onRovingKeyDown}>
-          {([["ai", "Quick AI Entry", Sparkles], ["manual", "Manual Entry", PenLine]] as const).map(([m, label, Icon]) => (
+        <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1" role="tablist" aria-label="Entry method" onKeyDown={onRovingKeyDown}>
+          {([["ai", "Quick AI Entry", Sparkles], ["manual", "Manual Entry", PenLine], ["bulk", "Bulk AI Import", Layers]] as const).map(([m, label, Icon]) => (
             <Button variant="ghost" key={m} role="tab" aria-selected={mode === m} tabIndex={roving(mode === m)} onClick={() => setMode(m)} className={cn("flex items-center justify-center gap-2 rounded-md py-1.5 text-sm font-medium transition-colors", mode === m ? "bg-card text-foreground shadow-card" : "text-muted-foreground hover:text-foreground")}>
-              <Icon className="size-4" />{label}
+              <Icon className="size-4 shrink-0" /><span className="truncate">{label}</span>
             </Button>
           ))}
         </div>
+
+        {mode === "bulk" && <BulkImportPanel onDirty={setBulkDirty} onClose={close} />}
 
         {mode === "ai" && (
           <div className="grid gap-3 rounded-lg border border-primary/20 bg-primary-soft/40 p-4">
