@@ -785,3 +785,10 @@ Browser (separate test browser; synthetic packages `qt_ai3d_a/b/c`, lead `ai3d_l
 
 ## AI-4A — Smart Follow-up Priorities
 Browser (separate test browser, clock fixed at 23:30 IST on 3 Nov 2026; synthetic leads `s4_*`, follow-ups `sf1–sf5`): Overdue = S4 Overdue only (its second future follow-up didn't duplicate); Due Today = 23:50 IST follow-up; Upcoming = 00:10 IST next-day follow-up ("tomorrow"); completed follow-up not overdue and that lead flagged missing; Qualified without follow-up → High missing; Proposal quiet 12 days (₹9,00,000 quoted, not used) → High review; Won lead not listed; thin lead → limitation. Summary 1/1/1/6. Schedule, Reschedule and WhatsApp opened and closed without changes; Lead Intelligence opened the right lead; refresh gave the same results; no external requests; 390px fits. 587 tests (10 new).
+
+## AI-4B browser acceptance (synthetic leads b4_*, script /tmp/browser/ai4b/run_ai4b.py)
+- Smart card Schedule follow-up shows "For Tara Thin" (lead b4_thn); cancel saved nothing; saved follow-up belonged to b4_thn after refresh; no other lead changed.
+- Drafts verified: new enquiry, unanswered call (2 recorded), quotation (recorded "Growth" share), pending requirements (Hinglish), unresponsive (Hindi), missing info (neutral wording, no quote claim), Won with booked after-sales follow-up.
+- Keep original unchanged draft; Try again changed wording; edit adding ₹9,999 and 15/11 blocked; Use suggestion inserted exact text incl. emoji/&; Undo restored; wa.me URL text exactly equalled final draft; no history entry before confirmation; no CRM mutations overall.
+- Switching Neha → Usha: unsaved guard appeared; no Neha text in Usha's composer. Lead page entry targets correct lead. 390px: no horizontal overflow. No external requests.
+- Not tested: employee preview; screen readers; a URL added inside the suggestion is blocked (by design — add it in the final message).

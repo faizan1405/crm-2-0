@@ -66,3 +66,14 @@ Planned (not built): AI-3B call prep, coaching, objections · AI-3C writing help
 - Rules: pending past due → Overdue (High; Low for after-sales); pending later today → Due Today (Medium); pending within 7 days → Upcoming (Low); no pending + Proposal and no activity for ≥ `THRESHOLDS.proposalStallDays` (7, same as AI-2) → Proposals Needing Review (High); no pending + active lead → Missing Next Follow-up (Qualified High, others Medium; thin leads Low + "insufficient" limitation). Completed/cancelled follow-ups are never actionable; Won/Lost leads only appear for genuine pending after-sales follow-ups. Quoted value is never used.
 - Summary counts follow-up records (overdue, due today, completed today in IST) and unique non-closed leads needing attention.
 - `SmartFollowUps` panel on Follow-ups; buttons open existing Call, Schedule/Reschedule form, WhatsApp composer, Lead Intelligence and lead page only.
+
+## AI-4B — Owner Smart Follow-up Message Writer (Demo Mode)
+
+- Files: `src/lib/ai/followupWriter.ts` (contracts `FollowUpDraftRequest/Result`, `FollowUpDraftProvider`, facts builder, demo drafter, protected-detail check; swap point `getFollowUpDraftProvider()`), `src/components/ai/FollowUpWriterPanel.tsx`.
+- Entry points: "AI Draft Message" on Smart Follow-up Priority cards, on the lead page Follow-ups section, and inside the WhatsApp Composer when Follow-up is selected. All reuse the existing composer; nothing new sends messages.
+- 7 purposes, 4 styles, English/Hindi/Hinglish/Preserve original. Facts come from permission-filtered `buildLeadContext` plus this lead's recorded quotation shares and next follow-up note only. "Context used" is shown.
+- Never claims a quotation was sent without a recorded share; missing requirement → neutral wording; Won leads → after-sales check-in. No amounts, dates, discounts or commitments are generated.
+- Suggestion is editable and separate from the draft. Use suggestion / Keep original / Try again; Undo restores the prior draft. Use is blocked if the (edited) suggestion drops the client's name or adds numbers, prices, dates or links not in the recorded facts or current draft (Owner can still type them into the final message manually).
+- Opening WhatsApp and "Log to history" are unchanged; no automatic sends, logs, follow-ups, stage, deal or payment changes.
+- Follow-up form opened for a specific lead now shows "For <lead name>".
+- Tests: `followupWriter.ai4b.test.ts` (8). 595 tests total.
