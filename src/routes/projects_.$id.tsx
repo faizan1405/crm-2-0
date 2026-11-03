@@ -307,14 +307,29 @@ function DeliveryTab({ p }: { p: Project }) {
   </div>;
 }
 
+type SupportPatch = Parameters<ReturnType<typeof useCRM.getState>["updateSupportRequest"]>[1];
 function SupportRow({ id, canEdit, owner, assignee, people, onUpdate }: { id: string; canEdit: boolean; owner: boolean; assignee: string; people: readonly { id: string; name: string }[]; onUpdate: ReturnType<typeof useCRM.getState>["updateSupportRequest"] }) {
   const x = useCRM((s) => s.supportRequests.find((r) => r.id === id))!;
   const [res, setRes] = useState(x.resolution ?? "");
+  // Version this row's draft/actions are based on; a newer saved version means another tab changed it.
+  const [seen, setSeen] = useState(x.version);
+  const [conflict, setConflict] = useState<{ patch: SupportPatch; ok: string } | null>(null);
   const done = x.status === "resolved" || x.status === "closed";
+  const run = (patch: SupportPatch, ok: string, base = seen) => {
+    const r = runGuarded(() => onUpdate(id, patch, base));
+    if (!r) { if (useCRM.getState().supportRequests.find((q) => q.id === id)?.version !== base) setConflict({ patch, ok }); return; }
+    if (r.value) { toast.error(r.value); return; }
+    setConflict(null);
+    setSeen(useCRM.getState().supportRequests.find((q) => q.id === id)?.version ?? base);
+    toast.success(ok);
+  };
+  const reloadLatest = () => { const cur = useCRM.getState().supportRequests.find((q) => q.id === id); if (cur) { setSeen(cur.version); setRes(cur.resolution ?? ""); } setConflict(null); };
+  const applyMine = () => { const cur = useCRM.getState().supportRequests.find((q) => q.id === id); if (!cur || !conflict) return; const patch = "resolution" in conflict.patch ? { ...conflict.patch, resolution: res } : conflict.patch; run(patch, conflict.ok, cur.version); };
   return <li className="pd-task" data-done={done || undefined}>
     <div className="flex flex-wrap items-start justify-between gap-2"><div className="min-w-0"><div className="text-sm font-medium">{x.title}</div><div className="text-xs text-muted-foreground">{SUPPORT_KIND_TEXT[x.kind]} · {x.priority} · {assignee} · opened {formatDate(x.createdAt)}{x.dueDate ? ` · due ${formatDate(x.dueDate)}` : ""} · coverage {x.coverage}</div></div><span className="pd-pill capitalize">{x.status.replace("_", " ")}</span></div>
     {x.description && <p className="mt-2 text-sm">{x.description}</p>}
-    {canEdit && !done && <div className="mt-2 grid gap-2"><Textarea aria-label="Resolution notes" rows={2} placeholder="Resolution notes" value={res} onChange={(e) => setRes(e.target.value)} /><div className="flex flex-wrap gap-2">{x.status === "open" && <Button size="sm" variant="outline" className="touch-hit" onClick={() => { const e = onUpdate(id, { status: "in_progress" }); if (e) toast.error(e); else toast.success("Request started"); }}>Start</Button>}<Button size="sm" className="touch-hit" onClick={() => { const e = onUpdate(id, { status: "resolved", resolution: res }); if (e) toast.error(e); else toast.success("Request resolved"); }}>Resolve</Button>{owner && <select aria-label="Coverage" className={cn(selectCls, "h-8 text-xs")} value={x.coverage} onChange={(e) => onUpdate(id, { coverage: e.target.value as typeof x.coverage })}><option value="undecided">Coverage undecided</option><option value="included">Included in agreement</option><option value="billable">Billable</option></select>}{owner && <select aria-label="Reassign request" className={cn(selectCls, "h-8 text-xs")} value={x.assigneeId ?? ""} onChange={(e) => { const er = onUpdate(id, { assigneeId: e.target.value || null }); if (er) toast.error(er); else toast.success("Request reassigned"); }}><option value="">Unassigned</option>{people.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>}</div></div>}
-    {done && x.resolution && <p className="mt-2 text-xs text-muted-foreground">Resolution: {x.resolution}{canEdit && <button type="button" className="ml-2 inline-flex items-center gap-1 underline" onClick={() => { const e = onUpdate(id, { status: "open" }); if (e) toast.error(e); else toast.success("Request reopened"); }}><RotateCcw className="size-3" />Reopen</button>}</p>}
+    {conflict && <div role="alert" className="mt-2 grid gap-2 rounded-md border border-warning/40 bg-warning/10 p-2 text-sm"><p>This support request was updated in another tab — it's now <b>{x.status.replace("_", " ")}</b>, assigned to {assignee}, coverage {x.coverage}. Nothing of yours was saved; your typed notes are kept below.</p><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" className="touch-hit" onClick={reloadLatest}>Reload latest</Button><Button size="sm" className="touch-hit" onClick={applyMine}>Apply my change</Button></div></div>}
+    {canEdit && (!done || conflict) && <div className="mt-2 grid gap-2"><Textarea aria-label="Resolution notes" rows={2} placeholder="Resolution notes" value={res} onChange={(e) => setRes(e.target.value)} />{!done && <div className="flex flex-wrap gap-2">{x.status === "open" && <Button size="sm" variant="outline" className="touch-hit" onClick={() => run({ status: "in_progress" }, "Request started")}>Start</Button>}<Button size="sm" className="touch-hit" onClick={() => run({ status: "resolved", resolution: res }, "Request resolved")}>Resolve</Button>{owner && <select aria-label="Coverage" className={cn(selectCls, "h-8 text-xs")} value={x.coverage} onChange={(e) => run({ coverage: e.target.value as typeof x.coverage }, "Coverage updated")}><option value="undecided">Coverage undecided</option><option value="included">Included in agreement</option><option value="billable">Billable</option></select>}{owner && <select aria-label="Reassign request" className={cn(selectCls, "h-8 text-xs")} value={x.assigneeId ?? ""} onChange={(e) => run({ assigneeId: e.target.value || null }, "Request reassigned")}><option value="">Unassigned</option>{people.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>}</div>}</div>}
+    {done && x.resolution && <p className="mt-2 text-xs text-muted-foreground">Resolution: {x.resolution}{canEdit && <button type="button" className="ml-2 inline-flex items-center gap-1 underline" onClick={() => run({ status: "open" }, "Request reopened")}><RotateCcw className="size-3" />Reopen</button>}</p>}
   </li>;
 }
