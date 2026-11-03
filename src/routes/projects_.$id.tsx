@@ -25,6 +25,7 @@ import { ProjectAssistPanel } from "@/components/ai/ProjectAssistPanel";
 import { useProjectTaskDraft } from "@/lib/ai/projectTaskDraft";
 import { Sparkles } from "lucide-react";
 import { SupportAssistPanel } from "@/components/ai/SupportAssistPanel";
+import { ProjectDraftGuard } from "@/components/projects/ProjectDraftGuard";
 
 type Tab = "overview" | "tasks" | "requirements" | "finance" | "activity" | "delivery";
 const TABS: Tab[] = ["overview", "tasks", "requirements", "finance", "activity", "delivery"];
@@ -60,7 +61,7 @@ function ProjectPage() {
       {v.owner && assist === p.id && <ProjectAssistPanel key={p.id} projectId={p.id} onClose={() => setAssist(null)} />}
       {flag && <div className="pd-note mb-4" role="alert">{flag} The project and its history are kept.</div>}
       <nav className="mb-6 max-w-full overflow-x-auto" aria-label="Project sections"><div className="seg w-max">{tabs.map((t) => <Link key={t} to="/projects/$id" params={{ id }} search={{ tab: t }} aria-pressed={tab === t}>{TAB_TEXT[t]}</Link>)}</div></nav>
-      {tab === "overview" && <OverviewTab p={p} />}
+      {tab === "overview" && <OverviewTab key={p.id} p={p} />}
       {tab === "tasks" && <TasksTab p={p} />}
       {tab === "requirements" && <RequirementsTab p={p} />}
       {tab === "finance" && canSeeProjectFinance(v) && <FinanceTab p={p} />}
@@ -82,12 +83,15 @@ function OverviewTab({ p }: { p: Project }) {
   const prog = projectProgress(tasks);
   const [f, setF] = useState({ name: p.name, scope: p.scope ?? "", bookingDate: p.bookingDate ?? "", plannedStart: p.plannedStart ?? "", actualStart: p.actualStart ?? "", targetDelivery: p.targetDelivery ?? "", priority: p.priority, ownerId: p.ownerId ?? "", notes: p.notes ?? "" });
   const [members, setMembers] = useState<string[]>(p.memberIds);
+  const [savedDraft, setSavedDraft] = useState(() => JSON.stringify({ f, members }));
+  const dirty = JSON.stringify({ f, members }) !== savedDraft;
   const [msg, setMsg] = useState<ProjectMessage>("kickoff");
   const lead = p.leadId ? leads.find((l) => l.id === p.leadId) : undefined;
-  const save = () => { const e = updateProject(p.id, { name: f.name, scope: f.scope || undefined, bookingDate: f.bookingDate || undefined, plannedStart: f.plannedStart || undefined, actualStart: f.actualStart || undefined, targetDelivery: f.targetDelivery || undefined, priority: f.priority, ownerId: f.ownerId || null, memberIds: members, notes: v.owner ? f.notes || undefined : p.notes }); if (e) toast.error(e); else toast.success("Project saved"); };
+  const save = () => { if (!dirty) return; const e = updateProject(p.id, { name: f.name, scope: f.scope || undefined, bookingDate: f.bookingDate || undefined, plannedStart: f.plannedStart || undefined, actualStart: f.actualStart || undefined, targetDelivery: f.targetDelivery || undefined, priority: f.priority, ownerId: f.ownerId || null, memberIds: members, notes: v.owner ? f.notes || undefined : p.notes }); if (e) toast.error(e); else { setSavedDraft(JSON.stringify({ f, members })); toast.success("Project saved"); } };
   const pending = [...p.requirements.filter((r) => !r.done).map((r) => r.label), ...p.dependencies.filter((d) => !d.done).map((d) => d.label)];
   const date = (k: "bookingDate" | "plannedStart" | "actualStart" | "targetDelivery", label: string) => <label className="grid gap-1.5 text-sm"><span className="text-muted-foreground">{label}</span><Input type="date" disabled={!canEdit} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} /></label>;
   return <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+    <ProjectDraftGuard dirty={dirty} />
     <div className="grid content-start gap-6">
     <Card title="Project information">
       <div className="grid gap-4">
@@ -100,7 +104,7 @@ function OverviewTab({ p }: { p: Project }) {
         </div>
         <fieldset className="grid gap-1.5 text-sm"><legend className="mb-1.5 text-muted-foreground">Team members</legend><div className="flex flex-wrap gap-2">{people.list.filter((x) => x.id !== "owner").map((x) => <label key={x.id} className="pd-chip"><input type="checkbox" disabled={!canEdit || !v.owner} checked={members.includes(x.id)} onChange={(e) => setMembers(e.target.checked ? [...members, x.id] : members.filter((m) => m !== x.id))} />{x.name}</label>)}{people.list.length === 1 && <span className="text-xs text-muted-foreground">No employees yet.</span>}</div><span className="text-xs text-muted-foreground">Project access is separate from lead assignment.</span></fieldset>
         {v.owner && <label className="grid gap-1.5 text-sm"><span className="text-muted-foreground">Internal notes (Owner only)</span><Textarea rows={3} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} placeholder="Never paste passwords here." /></label>}
-        {canEdit && <div className="flex justify-end"><Button onClick={save}>Save changes</Button></div>}
+        {canEdit && <div className="flex justify-end"><Button disabled={!dirty} onClick={save}>Save changes</Button></div>}
       </div>
     </Card>
     <ProjectAdditionalInfo projectId={p.id} />
@@ -341,7 +345,7 @@ function SupportRow({ id, canEdit, owner, assignee, people, onUpdate, aiOpen = f
   return <li className="pd-task" data-done={done || undefined}>
     <div className="flex flex-wrap items-start justify-between gap-2"><div className="min-w-0"><div className="text-sm font-medium">{x.title}</div><div className="text-xs text-muted-foreground">{SUPPORT_KIND_TEXT[x.kind]} · {x.priority} · {assignee} · opened {formatDate(x.createdAt)}{x.dueDate ? ` · due ${formatDate(x.dueDate)}` : ""} · coverage {x.coverage}</div></div><div className="flex items-center gap-2">{owner && onToggleAi && <Button type="button" size="sm" variant="outline" className="h-7 rounded-full px-2 text-xs" aria-expanded={aiOpen} aria-label={`AI Assist for ${x.title}`} onClick={onToggleAi}><Sparkles className="size-3" />AI Assist</Button>}<span className="pd-pill capitalize">{x.status.replace("_", " ")}</span></div></div>
     {x.description && <p className="mt-2 text-sm">{x.description}</p>}
-    {conflict && <div role="alert" className="mt-2 grid gap-2 rounded-md border border-warning/40 bg-warning/10 p-2 text-sm"><p>This support request was updated in another tab — it's now <b>{x.status.replace("_", " ")}</b>, assigned to {assignee}, coverage {x.coverage}. Nothing of yours was saved; your typed notes are kept below.</p><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" className="touch-hit" onClick={reloadLatest}>Reload latest</Button><Button size="sm" className="touch-hit" onClick={applyMine}>Apply my change</Button></div></div>}
+    {conflict && <div role="alert" className="mt-2 grid gap-2 rounded-md border border-warning/40 bg-warning/10 p-2 text-sm"><p>This support request was updated in another tab — it's now <b>{x.status.replace("_", " ")}</b>, assigned to {assignee}, coverage {x.coverage}. Nothing of yours was saved; your typed notes are kept below.</p><p>Reload latest replaces your unsaved resolution-note draft with the latest saved notes. Apply my change keeps your draft and applies your change to the latest request.</p><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" className="touch-hit" onClick={reloadLatest}>Reload latest (discard draft)</Button><Button size="sm" className="touch-hit" onClick={applyMine}>Apply my change</Button></div></div>}
     {canEdit && (!done || conflict) && <div ref={(el) => { actionsRef.current = el; }} className="mt-2 grid gap-2"><Textarea aria-label="Resolution notes" rows={2} placeholder="Resolution notes" value={res} onChange={(e) => setRes(e.target.value)} />{!done && <div className="flex flex-wrap gap-2">{x.status === "open" && <Button size="sm" variant="outline" className="touch-hit" onClick={() => run({ status: "in_progress" }, "Request started")}>Start</Button>}<Button size="sm" className="touch-hit" onClick={() => run({ status: "resolved", resolution: res }, "Request resolved")}>Resolve</Button>{owner && <select aria-label="Coverage" className={cn(selectCls, "h-8 text-xs")} value={x.coverage} onChange={(e) => run({ coverage: e.target.value as typeof x.coverage }, "Coverage updated")}><option value="undecided">Coverage undecided</option><option value="included">Included in agreement</option><option value="billable">Billable</option></select>}{owner && <select aria-label="Reassign request" className={cn(selectCls, "h-8 text-xs")} value={x.assigneeId ?? ""} onChange={(e) => run({ assigneeId: e.target.value || null }, "Request reassigned")}><option value="">Unassigned</option>{people.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>}</div>}</div>}
     {done && x.resolution && <p ref={(el) => { if (el) actionsRef.current = el; }} className="mt-2 text-xs text-muted-foreground">Resolution: {x.resolution}{canEdit && <button type="button" className="ml-2 inline-flex items-center gap-1 underline" onClick={() => run({ status: "open" }, "Request reopened")}><RotateCcw className="size-3" />Reopen</button>}</p>}
     {owner && aiOpen && <SupportAssistPanel key={id} requestId={id} {...(x.assigneeId ? { assigneeName: assignee } : {})} onClose={() => onToggleAi?.()} onOpenResolution={() => { const el = actionsRef.current; el?.scrollIntoView({ block: "center", behavior: "smooth" }); el?.querySelector<HTMLElement>("textarea, button")?.focus(); }} />}

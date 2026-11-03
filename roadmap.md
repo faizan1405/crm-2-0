@@ -2,6 +2,9 @@
 
 Frontend-only demo. No backend; production CRM untouched.
 
+## AI-9C
+- [ ] Protect explicit-save Project overview drafts on navigation/Back/refresh, clarify Support reload, regression and browser checks, update readiness report; stop here.
+
 - [x] Phase 1 — Dashboard, Leads, Pipeline, Follow-ups, Deals & Payments, Notes
 - [x] Phase 2 — Analytics, Daily Briefing, Settings, Quick AI (demo parser) + Manual entry, lead details/edit, duplicate handling, unified store, browser tests
 - [x] Phase 2.5 — Browser interaction and responsive audit, consistency fixes, 30 passing business tests, Antigravity handoff documentation; remaining service/accessibility gaps documented
