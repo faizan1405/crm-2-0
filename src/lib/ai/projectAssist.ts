@@ -314,4 +314,3 @@ export function updateViolations(c: ProjectAIContext, original: string, text: st
 export const demoProjectAssistProvider: ProjectAssistProvider = { clientUpdate: async (req) => { await new Promise((r) => setTimeout(r, 120)); return demoClientUpdate(req); } };
 /** Swap point for the future secure server endpoint. */
 export const getProjectAssistProvider = (): ProjectAssistProvider => demoProjectAssistProvider;
-void (0 as unknown as typeof _t); declare const _t: unknown;
