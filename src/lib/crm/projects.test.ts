@@ -1,3 +1,4 @@
+import { StaleRecordError } from "./crossTab";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { useCRM } from "./store";
 import { startPreview, exitPreview } from "./preview";
@@ -172,6 +173,20 @@ describe("support", () => {
     expect(s().updateSupportRequest(sr.id, { status: "resolved" })).toMatch(/resolution/);
     expect(s().updateSupportRequest(sr.id, { status: "resolved", resolution: "Fixed SMTP" })).toBeNull();
     expect(s().supportRequests[0]!.resolvedAt).toBeTruthy();
+  });
+  it("F2C: an outdated save from another tab is refused and changes nothing", () => {
+    const id = make();
+    s().addSupportRequest({ projectId: id, kind: "bug", title: "Two tabs", priority: "normal", assigneeId: null });
+    const sr = s().supportRequests[0]!; const tabB = sr.version;
+    expect(s().updateSupportRequest(sr.id, { status: "in_progress" }, tabB)).toBeNull(); // Tab A saves
+    const after = s().supportRequests[0]!; const hist = s().projects.find((p) => p.id === id)!.history?.length;
+    for (const patch of [{ status: "resolved" as const, resolution: "old draft" }, { assigneeId: "owner" }, { coverage: "billable" as const }, { status: "open" as const }])
+      expect(() => s().updateSupportRequest(sr.id, patch, tabB)).toThrow(StaleRecordError);
+    expect(s().supportRequests[0]).toEqual(after);
+    expect(s().supportRequests).toHaveLength(1);
+    expect(s().projects.find((p) => p.id === id)!.history?.length).toBe(hist);
+    expect(s().updateSupportRequest(sr.id, { status: "resolved", resolution: "my draft" }, after.version)).toBeNull(); // explicit apply
+    expect(s().supportRequests[0]!.resolution).toBe("my draft");
   });
 });
 
