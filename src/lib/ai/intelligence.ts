@@ -100,5 +100,5 @@ export function analyzeLead(l: LeadContext, now = new Date()): LeadIntelligence 
   if (l.money) factsOut.push({ label: "Opportunity", value: l.money.quotedOrBudget !== undefined ? `₹${l.money.quotedOrBudget.toLocaleString("en-IN")} quoted/budget` : NOT_ENOUGH });
 
   const summary = `${l.name}${l.company ? ` (${l.company})` : ""} — ${l.stage}, from ${l.source}. ${l.requirement ? `Needs: ${l.requirement}.` : "Requirement: not recorded."}`;
-  return { summary, facts: factsOut, attention, attentionWhy: why, signals, intent: intent.length ? intent : [NOT_ENOUGH], missing, primary, alternatives: alt.slice(0, 2) };
+  return { summary, facts: factsOut, attention, attentionWhy: why, signals, intent: intent.length ? intent : [NOT_ENOUGH], missing: closed ? [] : missing, primary, alternatives: alt.slice(0, 2) };
 }
