@@ -98,7 +98,7 @@ export function AddLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
 
   return (
     <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : close())}>
-      <DialogContent dirty={dirty} className={cn("max-h-[92vh] overflow-y-auto", mode === "bulk" ? "sm:max-w-5xl" : "sm:max-w-2xl")}>
+      <DialogContent dirty={dirty} {...(mode === "bulk" ? { onInteractOutside: (e: Event) => e.preventDefault() } : {})} className={cn("max-h-[92vh] overflow-y-auto", mode === "bulk" ? "sm:max-w-5xl" : "sm:max-w-2xl")}>
         <DialogHeader>
           <DialogTitle>Add lead</DialogTitle>
           <DialogDescription>A new opportunity starts here.</DialogDescription>
