@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowUpRight, CalendarPlus, ChevronLeft, ChevronRight, Clock, Flame, Gem, NotebookPen, PhoneCall, X } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CalendarPlus, ChevronLeft, ChevronRight, Clock, Flame, Gem, NotebookPen, PhoneCall, X, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Shell, selectCls } from "@/components/crm/Shell";
@@ -222,6 +222,7 @@ function PipeInspector({ lead: l, canMove, onClose, onStage, onFollowUp }: { lea
         <CallButton leadId={l.id} phone={l.phone} name={l.name} source="Pipeline" />
         {can("clients.calls") && <Button variant="outline" size="sm" className="rounded-full" onClick={() => openCallLog(l.id, "Pipeline")}><PhoneCall className="size-3.5" />Log call</Button>}
         <WhatsAppButton leadId={l.id} name={l.name} source="Pipeline" label />
+        <Button variant="outline" size="sm" className="rounded-full" asChild><Link to="/ai-copilot" search={{ lead: l.id }}><Sparkles className="size-3.5" />Ask AI</Link></Button>
         {can("followups.create") && <Button variant="outline" size="sm" className="rounded-full" onClick={onFollowUp}><CalendarPlus className="size-3.5" />Follow-up</Button>}
         <Button variant="outline" size="sm" className="rounded-full" onClick={() => setNoting((v) => !v)} aria-expanded={noting}><NotebookPen className="size-3.5" />Note</Button>
       </div>

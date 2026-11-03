@@ -6,7 +6,7 @@ import { CallButton } from "@/components/crm/CallButton";
 import { createFileRoute, Link, useBlocker } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, Phone, MessageCircle, Mail, CalendarPlus, Check, Pencil } from "lucide-react";
+import { ArrowLeft, Phone, MessageCircle, Mail, CalendarPlus, Check, Pencil, Sparkles } from "lucide-react";
 import { Shell, PriorityBadge, selectCls, Identity } from "@/components/crm/Shell";
 import { FollowUpDialog, LostReasonDialog } from "@/components/crm/Dialogs";
 import { useCRM } from "@/lib/crm/store";
@@ -61,6 +61,7 @@ function LeadDetail() {
       actions={<div className="flex flex-wrap gap-2">
         <CallButton leadId={id} phone={lead.phone} name={lead.name} source="Lead detail" className="h-9 px-4" />{can("clients.calls") && <Button variant="outline" onClick={() => openCallLog(id, "Lead detail")}>Log call</Button>}
         <WhatsAppButton leadId={id} name={lead.name} source="Lead detail" label className="h-9 px-4" />
+        <Button variant="outline" asChild><Link to="/ai-copilot" search={{ lead: id }}><Sparkles className="size-4" />Ask AI</Link></Button>
         {can("followups.create") && <Button onClick={() => setFu(true)}><CalendarPlus className="size-4" />Follow-up</Button>}
       </div>}>
       <Link to="/leads" className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All leads</Link>
