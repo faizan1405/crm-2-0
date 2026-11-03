@@ -99,7 +99,7 @@ function CopilotPage() {
           </div>
           <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4" aria-live="polite">
             {!messages.length && !pending && !error && (
-              <Empty icon={<Sparkles />} title="Ask a sales question" hint={lead ? `Try one of these about ${lead.name}.` : "Choose a lead under "Lead context", or ask something general."}
+              <Empty icon={<Sparkles />} title="Ask a sales question" hint={lead ? `Try one of these about ${lead.name}.` : "Choose a lead in Lead context, or ask something general."}
                 action={<div className="flex flex-wrap justify-center gap-2">{SUGGESTED_QUESTIONS.filter((s) => lead || s.module === "general").map((s) => <Button key={s.text} size="sm" variant="outline" className="rounded-full" onClick={() => void ask(s.text, s.module)}>{s.text}</Button>)}</div>} />
             )}
             {messages.map((m) => m.role === "user"
