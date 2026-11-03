@@ -1,4 +1,5 @@
-import { WhatsAppButton } from "@/components/crm/WhatsAppComposer";
+import { WhatsAppButton, openWhatsApp } from "@/components/crm/WhatsAppComposer";
+import { allows, useSession } from "@/lib/crm/session";
 import { mailtoHref } from "@/lib/crm/validation";
 import { runFollowUp, runVoid } from "@/components/crm/conflictFeedback";
 import { openCallLog } from "@/components/crm/PostCallDialog";
@@ -114,7 +115,7 @@ function LeadDetail() {
             </div>}
           </section>
           <section className="surface p-5">
-            <h2 className="mb-3 font-semibold">Follow-ups</h2>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">Follow-ups</h2>{allows(useSession.getState().preview, "clients.whatsapp") && <Button size="sm" variant="outline" onClick={() => openWhatsApp(id, "Lead follow-ups", { purpose: "followup", aiDraft: true })}><Sparkles className="size-3.5" />AI Draft Message</Button>}</div>
             <div className="mb-3"><SuggestionList leadId={id} /></div>
             {fus.length === 0 && <p className="text-sm text-muted-foreground">None scheduled.</p>}
             <ul className="grid gap-2">
