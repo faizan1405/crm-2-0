@@ -13,11 +13,14 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { AIImprovePanel } from "@/components/ai/AIImprovePanel";
+import { FollowUpWriterPanel } from "@/components/ai/FollowUpWriterPanel";
+import type { FollowUpPurpose } from "@/lib/ai/followupWriter";
 import { QuotationTemplateEditor } from "@/components/studio/QuotationTemplateEditor";
 import { cn } from "@/lib/utils";
 
 /** `text` = a fully-resolved draft prepared elsewhere (e.g. Project Desk). It opens as an edited Custom message, so it is never overwritten silently. */
-export interface ComposerPreset { purpose?: WaPurpose; packageId?: string; text?: string }
+/** `aiDraft` opens the Follow-up AI Draft Message panel straight away (optionally with a suggested purpose). */
+export interface ComposerPreset { purpose?: WaPurpose; packageId?: string; text?: string; aiDraft?: boolean | FollowUpPurpose }
 /** UI-only state: which lead the composer is open for. Never persisted. */
 export const useWhatsApp = create<{ leadId: string | null; source: string; preset: ComposerPreset; nonce: number; open: (leadId: string, source: string, preset?: ComposerPreset) => void; close: () => void }>()((set) => ({
   leadId: null, source: "", preset: {}, nonce: 0,
@@ -81,7 +84,7 @@ function ComposerBody({ lead, source, preset, close, onDirty }: { lead: Lead; so
   const pick = (p: WaPurpose) => {
     if (p === purpose) return;
     if (edited && text.trim() && !window.confirm("Replace your edited message with the new template?")) return;
-    setPurpose(p); setTemplateId(null); setEdited(false);
+    setPurpose(p); setTemplateId(null); setEdited(false); setBeforeAI(null);
   };
   const choosePackage = (id: string) => {
     if (id === pkg?.id) return;
@@ -164,8 +167,9 @@ function ComposerBody({ lead, source, preset, close, onDirty }: { lead: Lead; so
         <div className="flex items-center justify-between"><label htmlFor="wa-text" className="text-xs font-semibold">Message</label><span className="num text-[11px] text-muted-foreground">{text.length} chars</span></div>
         <Textarea id="wa-text" value={text} onChange={(e) => { setText(e.target.value); setEdited(true); }} rows={8} placeholder={purpose === "custom" ? "Write your message…" : ""} className="wa-editor min-h-40 text-sm leading-relaxed" />
       </div>
+      {(purpose === "custom" || purpose === "followup") && !opened && beforeAI !== null && <div role="status" className="flex flex-wrap items-center gap-2 text-xs"><Check className="size-3.5 text-success" /><span className="flex-1">AI text is in your message — you can still edit it.</span><Button type="button" size="sm" variant="ghost" onClick={() => { setText(beforeAI); setEdited(true); setBeforeAI(null); }}><RefreshCw className="size-3.5" />Undo</Button></div>}
+      {purpose === "followup" && !opened && <FollowUpWriterPanel leadId={lead.id} draft={text} initialOpen={!!preset.aiDraft} {...(typeof preset.aiDraft === "string" ? { initialPurpose: preset.aiDraft } : {})} onUse={(t) => { setBeforeAI(text); setText(t); setEdited(true); }} />}
       {purpose === "custom" && !opened && <div className="grid gap-2">
-        {beforeAI !== null && <div role="status" className="flex flex-wrap items-center gap-2 text-xs"><Check className="size-3.5 text-success" /><span className="flex-1">Improved text is in your message — you can still edit it.</span><Button type="button" size="sm" variant="ghost" onClick={() => { setText(beforeAI); setEdited(true); setBeforeAI(null); }}><RefreshCw className="size-3.5" />Undo improvement</Button></div>}
         <AIImprovePanel draft={text} firstName={lead.name.split(/\s+/)[0]} onUse={(t) => { setBeforeAI(text); setText(t); setEdited(true); }} />
       </div>}
       {opened ? (
