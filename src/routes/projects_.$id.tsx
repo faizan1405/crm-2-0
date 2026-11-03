@@ -21,6 +21,9 @@ import { ProjectAdditionalInfo, ProjectTagPicker } from "@/components/projects/P
 import { ProgressBar, StagePill, StatusPill, useCanProject, usePeople, useProjectViewer } from "@/components/projects/ProjectParts";
 import { cn } from "@/lib/utils";
 import { runGuarded } from "@/components/crm/conflictFeedback";
+import { ProjectAssistPanel } from "@/components/ai/ProjectAssistPanel";
+import { useProjectTaskDraft } from "@/lib/ai/projectTaskDraft";
+import { Sparkles } from "lucide-react";
 
 type Tab = "overview" | "tasks" | "requirements" | "finance" | "activity" | "delivery";
 const TABS: Tab[] = ["overview", "tasks", "requirements", "finance", "activity", "delivery"];
@@ -44,12 +47,16 @@ function ProjectPage() {
   const p = useCRM((s) => s.projects.find((x) => x.id === id));
   const deals = useCRM((s) => s.deals), leads = useCRM((s) => s.leads);
   const v = useProjectViewer();
+  const [assist, setAssist] = useState<string | null>(null);
+  const clearDraft = useProjectTaskDraft((s) => s.clear);
+  useEffect(() => { setAssist(null); return () => { const d = useProjectTaskDraft.getState().draft; if (d && d.projectId === id) clearDraft(); }; }, [id, clearDraft]);
   if (!p || !canSeeProject(p, v)) return <Shell title="Project"><div className="receipt"><Empty icon={<FolderKanban />} title="Project not available" hint="It doesn't exist or isn't assigned to you." action={<Link to="/projects" className="text-sm underline">Back to Project Desk</Link>} /></div></Shell>;
   const flag = reversalFlag(p, deals, leads);
   const tabs = TABS.filter((t) => t !== "finance" || canSeeProjectFinance(v));
   return (
     <Shell title={p.name} subtitle={`${p.clientName}${p.company ? ` · ${p.company}` : ""} · ${p.type}`}>
-      <div className="mb-4 flex flex-wrap items-center gap-2"><Link to="/projects" search={{ tab: "all" }} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />Project Desk</Link><span className="flex-1" /><StatusPill status={p.status} /><StagePill stage={p.stage} />{p.archived && <span className="pd-pill">Archived</span>}</div>
+      <div className="mb-4 flex flex-wrap items-center gap-2"><Link to="/projects" search={{ tab: "all" }} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />Project Desk</Link><span className="flex-1" /><StatusPill status={p.status} /><StagePill stage={p.stage} />{p.archived && <span className="pd-pill">Archived</span>}{v.owner && <Button size="sm" variant="outline" className="rounded-full" aria-expanded={assist === p.id} onClick={() => setAssist(assist === p.id ? null : p.id)}><Sparkles className="size-3.5" />AI Assist</Button>}</div>
+      {v.owner && assist === p.id && <ProjectAssistPanel key={p.id} projectId={p.id} onClose={() => setAssist(null)} />}
       {flag && <div className="pd-note mb-4" role="alert">{flag} The project and its history are kept.</div>}
       <nav className="mb-6 max-w-full overflow-x-auto" aria-label="Project sections"><div className="seg w-max">{tabs.map((t) => <Link key={t} to="/projects/$id" params={{ id }} search={{ tab: t }} aria-pressed={tab === t}>{TAB_TEXT[t]}</Link>)}</div></nav>
       {tab === "overview" && <OverviewTab p={p} />}
@@ -138,16 +145,19 @@ function TasksTab({ p }: { p: Project }) {
   const [nt, setNt] = useState({ title: "", milestoneId: "", assigneeId: "", dueDate: "", priority: "normal" as ProjectPriority });
   const [nm, setNm] = useState({ title: "", dueDate: "" });
   const prog = projectProgress(tasks);
+  const [aiDraft, setAiDraft] = useState<{ title: string; reason: string } | null>(null);
+  const pendingDraft = useProjectTaskDraft((s) => (s.draft?.projectId === p.id ? s.draft : null));
+  useEffect(() => { if (!pendingDraft) return; const d = useProjectTaskDraft.getState().take(p.id); if (d) { setNt((x) => ({ ...x, title: d.title })); setAiDraft({ title: d.title, reason: d.reason }); } }, [pendingDraft, p.id]);
   const groups: { id: string; title: string; dueDate?: string | undefined }[] = [...ms, { id: "", title: "Not in a milestone" }];
   return <div className="grid gap-6">
     <Card title="Progress"><ProgressBar pct={prog.pct} label={prog.text} /></Card>
-    {canAdd && <Card title="Add task"><div className="pd-filters">
+    {canAdd && <Card title="Add task">{aiDraft && <div className="pd-note mb-3 text-xs" role="status" data-testid="ai-task-draft">Draft from AI Assist ({aiDraft.reason}) — review the title, then click Add to save. Nothing is saved yet. <button type="button" className="underline" onClick={() => { setAiDraft(null); setNt((x) => ({ ...x, title: "" })); }}>Discard draft</button></div>}<div className="pd-filters">
       <Input aria-label="Task title" placeholder="Task title" className="min-w-[200px] flex-1" value={nt.title} onChange={(e) => setNt({ ...nt, title: e.target.value })} />
       <select aria-label="Milestone" className={selectCls} value={nt.milestoneId} onChange={(e) => setNt({ ...nt, milestoneId: e.target.value })}><option value="">No milestone</option>{ms.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}</select>
       <select aria-label="Assignee" className={selectCls} value={nt.assigneeId} onChange={(e) => setNt({ ...nt, assigneeId: e.target.value })}><option value="">Unassigned</option>{people.list.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
       <Input aria-label="Due date" type="date" className="w-auto" value={nt.dueDate} onChange={(e) => setNt({ ...nt, dueDate: e.target.value })} />
       <select aria-label="Priority" className={selectCls} value={nt.priority} onChange={(e) => setNt({ ...nt, priority: e.target.value as ProjectPriority })}><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select>
-      <Button onClick={() => { const r = addTask(p.id, { title: nt.title, milestoneId: nt.milestoneId || undefined, assigneeId: nt.assigneeId || null, dueDate: nt.dueDate || undefined, priority: nt.priority }); if (!r.ok) toast.error(r.error); else { setNt({ ...nt, title: "" }); toast.success("Task added"); } }}><Plus className="size-4" />Add</Button>
+      <Button onClick={() => { const r = addTask(p.id, { title: nt.title, milestoneId: nt.milestoneId || undefined, assigneeId: nt.assigneeId || null, dueDate: nt.dueDate || undefined, priority: nt.priority }); if (!r.ok) toast.error(r.error); else { setNt({ ...nt, title: "" }); setAiDraft(null); toast.success("Task added"); } }}><Plus className="size-4" />Add</Button>
     </div>
     <div className="pd-filters mt-3"><Input aria-label="Milestone name" placeholder="New milestone" className="min-w-[200px] flex-1" value={nm.title} onChange={(e) => setNm({ ...nm, title: e.target.value })} /><Input aria-label="Milestone due" type="date" className="w-auto" value={nm.dueDate} onChange={(e) => setNm({ ...nm, dueDate: e.target.value })} /><Button variant="outline" onClick={() => { const e = addMilestone(p.id, nm.title, nm.dueDate || undefined); if (e) toast.error(e); else setNm({ title: "", dueDate: "" }); }}>Add milestone</Button></div></Card>}
     {groups.map((g) => { const list = tasks.filter((t) => (t.milestoneId ?? "") === g.id && (g.id || !ms.some((m) => m.id === t.milestoneId))); if (!g.id && !list.length) return null; const mp = g.id ? milestoneProgress(g as never, tasks) : null;

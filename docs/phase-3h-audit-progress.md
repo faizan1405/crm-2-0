@@ -802,3 +802,6 @@ Browser (separate test browser, clock fixed at 23:30 IST on 3 Nov 2026; syntheti
 - Pasted tab-separated table (Full Name/WhatsApp/Company, Hindi company) → 2 created.
 - After refresh: all 24 created IDs present, counts identical; 0 follow-ups/deals/payments. Hindi name and "<b>bold</b> & "quoted" — नमस्ते" stored as plain text, not rendered as HTML. 390px: no page overflow. No external requests.
 - Not tested: screen readers; employee preview.
+
+### AI-6A Owner Project AI Assistant — done (demo only)
+See docs/ai-copilot-architecture.md. Not tested: screen readers, employee preview (the button is Owner-only).
