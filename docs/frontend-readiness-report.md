@@ -25,3 +25,10 @@ Real employee login (Employee Preview is a simulation, not login); secure server
 
 ## F. Verdict
 **Ready for Owner review with documented defects.** Every end-to-end journey (sale → payment → project → delivery → support) passed with real clicks and totals reconciled; the remaining items in C are small and listed, and D/E are open. Not production-ready.
+
+## F2C update (2026-11-03)
+- Two-tab support conflict: **fixed** — outdated saves are refused with a warning, typed notes kept, user reloads or explicitly applies. Browser-verified; "Reload latest" not clicked in the browser.
+- Open frontend defects: no support-request delete (by design, F2B synthetic requests kept); older task history shows employee codes.
+- Unverified: Owner's 3 real quotation packages; real screen readers; project-board native drag.
+- Backend-only: real login, secure storage, multi-device sync, atomic cross-device transactions.
+- **Final verdict: Ready for Owner Review** (not production-ready).

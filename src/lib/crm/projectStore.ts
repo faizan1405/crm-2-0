@@ -45,7 +45,7 @@ export interface ProjectSlice {
   deliverProject: (id: string, d: DeliverInput) => string | null;
   saveSupport: (id: string, s: ProjectSupport) => string | null;
   addSupportRequest: (r: Omit<SupportRequest, "id" | "createdAt" | "updatedAt" | "version" | "status" | "coverage"> & { coverage?: SupportRequest["coverage"] }) => Res<{ id: string }>;
-  updateSupportRequest: (id: string, patch: Partial<Pick<SupportRequest, "status" | "resolution" | "assigneeId" | "priority" | "dueDate" | "coverage">>) => string | null;
+  updateSupportRequest: (id: string, patch: Partial<Pick<SupportRequest, "status" | "resolution" | "assigneeId" | "priority" | "dueDate" | "coverage">>, baseVersion?: number) => string | null;
   saveProjectTemplate: (t: ProjectTemplate) => string | null;
 }
 
@@ -205,8 +205,9 @@ export function createProjectSlice(set: (fn: (s: S) => Partial<S>) => void, get:
       edit(r.projectId, () => ({}), `Support request opened: “${title}”${r.assigneeId ? ` · assigned to ${assigneeLabel(r.assigneeId, emps)}` : ""}`);
       return { ok: true, id };
     },
-    updateSupportRequest: (id, patch) => {
+    updateSupportRequest: (id, patch, baseVersion) => {
       const r = get().supportRequests.find((x) => x.id === id); if (!r || !visible(r.projectId)) return "Request not found.";
+      if (baseVersion !== undefined && r.version !== baseVersion) throw new StaleRecordError(id, "support");
       if (looksLikeSecret(patch.resolution)) return SECRET_ERROR;
       if (patch.status === "resolved" && !(patch.resolution ?? r.resolution ?? "").trim()) return "Add resolution notes before resolving.";
       const emps = (get() as unknown as { employees: { id: string; name: string; accountStatus: string }[] }).employees ?? [];
