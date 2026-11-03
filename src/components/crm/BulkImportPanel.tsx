@@ -28,7 +28,8 @@ async function readPdf(f: File, onProgress: (done: number, total: number) => voi
   const pdfjs = await import("pdfjs-dist");
   const worker = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default;
   pdfjs.GlobalWorkerOptions.workerSrc = worker;
-  const doc = await pdfjs.getDocument({ data: new Uint8Array(await f.arrayBuffer()), isEvalSupported: false, enableXfa: false }).promise;
+  const task = pdfjs.getDocument({ data: new Uint8Array(await f.arrayBuffer()), enableXfa: false });
+  const doc = await task.promise;
   try {
     const total = doc.numPages, n = Math.min(total, MAX_PDF_PAGES);
     const pages: PdfPageText[] = [];
@@ -40,7 +41,7 @@ async function readPdf(f: File, onProgress: (done: number, total: number) => voi
       onProgress(i, n);
     }
     return { pages, total };
-  } finally { void doc.destroy(); }
+  } finally { void task.destroy(); }
 }
 
 type Result = { kind: "done"; summary: ImportSummary } | { kind: "failed"; message: string; attempted: number };
