@@ -1,8 +1,10 @@
 # Antigravity + Hostinger Backend Handover — CRM V2
 Specification only. **No backend has been written or deployed.** Do not start without explicit Owner approval. Do not touch CRM V1 or its GitHub repository.
 
+> **H0 status (6 Nov 2026 UTC):** verified against current code. Everything in §A describes code that exists today. Everything in §B–§H is a **proposed** contract — no endpoint, table, server or OpenRouter call exists yet.
+
 ## A. Existing frontend architecture
-- **Framework:** TanStack Start v1 (React 19, TanStack Router file routes), Vite 7, Tailwind CSS v4, TypeScript strict, vitest (701 tests).
+- **Framework:** TanStack Start v1 (React 19, TanStack Router file routes), Vite 7, Tailwind CSS v4, TypeScript strict, vitest (706 tests as of H0).
 - **Routes (`src/routes`):** `/` dashboard, `/inbox`, `/leads`, `/leads/$id`, `/leads/bin`, `/pipeline`, `/follow-ups`, `/ai-copilot`, `/deals`, `/projects`, `/projects/$id`, `/sales-studio`, `/notes`, `/my-performance`, `/analytics`, `/daily-briefing`, `/team-performance`, `/team-activity`, `/team`, `/team/preview/$id`, `/team/workspace/$id`, `/automation`, `/crm-config`, `/data-vault`, `/settings`, `/login`.
 - **State:** one zustand store `src/lib/crm/store.ts` (with `projectStore.ts` slice) persisted via a guarded localStorage adapter; this store is the single swap point for a real API. Store actions already enforce validation, version checks and record synchronisation.
 - **Browser storage:**
@@ -55,3 +57,21 @@ Must stay deterministic (never replaced by a model): financial totals and status
 - Proof files must be exported separately from IndexedDB (not in localStorage).
 - No overwriting live data; imports are idempotent by record id.
 - No production changes have been made by this checkpoint.
+
+## F. OpenRouter implementation contract (proposed — not built)
+**Existing seam:** `AIProvider` in `src/lib/ai/types.ts` (`status()`, `ask(AIRequest) → AIResponse`, rejects with `AIError` codes `unavailable|timeout|rate_limited|denied|invalid|unknown`). `getProvider()` in `demoProvider.ts` returns the Demo provider today. Per-feature helpers (`rewrite.ts`, `quoteWriter.ts`, `followupWriter.ts`, `notes.ts`, `projectAssist.ts`, `supportAssist.ts`, `financeAssist.ts`, `perfCoach.ts`, `coach.ts`, `intelligence.ts`, `smartFollowups.ts`, `docExtract.ts`/`bulkImport.ts`) build deterministic context and results locally.
+
+**Proposed endpoint:** `POST /api/v1/ai/run` (authenticated session cookie, CSRF protected).
+- Request: `{ feature, requestId, input, context }` where `feature` ∈ `copilot | lead_intelligence | call_prep | objection | whatsapp_improve | quote_writer | followup_writer | smart_followups | notes_assist | bulk_extract | project_assist | support_assist | finance_assist | daily_briefing | perf_coach`; `context` is rebuilt **on the server** from the database with the same permission rules as `buildLeadContext` — the client-sent context is never trusted.
+- Response: `{ requestId, feature, text, structured?, suggestions[], simulated:false, providerLabel, model, usage:{promptTokens, completionTokens, costUsd}, at }`, mapped to the existing `AIResponse` shape so screens need no change.
+- Errors: map to existing `AIError` codes; UI already shows retry for `retryable`.
+
+**Rules:** key in server secrets only (`OPENROUTER_API_KEY`); model from server config (`AI_MODEL`, per-feature override optional); per-user daily request/token caps and a monthly cost ceiling, returning `rate_limited` when hit; timeout 30 s, max 2 retries with backoff on 429/5xx only; strip phone numbers/emails where the feature does not need them, never send payment proofs, passwords, credentials, personal Notes (unless Notes Assist on that note) or other clients; validate output length/schema and re-run existing money/date guards (`financeAssist.ts`, `quoteWriter.ts`, `rewrite.ts`) — any amount or date not present in context is rejected; every output is a draft the user explicitly applies through existing forms; WhatsApp is only ever opened for manual send, never sent automatically.
+
+**Deterministic forever:** finance totals/statuses, payment validation, KPIs, duplicate detection, dates/time zone, stage age, permissions. The model writes, summarises and recommends; it never produces financial figures.
+
+## G. Migration & deployment sequence (proposed)
+1. Owner approval of this document. 2. Build backend on a **staging** environment only. 3. Owner exports Data Vault JSON **and** payment-proof files (IndexedDB `scale-flow-payment-proofs` — not in the JSON today; a proof export step must be built). 4. Import into staging idempotently by record id; never delete or overwrite. 5. Reconcile record counts per entity, `financeSummary` totals, payments per deal and proof file count/checksums. 6. Restore test: back up staging, restore into a second copy, reconcile again. 7. Owner reviews staging with real data. 8. Switch CRM V2 frontend to the API provider; keep browser data untouched as fallback. 9. Rollback = re-point to previous build + pre-import snapshot. CRM V1 (crm.joinscaleflow.in) and repo `faizan1405/CRM` are never modified.
+
+## H. Recommended backend implementation order
+1. Auth (Owner) + sessions + server authorization. 2. Database schema mirroring §A with `version` columns. 3. Leads/activities/follow-ups API. 4. Deals/payments with transactions + proof file storage. 5. Projects/tasks/support with 409 conflicts. 6. Data Vault export/import + restore verification. 7. Store swap in `store.ts`. 8. Server scheduling for automations. 9. OpenRouter endpoint (§F). 10. Employee accounts (Team CRM, separately approved).

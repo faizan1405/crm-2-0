@@ -59,3 +59,4 @@ Frontend-only demo. No backend; production CRM untouched.
 
 - [x] Phase 3G.1.1 Project fields, tags, project automation, QA A/B/C
 - [x] Phase 3G.2 Analytics Studio
+- [x] H0 final Owner review & handover freeze
