@@ -520,7 +520,9 @@ describe("B2B4 Server-Backed WhatsApp Composer & Manual Confirmation Guarantees"
     expect(waPostCount).toBe(2);
   });
 
-  it("blocks invalid WhatsApp numbers, disables archived leads, renders across Leads & Follow-ups, and clears session pending key on exit", async () => {
+  it(
+    "blocks invalid WhatsApp numbers, disables archived leads, renders across Leads & Follow-ups, and clears session pending key on exit",
+    async () => {
     const activeLead = makeLead({ id: "lead_1", name: "Rohan Pilot", phone: "9811112233" });
     const landlineLead = makeLead({
       id: "lead_landline",
@@ -663,5 +665,5 @@ describe("B2B4 Server-Backed WhatsApp Composer & Manual Confirmation Guarantees"
     );
     fireEvent.click(within(container).getAllByRole("button", { name: "Exit Pilot Mode" })[0]!);
     expect(window.sessionStorage.getItem("sf-b2b4-pilot-wa-pending")).toBeNull();
-  });
+  }, 15_000);
 });

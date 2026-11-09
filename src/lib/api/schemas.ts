@@ -551,13 +551,379 @@ export const duplicateLeadConflictSchema = z.object({
 export type DuplicateLeadConflict = z.infer<typeof duplicateLeadConflictSchema>;
 
 export const staleConflictSchema = z.object({
-  resource: z.enum(["lead", "followup"]),
+  resource: z.enum(["lead", "followup", "deal", "payment"]),
   id: z.string(),
   expectedVersion: z.number().int().optional(),
   currentVersion: z.number().int().optional(),
 });
 
 export type StaleConflict = z.infer<typeof staleConflictSchema>;
+
+// ---------------------------------------------------------------------------
+// Checkpoint B3C — Deals, Payments, Proofs & Financial Schemas
+// ---------------------------------------------------------------------------
+
+export const CLIENT_TYPES_API = ["crm", "other"] as const;
+export type ClientTypeApi = (typeof CLIENT_TYPES_API)[number];
+
+export const DEAL_STATUSES_API = ["active", "won", "lost", "cancelled"] as const;
+export type DealStatusApi = (typeof DEAL_STATUSES_API)[number];
+
+export const PAYMENT_STATUSES_API = ["paid", "partial", "unpaid", "overdue", "cancelled"] as const;
+export type PaymentStatusApi = (typeof PAYMENT_STATUSES_API)[number];
+
+export const PAYMENT_METHODS_API = ["UPI", "Bank Transfer", "Cash", "Card", "Cheque"] as const;
+export type PaymentMethodApi = (typeof PAYMENT_METHODS_API)[number];
+
+export const PAYMENT_TYPES_API = ["advance", "milestone", "final", "other"] as const;
+export type PaymentTypeApi = (typeof PAYMENT_TYPES_API)[number];
+
+export const PROOF_KINDS_API = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+] as const;
+export type ProofKindApi = (typeof PROOF_KINDS_API)[number];
+
+export const PROOF_LIFECYCLE_API = ["active", "replaced", "removed"] as const;
+export type ProofLifecycleApi = (typeof PROOF_LIFECYCLE_API)[number];
+
+export const paymentProofDtoSchema = z.object({
+  id: z.string(),
+  legacyAttachmentId: z.string().nullable().optional(),
+  paymentId: z.string(),
+  dealId: z.string(),
+  originalFileName: z.string(),
+  fileExtension: z.string(),
+  mimeType: z.enum(PROOF_KINDS_API),
+  fileSize: z.number().int().min(1),
+  sha256: z.string(),
+  storageDriver: z.string(),
+  lifecycleStatus: z.enum(PROOF_LIFECYCLE_API),
+  version: z.number().int().min(1),
+  uploadedByUserId: z.string(),
+  uploadedAt: z.string(),
+  removedAt: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  downloadUrl: z.string(),
+});
+export type PaymentProofDto = z.infer<typeof paymentProofDtoSchema>;
+
+export const dealMilestoneDtoSchema = z.object({
+  id: z.string(),
+  legacyId: z.string().nullable().optional(),
+  label: z.string(),
+  amount: z.number(),
+  amountDecimal: z.string(),
+  amountPaise: z.number().int(),
+  dueDate: z.string(),
+  sortOrder: z.number().int(),
+});
+export type DealMilestoneDto = z.infer<typeof dealMilestoneDtoSchema>;
+
+export const dealFinancialSummaryDtoSchema = z.object({
+  dealId: z.string(),
+  dealStatus: z.enum(DEAL_STATUSES_API),
+  paymentStatus: z.enum(PAYMENT_STATUSES_API),
+  isOverdue: z.boolean(),
+  dueDate: z.string().nullable(),
+  quotedAmount: z.number(),
+  quotedAmountDecimal: z.string(),
+  quotedAmountPaise: z.number().int(),
+  finalAmount: z.number(),
+  finalAmountDecimal: z.string(),
+  finalAmountPaise: z.number().int(),
+  collected: z.number(),
+  collectedDecimal: z.string(),
+  collectedPaise: z.number().int(),
+  realizedRevenue: z.number(),
+  realizedRevenueDecimal: z.string(),
+  realizedRevenuePaise: z.number().int(),
+  outstanding: z.number(),
+  outstandingDecimal: z.string(),
+  outstandingPaise: z.number().int(),
+  overdue: z.number(),
+  overdueDecimal: z.string(),
+  overduePaise: z.number().int(),
+  voidedAmount: z.number(),
+  voidedDecimal: z.string(),
+  voidedPaise: z.number().int(),
+  activePaymentCount: z.number().int(),
+  voidedPaymentCount: z.number().int(),
+  collectionRate: z.number().nullable(),
+  lastPaymentDate: z.string().nullable(),
+  nextMilestone: z
+    .object({
+      id: z.string(),
+      label: z.string(),
+      amount: z.number(),
+      amountDecimal: z.string(),
+      amountPaise: z.number().int(),
+      dueDate: z.string(),
+    })
+    .nullable(),
+});
+export type DealFinancialSummaryDto = z.infer<typeof dealFinancialSummaryDtoSchema>;
+
+export const dealDtoSchema = z.object({
+  id: z.string(),
+  legacyId: z.string().nullable().optional(),
+  leadId: z.string().optional(),
+  clientType: z.enum(CLIENT_TYPES_API),
+  clientName: z.string(),
+  company: z.string().optional(),
+  phone: z.string().optional(),
+  name: z.string(),
+  quotedAmount: z.number(),
+  quotedAmountDecimal: z.string(),
+  quotedAmountPaise: z.number().int(),
+  finalAmount: z.number(),
+  finalAmountDecimal: z.string(),
+  finalAmountPaise: z.number().int(),
+  status: z.enum(DEAL_STATUSES_API),
+  dueDate: z.string().optional(),
+  milestones: z.array(dealMilestoneDtoSchema).default([]),
+  notes: z.string().optional(),
+  wonAt: z.string().optional(),
+  wonIstDate: z.string().optional(),
+  wonDateVerifiedAt: z.string().optional(),
+  wonDateVerifiedByUserId: z.string().optional(),
+  cancelledAt: z.string().optional(),
+  cancelledIstDate: z.string().optional(),
+  cancelledByUserId: z.string().optional(),
+  cancelReason: z.string().optional(),
+  opId: z.string().optional(),
+  createdByUserId: z.string(),
+  updatedByUserId: z.string(),
+  version: z.number().int().min(1),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  financialSummary: dealFinancialSummaryDtoSchema,
+});
+export type DealDto = z.infer<typeof dealDtoSchema>;
+
+export const paymentDtoSchema = z.object({
+  id: z.string(),
+  legacyId: z.string().nullable().optional(),
+  dealId: z.string(),
+  amount: z.number(),
+  amountDecimal: z.string(),
+  amountPaise: z.number().int(),
+  date: z.string(),
+  method: z.enum(PAYMENT_METHODS_API),
+  type: z.enum(PAYMENT_TYPES_API),
+  reference: z.string().optional(),
+  notes: z.string().optional(),
+  status: z.enum(["posted", "voided"]),
+  voided: z.boolean(),
+  voidedAt: z.string().optional(),
+  voidedIstDate: z.string().optional(),
+  voidedByUserId: z.string().optional(),
+  voidReason: z.string().optional(),
+  opId: z.string().optional(),
+  recordedByUserId: z.string(),
+  updatedByUserId: z.string(),
+  version: z.number().int().min(1),
+  hasProof: z.boolean().optional(),
+  proof: paymentProofDtoSchema.nullable().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type PaymentDto = z.infer<typeof paymentDtoSchema>;
+
+export const financeEventDtoSchema = z.object({
+  id: z.string(),
+  dealId: z.string(),
+  paymentId: z.string().optional(),
+  leadId: z.string().optional(),
+  actorUserId: z.string(),
+  eventType: z.string(),
+  summary: z.string(),
+  reason: z.string().optional(),
+  amount: z.number().optional(),
+  amountDecimal: z.string().optional(),
+  amountPaise: z.number().int().optional(),
+  before: z.record(z.string(), z.unknown()).optional(),
+  after: z.record(z.string(), z.unknown()).optional(),
+  leadActivityId: z.string().optional(),
+  opId: z.string().optional(),
+  at: z.string(),
+  occurredIstDate: z.string(),
+  createdAt: z.string(),
+});
+export type FinanceEventDto = z.infer<typeof financeEventDtoSchema>;
+
+export const ownerFinanceSummaryDtoSchema = z.object({
+  todayIstDate: z.string(),
+  period: z.enum(["all_time", "this_month", "last_month", "custom"]),
+  fromIstDate: z.string().nullable(),
+  toIstDate: z.string().nullable(),
+  totalBooked: z.number(),
+  totalBookedDecimal: z.string(),
+  totalBookedPaise: z.number().int(),
+  activeBooked: z.number(),
+  activeBookedDecimal: z.string(),
+  activeBookedPaise: z.number().int(),
+  cancelledBooked: z.number(),
+  cancelledBookedDecimal: z.string(),
+  cancelledBookedPaise: z.number().int(),
+  cashCollected: z.number(),
+  cashCollectedDecimal: z.string(),
+  cashCollectedPaise: z.number().int(),
+  activeCashCollected: z.number(),
+  activeCashCollectedDecimal: z.string(),
+  activeCashCollectedPaise: z.number().int(),
+  cancelledCashCollected: z.number(),
+  cancelledCashCollectedDecimal: z.string(),
+  cancelledCashCollectedPaise: z.number().int(),
+  outstanding: z.number(),
+  outstandingDecimal: z.string(),
+  outstandingPaise: z.number().int(),
+  overdue: z.number(),
+  overdueDecimal: z.string(),
+  overduePaise: z.number().int(),
+  voidedAmount: z.number(),
+  voidedDecimal: z.string(),
+  voidedPaise: z.number().int(),
+  activeDealCount: z.number().int(),
+  cancelledDealCount: z.number().int(),
+  activePaymentCount: z.number().int(),
+  voidedPaymentCount: z.number().int(),
+  collectionRate: z.number().nullable(),
+});
+export type OwnerFinanceSummaryDto = z.infer<typeof ownerFinanceSummaryDtoSchema>;
+
+// API Response Envelopes
+export const dealsListResponseSchema = z.object({
+  ok: z.literal(true),
+  items: z.array(dealDtoSchema),
+  total: z.number().int().min(0),
+  limit: z.number().int().min(1),
+  offset: z.number().int().min(0),
+});
+export type DealsListResponse = z.infer<typeof dealsListResponseSchema>;
+
+export const dealGetResponseSchema = z.object({
+  ok: z.literal(true),
+  deal: dealDtoSchema,
+});
+
+export const dealCreateResponseSchema = z.object({
+  ok: z.literal(true),
+  deal: dealDtoSchema,
+  activity: leadActivityDtoSchema.optional(),
+});
+export type DealCreateResponse = z.infer<typeof dealCreateResponseSchema>;
+
+export const dealUpdateResponseSchema = z.object({
+  ok: z.literal(true),
+  deal: dealDtoSchema,
+});
+
+export const dealStatusChangeResponseSchema = z.object({
+  ok: z.literal(true),
+  deal: dealDtoSchema,
+  activity: leadActivityDtoSchema.optional(),
+});
+
+export const dealCancelResponseSchema = z.object({
+  ok: z.literal(true),
+  deal: dealDtoSchema,
+  activity: leadActivityDtoSchema.optional(),
+});
+
+export const dealVerifyWonResponseSchema = z.object({
+  ok: z.literal(true),
+  deal: dealDtoSchema,
+  activity: leadActivityDtoSchema.optional(),
+});
+
+export const dealSummaryResponseSchema = z.object({
+  ok: z.literal(true),
+  dealId: z.string(),
+  summary: dealFinancialSummaryDtoSchema,
+});
+
+export const dealAuditListResponseSchema = z.object({
+  ok: z.literal(true),
+  dealId: z.string(),
+  events: z.array(financeEventDtoSchema),
+  total: z.number().int().min(0),
+  limit: z.number().int().min(1),
+  offset: z.number().int().min(0),
+});
+export type DealAuditListResponse = z.infer<typeof dealAuditListResponseSchema>;
+
+export const ownerFinanceSummaryResponseSchema = z.object({
+  ok: z.literal(true),
+  summary: ownerFinanceSummaryDtoSchema,
+});
+
+export const paymentsListResponseSchema = z.object({
+  ok: z.literal(true),
+  items: z.array(paymentDtoSchema),
+  total: z.number().int().min(0),
+  limit: z.number().int().min(1),
+  offset: z.number().int().min(0),
+});
+export type PaymentsListResponse = z.infer<typeof paymentsListResponseSchema>;
+
+export const paymentGetResponseSchema = z.object({
+  ok: z.literal(true),
+  payment: paymentDtoSchema,
+});
+
+export const paymentCreateResponseSchema = z.object({
+  ok: z.literal(true),
+  payment: paymentDtoSchema,
+  dealSummary: dealFinancialSummaryDtoSchema,
+  activity: leadActivityDtoSchema.optional(),
+});
+export type PaymentCreateResponse = z.infer<typeof paymentCreateResponseSchema>;
+
+export const paymentVoidResponseSchema = z.object({
+  ok: z.literal(true),
+  payment: paymentDtoSchema,
+  dealSummary: dealFinancialSummaryDtoSchema,
+  activity: leadActivityDtoSchema.optional(),
+});
+export type PaymentVoidResponse = z.infer<typeof paymentVoidResponseSchema>;
+
+export const proofGetResponseSchema = z.object({
+  ok: z.literal(true),
+  proof: paymentProofDtoSchema,
+});
+
+export const proofHistoryResponseSchema = z.object({
+  ok: z.literal(true),
+  paymentId: z.string(),
+  items: z.array(paymentProofDtoSchema),
+  total: z.number().int().min(0),
+  limit: z.number().int().min(1),
+  offset: z.number().int().min(0),
+});
+export type ProofHistoryResponse = z.infer<typeof proofHistoryResponseSchema>;
+
+export const proofAttachResponseSchema = z.object({
+  ok: z.literal(true),
+  proof: paymentProofDtoSchema,
+});
+export type ProofAttachResponse = z.infer<typeof proofAttachResponseSchema>;
+
+export const proofReplaceResponseSchema = z.object({
+  ok: z.literal(true),
+  proof: paymentProofDtoSchema,
+  replacedProof: paymentProofDtoSchema,
+});
+export type ProofReplaceResponse = z.infer<typeof proofReplaceResponseSchema>;
+
+export const proofRemoveResponseSchema = z.object({
+  ok: z.literal(true),
+  removedProof: paymentProofDtoSchema,
+});
+export type ProofRemoveResponse = z.infer<typeof proofRemoveResponseSchema>;
 
 export const followupConflictSchema = z.object({
   activeFollowUp: followUpDtoSchema.optional(),

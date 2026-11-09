@@ -718,20 +718,34 @@ describe("B3B Idempotency & Financial Consistency Guards", () => {
         }),
       } as unknown as import("./db/index.server").CrmDatabase;
 
-      // 1. Dry run reconcile
+      // 1. Reconcile with default 15-minute grace period (protects recent in-flight uploads)
+      const protectedRun = await reconcileOrphanProofFiles(mockDb, {
+        storageBackend: storage,
+        deleteOrphans: true,
+      });
+      expect(protectedRun.activeDbCount).toBe(1);
+      expect(protectedRun.gracePeriodSkippedCount).toBe(1);
+      expect(protectedRun.unreferencedFiles).toEqual([]);
+      expect(protectedRun.deletedOrphans).toEqual([]);
+      expect(await storage.exists(p2.storageKey)).toBe(true);
+
+      // 2. Dry-run reconcile with minAgeMs: 0
       const preview = await reconcileOrphanProofFiles(mockDb, {
         storageBackend: storage,
         deleteOrphans: false,
+        minAgeMs: 0,
       });
       expect(preview.activeDbCount).toBe(1);
+      expect(preview.gracePeriodSkippedCount).toBe(0);
       expect(preview.unreferencedFiles).toEqual([p2.storageKey]);
       expect(preview.deletedOrphans).toEqual([]);
       expect(await storage.exists(p2.storageKey)).toBe(true);
 
-      // 2. Reconcile with delete
+      // 3. Reconcile with delete and minAgeMs: 0
       const pruned = await reconcileOrphanProofFiles(mockDb, {
         storageBackend: storage,
         deleteOrphans: true,
+        minAgeMs: 0,
       });
       expect(pruned.unreferencedFiles).toEqual([p2.storageKey]);
       expect(pruned.deletedOrphans).toEqual([p2.storageKey]);

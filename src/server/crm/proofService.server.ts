@@ -914,12 +914,14 @@ export async function reconcileOrphanProofFiles(
   options?: {
     storageBackend?: ProofStorageBackend | undefined;
     deleteOrphans?: boolean | undefined;
+    minAgeMs?: number | undefined;
   },
 ): Promise<{
   activeDbCount: number;
   unreferencedFiles: string[];
   deletedOrphans: string[];
   missingKeys: string[];
+  gracePeriodSkippedCount: number;
 }> {
   const storage = options?.storageBackend ?? getProofStorageBackend();
   const rows = await db
@@ -927,7 +929,10 @@ export async function reconcileOrphanProofFiles(
     .from(crmPaymentProofs);
 
   const activeKeys = new Set(rows.map((r) => r.storageKey));
-  const { unreferencedFiles, missingKeys } = await storage.reconcileStorage(activeKeys);
+  const { unreferencedFiles, missingKeys, gracePeriodSkippedCount } = await storage.reconcileStorage(
+    activeKeys,
+    options?.minAgeMs !== undefined ? { minAgeMs: options.minAgeMs } : undefined,
+  );
 
   const deletedOrphans: string[] = [];
   if (options?.deleteOrphans) {
@@ -944,5 +949,6 @@ export async function reconcileOrphanProofFiles(
     unreferencedFiles,
     deletedOrphans,
     missingKeys,
+    gracePeriodSkippedCount,
   };
 }

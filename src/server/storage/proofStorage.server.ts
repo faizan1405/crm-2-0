@@ -61,9 +61,13 @@ export interface ProofStorageBackend {
   deleteProof(storageKey: string): Promise<boolean>;
   deleteTemp(tempKey: string): Promise<boolean>;
   cleanupAbandonedTemp(maxAgeMs?: number): Promise<number>;
-  reconcileStorage(activeKeys: Set<string>): Promise<{
+  reconcileStorage(
+    activeKeys: Set<string>,
+    options?: { minAgeMs?: number },
+  ): Promise<{
     unreferencedFiles: string[];
     missingKeys: string[];
+    gracePeriodSkippedCount: number;
   }>;
 }
 
@@ -407,17 +411,34 @@ export class LocalFsProofStorage implements ProofStorageBackend {
     return cleaned;
   }
 
-  async reconcileStorage(activeKeys: Set<string>): Promise<{
+  async reconcileStorage(
+    activeKeys: Set<string>,
+    options?: { minAgeMs?: number },
+  ): Promise<{
     unreferencedFiles: string[];
     missingKeys: string[];
+    gracePeriodSkippedCount: number;
   }> {
     const unreferencedFiles: string[] = [];
     const missingKeys: string[] = [];
+    let gracePeriodSkippedCount = 0;
+    const minAgeMs = options?.minAgeMs ?? 15 * 60 * 1000;
+    const now = Date.now();
 
     if (fs.existsSync(this.proofsDir)) {
       const existing = await fs.promises.readdir(this.proofsDir);
       for (const item of existing) {
         if (!activeKeys.has(item)) {
+          const fullPath = path.join(this.proofsDir, item);
+          try {
+            const stat = await fs.promises.stat(fullPath);
+            if (minAgeMs > 0 && now - stat.mtimeMs < minAgeMs) {
+              gracePeriodSkippedCount++;
+              continue;
+            }
+          } catch {
+            // file removed or inaccessible
+          }
           unreferencedFiles.push(item);
         }
       }
@@ -430,7 +451,7 @@ export class LocalFsProofStorage implements ProofStorageBackend {
       }
     }
 
-    return { unreferencedFiles, missingKeys };
+    return { unreferencedFiles, missingKeys, gracePeriodSkippedCount };
   }
 }
 
@@ -487,8 +508,8 @@ export class ObjectStorageProofStorage implements ProofStorageBackend {
     return this.fallbackLocal.cleanupAbandonedTemp(maxAgeMs);
   }
 
-  async reconcileStorage(activeKeys: Set<string>) {
-    return this.fallbackLocal.reconcileStorage(activeKeys);
+  async reconcileStorage(activeKeys: Set<string>, options?: { minAgeMs?: number }) {
+    return this.fallbackLocal.reconcileStorage(activeKeys, options);
   }
 }
 

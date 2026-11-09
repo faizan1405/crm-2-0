@@ -29,13 +29,13 @@ import { clearPilotWhatsAppPending } from "./pilotWhatsAppLauncher";
 
 const PILOT_LINKS = [
   { to: "/leads" as const, label: "Leads (Pilot)", icon: Users, pilot: true },
+  { to: "/deals" as const, label: "Finance (Pilot)", icon: Wallet, pilot: true },
   { to: "/follow-ups" as const, label: "Follow-ups (Pilot)", icon: CalendarClock, pilot: true },
   { to: "/leads/bin" as const, label: "Waste & deleted", icon: Trash2, pilot: true },
 ];
 
 const LOCAL_LINKS = [
   { to: "/" as const, label: "Dashboard", icon: LayoutDashboard },
-  { to: "/deals" as const, label: "Deals & Payments", icon: Wallet },
   { to: "/projects" as const, label: "Project Desk", icon: FolderKanban },
   { to: "/data-vault" as const, label: "Data Vault", icon: Archive },
 ];

@@ -1,8 +1,8 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { runFollowUp, runVoid } from "@/components/crm/conflictFeedback";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Plus, Wallet, ArrowDownLeft, FolderKanban } from "lucide-react";
+import { Plus, Wallet, ArrowDownLeft, FolderKanban, Database } from "lucide-react";
 import { Shell, Empty, selectCls } from "@/components/crm/Shell";
 import { useCRM } from "@/lib/crm/store";
 import { financeSummary, dealCollected, dealOutstanding, dealPaymentStatus } from "@/lib/crm/finance";
@@ -22,8 +22,14 @@ import { useSession } from "@/lib/crm/session";
 import { verifiedWonDayError, verifiedWonIso } from "@/lib/crm/analytics";
 import { FinanceAssistPanel } from "@/components/ai/FinanceAssistPanel";
 import { Sparkles } from "lucide-react";
+import { useResolvedAuthState } from "@/lib/auth/authClient";
+import { setLeadPilotSessionOptIn } from "@/lib/api/pilotGate";
+import { parsePilotSearch, useLeadPilotState } from "@/lib/api/pilotHook";
+import { AppShellSkeleton } from "@/components/crm/ShellPrimitives";
+import { PilotDealsPage } from "@/components/pilot/PilotDealsPage";
 
 export const Route = createFileRoute("/deals")({
+  validateSearch: parsePilotSearch,
   head: () => ({
     meta: [
       { property: "og:type", content: "website" },
@@ -34,8 +40,21 @@ export const Route = createFileRoute("/deals")({
       { property: "og:description", content: "Track deal value, collections and overdue balances." },
     ],
   }),
-  component: Deals,
+  component: DealsEntry,
 });
+
+function DealsEntry() {
+  const search = Route.useSearch();
+  const { pilotActive, pilotResolved } = useLeadPilotState(search.pilot);
+
+  if (pilotActive) {
+    return <PilotDealsPage search={search} />;
+  }
+  if (!pilotResolved) {
+    return <AppShellSkeleton />;
+  }
+  return <Deals />;
+}
 
 const TONE = { paid: "bg-success-soft text-success", partial: "bg-warning-soft text-warning", unpaid: "bg-neutral-soft text-muted-foreground", overdue: "bg-destructive-soft text-destructive", cancelled: "bg-neutral-soft text-muted-foreground" };
 const METHODS: PaymentMethod[] = ["UPI", "Bank Transfer", "Cash", "Card", "Cheque"];
@@ -49,12 +68,49 @@ function Deals() {
   const [filter, setFilter] = useState<"all" | "due" | "overdue" | "paid">("all");
   const [ai, setAi] = useState(false);
   const isOwner = !useSession((st) => st.preview);
+  const auth = useResolvedAuthState();
+  const leadPilotAvailable = auth.status === "authenticated" && auth.leadPilotAvailable;
+  const navigate = useNavigate();
   const list = deals.filter((d) => { const s = dealPaymentStatus(d, payments); return filter === "all" || (filter === "due" ? s === "partial" || s === "unpaid" || s === "overdue" : s === filter); });
 
   const sel = list.find((d) => d.id === openId) ?? list[0];
   const rate = Math.min((fin.collectionRate ?? 0) * 100, 100);
   return (
-    <Shell title="Finance studio" subtitle={`${deals.length} deals across CRM clients and other clients · every figure comes from recorded payments`} actions={<>{isOwner && <Button variant="outline" className="rounded-full" aria-expanded={ai} onClick={() => setAi(!ai)}><Sparkles className="size-4" />AI Assist</Button>}<Button onClick={() => setAddDeal(true)} className="rounded-full"><Plus className="size-4" />New deal</Button></>}>
+    <Shell
+      title="Finance studio"
+      subtitle={`${deals.length} deals across CRM clients and other clients · every figure comes from recorded payments`}
+      actions={
+        <>
+          {leadPilotAvailable && (
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full gap-1.5"
+              onClick={() => {
+                setLeadPilotSessionOptIn(true);
+                void navigate({ to: "/deals", search: { pilot: 1 } });
+              }}
+            >
+              <Database className="size-4" />
+              Dev Finance Pilot
+            </Button>
+          )}
+          {isOwner && (
+            <Button
+              variant="outline"
+              className="rounded-full"
+              aria-expanded={ai}
+              onClick={() => setAi(!ai)}
+            >
+              <Sparkles className="size-4" />AI Assist
+            </Button>
+          )}
+          <Button onClick={() => setAddDeal(true)} className="rounded-full">
+            <Plus className="size-4" />New deal
+          </Button>
+        </>
+      }
+    >
       <section className="panel-ink grid gap-8 p-6 sm:p-8 lg:grid-cols-[1.2fr_2fr]">
         <div><div className="eyebrow">Total booked</div><div className="num mt-3 text-[48px] leading-none">{formatINR(fin.totalValue)}</div><div className="mt-2 text-xs opacity-70">Excludes cancelled deals</div></div>
         <div className="grid content-end gap-5">
