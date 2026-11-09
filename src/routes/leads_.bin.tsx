@@ -3,6 +3,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { ArrowLeft, RotateCcw, Trash2, Archive } from "lucide-react";
 import { Shell, Empty, Identity } from "@/components/crm/Shell";
+import { AppShellSkeleton } from "@/components/crm/ShellPrimitives";
 import { useCRM } from "@/lib/crm/store";
 import { relative, formatINR } from "@/lib/crm/format";
 import { STATUS_LABEL, type BinEntry } from "@/lib/crm/types";
@@ -28,9 +29,12 @@ export const Route = createFileRoute("/leads_/bin")({
 
 function BinEntry() {
   const search = Route.useSearch();
-  const { pilotActive } = useLeadPilotState(search.pilot);
+  const { pilotActive, pilotResolved } = useLeadPilotState(search.pilot);
   if (pilotActive) {
     return <PilotLeadsBinPage />;
+  }
+  if (!pilotResolved) {
+    return <AppShellSkeleton />;
   }
   return <LocalBin />;
 }

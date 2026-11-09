@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Eye, EyeOff, Loader2, AlertCircle, Info, Crown, Users, ShieldCheck } from "lucide-react";
 import { ScaleMark } from "@/components/crm/Shell";
 import {
   loginWithOwnerCredentials,
   sanitizeRedirectTarget,
-  useAuthStore,
+  useResolvedAuthState,
 } from "@/lib/auth/authClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,18 +47,20 @@ export type Portal = "owner" | "employee";
 
 function Login() {
   const { redirect, reason } = Route.useSearch();
-  const authStatus = useAuthStore((s) => s.status);
+  const { status: authStatus } = useResolvedAuthState();
   const [portal, setPortal] = useState<Portal>("owner");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const navigatingRef = useRef(false);
 
   const safeTarget = sanitizeRedirectTarget(redirect);
 
   useEffect(() => {
-    if (authStatus === "authenticated") {
+    if (authStatus === "authenticated" && !navigatingRef.current) {
+      navigatingRef.current = true;
       window.location.replace(safeTarget);
     }
   }, [authStatus, safeTarget]);
@@ -80,10 +82,12 @@ function Login() {
     }
 
     setBusy(true);
+    navigatingRef.current = true;
     const result = await loginWithOwnerCredentials(cleanedEmail, rawPassword);
     setPassword("");
 
     if (!result.ok) {
+      navigatingRef.current = false;
       setBusy(false);
       setError(result.message);
       return;

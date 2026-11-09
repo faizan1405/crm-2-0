@@ -117,3 +117,20 @@ export function Empty({
 
 export const selectCls =
   "h-10 max-w-full rounded-md border border-input bg-card px-3 text-sm text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
+
+export function AppShellSkeleton() {
+  return (
+    <div className="flex min-h-screen bg-background">
+      <div className="hidden w-[248px] shrink-0 bg-sidebar md:block" />
+      <div className="flex-1 p-8">
+        <div className="h-10 w-72 animate-pulse rounded-md bg-muted" />
+        <div className="mt-8 grid gap-4 sm:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-28 animate-pulse rounded-xl bg-muted" />
+          ))}
+        </div>
+        <div className="mt-6 h-64 animate-pulse rounded-xl bg-muted" />
+      </div>
+    </div>
+  );
+}

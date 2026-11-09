@@ -12,6 +12,7 @@ import { isPending } from "@/lib/crm/followups";
 import { dealCollected, dealOutstanding } from "@/lib/crm/finance";
 import { CallButton } from "@/components/crm/CallButton";
 import { Shell, PriorityBadge, Empty, Identity, selectCls } from "@/components/crm/Shell";
+import { AppShellSkeleton } from "@/components/crm/ShellPrimitives";
 import { AddLeadDialog } from "@/components/crm/AddLeadDialog";
 import { LostReasonDialog, FollowUpDialog } from "@/components/crm/Dialogs";
 import { useAccess, useSession, STAGE_DENIED, assigneeChoices } from "@/lib/crm/session";
@@ -35,7 +36,7 @@ import { viewCtxOf, viewerId } from "@/lib/crm/store";
 import { tagForLeads, runView, viewAllowed, viewEditable, viewIssues, type SavedView, type ViewCondition } from "@/lib/crm/customize";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Bookmark, BookmarkPlus, Star, Tag, AlertTriangle, Pencil } from "lucide-react";
-import { useAuthStore } from "@/lib/auth/authClient";
+import { useResolvedAuthState } from "@/lib/auth/authClient";
 import { setLeadPilotSessionOptIn } from "@/lib/api/pilotGate";
 import { useLeadPilotState } from "@/lib/api/pilotHook";
 import { PilotLeadsPage } from "@/components/pilot/PilotLeadsPage";
@@ -57,9 +58,12 @@ export const Route = createFileRoute("/leads")({
 
 function LeadsEntry() {
   const search = Route.useSearch();
-  const { pilotActive } = useLeadPilotState(search.pilot);
+  const { pilotActive, pilotResolved } = useLeadPilotState(search.pilot);
   if (pilotActive) {
     return <PilotLeadsPage search={search} />;
+  }
+  if (!pilotResolved) {
+    return <AppShellSkeleton />;
   }
   return <LocalLeads />;
 }
@@ -186,7 +190,8 @@ function LocalLeads() {
   };
   const canStage = can("pipeline.edit") || can("leads.edit");
   const preview = useSession((x) => x.preview);
-  const leadPilotAvailable = useAuthStore((x) => x.status === "authenticated" && x.leadPilotAvailable);
+  const auth = useResolvedAuthState();
+  const leadPilotAvailable = auth.status === "authenticated" && auth.leadPilotAvailable;
   const changeStatus = (id: string, s: LeadStatus) => (!canStage ? void toast.error(STAGE_DENIED) : s === "lost" ? setLost(id) : updateLead(id, { status: s }));
   const lostLead = leads.find((l) => l.id === lost);
 

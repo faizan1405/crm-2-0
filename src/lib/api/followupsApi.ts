@@ -18,6 +18,23 @@ import { activityKeys } from "./activitiesApi";
 import { leadKeys } from "./leadsApi";
 import { ApiError } from "./errors";
 
+export function formatIstTimeLabel(iso: string): string {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(parsed);
+}
+
+/** Asia/Kolkata has fixed UTC+05:30 (no DST), so +86,400,000ms preserves wall-clock HH:mm IST. */
+export function addIstOneDaySameTimeIso(iso: string): string | null {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Date(parsed.getTime() + 86_400_000).toISOString();
+}
+
 export type FollowUpBucketFilter = "all" | "pending" | "overdue" | "today" | "upcoming" | "done";
 
 export interface ListFollowUpsFilters {
@@ -144,7 +161,7 @@ export async function createFollowUp(
 export async function rescheduleFollowUp(
   id: string,
   payload: RescheduleFollowUpPayload,
-  idempotencyKey?: string,
+  idempotencyKey: string = createIdempotencyKey(),
 ) {
   const dueAtIso = payload.dueAt !== undefined ? assertValidIstDueAt(payload.dueAt) : undefined;
   return apiRequest({
@@ -155,7 +172,7 @@ export async function rescheduleFollowUp(
       ...(dueAtIso !== undefined ? { dueAt: dueAtIso } : {}),
       ...(payload.note !== undefined ? { note: payload.note } : {}),
     },
-    ...(idempotencyKey ? { idempotencyKey } : {}),
+    idempotencyKey,
     schema: followUpUpdateResponseSchema,
   });
 }

@@ -43,7 +43,7 @@ All endpoints require an authenticated active Owner cookie session (`401`/`403`/
 - `GET /api/v1/leads/:id/follow-ups` — History + active follow-up ID for a Lead.
 - `GET /api/v1/follow-ups/:id` — Single follow-up record.
 - `PATCH /api/v1/follow-ups/:id` — Reschedules `dueAt` and/or updates `note` (`version` required).
-- `POST /api/v1/follow-ups/:id/complete` — Marks `completedAt`, releases `active_lead_lock`, updates `crm_leads.last_contact_at` & `next_follow_up_at`, appends `"followup"` activity (`409 followup_already_closed` if already closed).
+- `POST /api/v1/follow-ups/:id/complete` — Marks `completedAt`, releases `active_lead_lock`, clears `crm_leads.next_follow_up_at` while preserving `crm_leads.last_contact_at` honestly without fabricating a call/message/meeting contact activity, and appends `"followup"` activity (`409 followup_already_closed` if already closed).
 - `POST /api/v1/follow-ups/:id/cancel` — Marks `cancelledAt` & optional `cancelReason`, releases `active_lead_lock`, clears `next_follow_up_at`, preserves `last_contact_at`, appends `"followup"` activity.
 
 ## 3. Idempotency & Optimistic Concurrency

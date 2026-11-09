@@ -7,6 +7,8 @@ import {
   Ban,
   Bookmark,
   CalendarPlus,
+  CalendarSync,
+  Check,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -24,10 +26,12 @@ import {
   Trash2,
   UserCheck,
   Users,
+  XCircle,
 } from "lucide-react";
 import { useCreateActivityMutation, useLeadActivitiesQuery } from "@/lib/api/activitiesApi";
 import { createIdempotencyKey } from "@/lib/api/client";
 import { extractStaleConflict, formatApiErrorMessage, isApiError } from "@/lib/api/errors";
+import { useCompleteFollowUpMutation, useLeadFollowUpsQuery } from "@/lib/api/followupsApi";
 import {
   useArchiveLeadMutation,
   useLeadsListQuery,
@@ -37,6 +41,7 @@ import {
 } from "@/lib/api/leadsApi";
 import {
   MANUAL_ACTIVITY_TYPES_API,
+  type FollowUpDto,
   type LeadDto,
   type LeadPriorityApi,
   type LeadSourceApi,
@@ -53,7 +58,7 @@ import {
   relative,
 } from "@/lib/crm/format";
 import type { LeadsSearch } from "@/lib/crm/leadsSearch";
-import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL } from "@/lib/crm/types";
+import { FOLLOWUP_LABEL, LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL } from "@/lib/crm/types";
 import { Empty, Identity, PriorityBadge, selectCls } from "@/components/crm/ShellPrimitives";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,6 +66,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { PilotAddLeadDialog } from "./PilotAddLeadDialog";
 import { PilotArchiveDialog, PilotLostReasonDialog } from "./PilotDialogs";
+import {
+  PilotCancelFollowUpDialog,
+  PilotEditFollowUpDialog,
+  PilotScheduleFollowUpDialog,
+} from "./PilotFollowUpDialogs";
 import { PilotShell } from "./PilotShell";
 
 const PAGE_SIZE = 50;
@@ -90,6 +100,7 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
   const [view, setView] = useState<"workspace" | "table" | "cards">("workspace");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [followUpTarget, setFollowUpTarget] = useState<LeadDto | null>(null);
 
   const [lostTarget, setLostTarget] = useState<LeadDto | null>(null);
   const [lostError, setLostError] = useState<string | null>(null);
@@ -609,7 +620,7 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
           </div>
           {selectedLead && (
             <PilotLeadInspector
-              key={`${selectedLead.id}-${selectedLead.version}`}
+              key={selectedLead.id}
               lead={selectedLead}
               mutating={updateMutation.isPending}
               onPin={() =>
@@ -712,10 +723,10 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
                     type="button"
                     size="icon"
                     variant="ghost"
-                    className="size-8 rounded-full opacity-50"
-                    disabled
-                    aria-label="Follow-up disabled in B2B1 Pilot"
-                    title="Follow-ups connect in B2B2"
+                    className="size-8 rounded-full"
+                    aria-label={`Schedule follow-up for ${l.name}`}
+                    title="Schedule follow-up"
+                    onClick={() => setFollowUpTarget(l)}
                   >
                     <CalendarPlus className="size-4" />
                   </Button>
@@ -949,6 +960,14 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
         }}
         onConfirm={(reason) => void handleConfirmArchive(reason)}
       />
+
+      <PilotScheduleFollowUpDialog
+        open={Boolean(followUpTarget)}
+        onOpenChange={(o) => !o && setFollowUpTarget(null)}
+        leadId={followUpTarget?.id}
+        leadName={followUpTarget?.name}
+        leadCompany={followUpTarget?.company}
+      />
     </PilotShell>
   );
 }
@@ -971,12 +990,44 @@ function PilotLeadInspector({
   onRemove: (kind: "waste" | "deleted") => void;
 }) {
   const activitiesQuery = useLeadActivitiesQuery(lead.id, { limit: 7 });
+  const leadFollowUpsQuery = useLeadFollowUpsQuery(lead.id);
   const createActivityMutation = useCreateActivityMutation();
+  const completeFollowUpMutation = useCompleteFollowUpMutation();
 
   const [actType, setActType] = useState<ManualActivityTypeApi>("note");
   const [actText, setActText] = useState("");
   const [actError, setActError] = useState<string | null>(null);
   const actIdemKeyRef = useRef<string>(createIdempotencyKey());
+
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [editFollowUp, setEditFollowUp] = useState<FollowUpDto | null>(null);
+  const [cancelFollowUpTarget, setCancelFollowUpTarget] = useState<FollowUpDto | null>(null);
+  const [fuBusy, setFuBusy] = useState(false);
+  const fuBusyRef = useRef(false);
+
+  const activeFollowUp =
+    leadFollowUpsQuery.data?.items.find(
+      (f) => f.id === leadFollowUpsQuery.data?.activeFollowUpId,
+    ) ?? null;
+
+  const completeActiveFollowUp = async () => {
+    if (!activeFollowUp || fuBusyRef.current) return;
+    fuBusyRef.current = true;
+    setFuBusy(true);
+    try {
+      await completeFollowUpMutation.mutateAsync({
+        id: activeFollowUp.id,
+        payload: { version: activeFollowUp.version },
+        idempotencyKey: createIdempotencyKey(),
+      });
+      toast.success("Follow-up completed");
+    } catch (err) {
+      toast.error(formatApiErrorMessage(err, "Could not complete follow-up."));
+    } finally {
+      fuBusyRef.current = false;
+      setFuBusy(false);
+    }
+  };
 
   const submitActivity = async (e: FormEvent) => {
     e.preventDefault();
@@ -1069,12 +1120,11 @@ function PilotLeadInspector({
           type="button"
           variant="outline"
           size="sm"
-          className="rounded-full opacity-60"
-          disabled
-          title="Follow-up UI migration is scheduled for B2B2"
+          className="rounded-full"
+          onClick={() => setScheduleOpen(true)}
         >
           <CalendarPlus className="size-3.5" />
-          Follow-up (B2B2)
+          Follow-up
         </Button>
         <Button type="button" variant="ghost" size="sm" asChild className="ml-auto rounded-full">
           <Link to="/leads/$id" params={{ id: lead.id }} search={{ pilot: 1 }}>
@@ -1165,11 +1215,99 @@ function PilotLeadInspector({
       )}
 
       <div className="mt-8 grid gap-8 md:grid-cols-2">
-        <div>
-          <div className="eyebrow mb-3">Deals (B3)</div>
-          <p className="text-xs text-muted-foreground">
-            Deals & Payment proofs stay browser-local until Checkpoint B3.
-          </p>
+        <div className="grid content-start gap-6">
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="eyebrow">Follow-up (MariaDB)</span>
+              <Link
+                to="/follow-ups"
+                search={{ pilot: 1 }}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                All follow-ups →
+              </Link>
+            </div>
+            {leadFollowUpsQuery.isLoading ? (
+              <div className="h-16 animate-pulse rounded-lg bg-muted" />
+            ) : leadFollowUpsQuery.isError ? (
+              <p role="alert" className="text-xs text-destructive">
+                {formatApiErrorMessage(leadFollowUpsQuery.error, "Could not load follow-ups.")}
+              </p>
+            ) : activeFollowUp ? (
+              <div
+                data-testid="pilot-inspector-active-fu"
+                className="rounded-lg border bg-card p-3 text-xs"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold text-foreground">
+                    {FOLLOWUP_LABEL[activeFollowUp.type]} ·{" "}
+                    <span className="num">{formatDateTime(activeFollowUp.dueAt)}</span>
+                  </span>
+                  <span className="num text-[11px] text-muted-foreground">
+                    v{activeFollowUp.version}
+                  </span>
+                </div>
+                {activeFollowUp.note && (
+                  <p className="mt-1.5 text-muted-foreground">{activeFollowUp.note}</p>
+                )}
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 rounded-full px-2.5 text-xs"
+                    disabled={fuBusy}
+                    onClick={() => setEditFollowUp(activeFollowUp)}
+                  >
+                    <CalendarSync className="size-3" />
+                    Edit
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 rounded-full px-2.5 text-xs text-destructive"
+                    disabled={fuBusy}
+                    onClick={() => setCancelFollowUpTarget(activeFollowUp)}
+                  >
+                    <XCircle className="size-3" />
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="ml-auto h-7 rounded-full px-2.5 text-xs"
+                    disabled={fuBusy}
+                    onClick={() => void completeActiveFollowUp()}
+                  >
+                    <Check className="size-3" />
+                    Complete
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-2 rounded-lg border p-3 text-xs">
+                <span className="text-muted-foreground">No active follow-up scheduled.</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 rounded-full px-2.5 text-xs"
+                  onClick={() => setScheduleOpen(true)}
+                >
+                  <CalendarPlus className="size-3" />
+                  Schedule
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="eyebrow mb-3">Deals (B3)</div>
+            <p className="text-xs text-muted-foreground">
+              Deals & Payment proofs stay browser-local until Checkpoint B3.
+            </p>
+          </div>
         </div>
 
         <div>
@@ -1274,6 +1412,26 @@ function PilotLeadInspector({
           Delete
         </Button>
       </div>
+
+      <PilotScheduleFollowUpDialog
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        leadId={lead.id}
+        leadName={lead.name}
+        leadCompany={lead.company}
+      />
+
+      <PilotEditFollowUpDialog
+        followUp={editFollowUp}
+        leadName={lead.name}
+        onOpenChange={(o) => !o && setEditFollowUp(null)}
+      />
+
+      <PilotCancelFollowUpDialog
+        followUp={cancelFollowUpTarget}
+        leadName={lead.name}
+        onOpenChange={(o) => !o && setCancelFollowUpTarget(null)}
+      />
     </aside>
   );
 }

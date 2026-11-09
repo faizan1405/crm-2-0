@@ -182,7 +182,7 @@ describe("B2B1 Follow-ups API Client Contract (Prepared for B2B2)", () => {
               version: 2,
               completedAt: "2026-11-10T09:05:00.000Z",
             },
-            leadLastContact: "2026-11-10T09:05:00.000Z",
+            leadLastContact: null,
             leadNextFollowUp: null,
             activity: SAMPLE_ACTIVITY,
           }),
@@ -234,11 +234,23 @@ describe("B2B1 Follow-ups API Client Contract (Prepared for B2B2)", () => {
     const rescheduled = await rescheduleFollowUp("fu_1", {
       version: 1,
       dueAt: "2026-11-11T14:30",
+      note: null,
     });
     expect(rescheduled.followUp.version).toBe(2);
+    const rescheduleCall = fetchMock.mock.calls.find(([u]) =>
+      String(u).endsWith("/api/v1/follow-ups/fu_1"),
+    );
+    const rescheduleHeaders = rescheduleCall?.[1]?.headers as
+      Headers | Record<string, string> | undefined;
+    const idemHeader =
+      rescheduleHeaders instanceof Headers
+        ? rescheduleHeaders.get("idempotency-key")
+        : (rescheduleHeaders?.["Idempotency-Key"] ?? rescheduleHeaders?.["idempotency-key"]);
+    expect(idemHeader).toBeTruthy();
 
     const completed = await completeFollowUp("fu_1", { version: 2 }, "idem_complete");
     expect(completed.followUp.status).toBe("completed");
+    expect(completed.leadLastContact).toBeNull();
     expect(completed.leadNextFollowUp).toBeNull();
 
     const cancelled = await cancelFollowUp("fu_1", { version: 2, reason: "Client postponed" });

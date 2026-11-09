@@ -2,7 +2,10 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { loadOptionalLocalDotEnv } from "./server/config/dotenv.server";
 import { executeProtectedSsrRequest } from "./server/http/apiRouter.server";
+
+loadOptionalLocalDotEnv();
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;

@@ -5,7 +5,10 @@ import { toast } from "sonner";
 import {
   Archive,
   ArrowLeft,
+  ArrowUpRight,
   CalendarPlus,
+  CalendarSync,
+  Check,
   Mail,
   MessageCircle,
   Pencil,
@@ -14,6 +17,8 @@ import {
   RefreshCw,
   RotateCcw,
   Sparkles,
+  SunMedium,
+  XCircle,
 } from "lucide-react";
 import { useCreateActivityMutation, useLeadActivitiesQuery } from "@/lib/api/activitiesApi";
 import { createIdempotencyKey } from "@/lib/api/client";
@@ -25,6 +30,13 @@ import {
   isApiError,
 } from "@/lib/api/errors";
 import {
+  addIstOneDaySameTimeIso,
+  formatIstTimeLabel,
+  useCompleteFollowUpMutation,
+  useLeadFollowUpsQuery,
+  useRescheduleFollowUpMutation,
+} from "@/lib/api/followupsApi";
+import {
   getLead,
   leadKeys,
   useArchiveLeadMutation,
@@ -35,6 +47,7 @@ import {
 import {
   MANUAL_ACTIVITY_TYPES_API,
   type DuplicateLeadConflict,
+  type FollowUpDto,
   type LeadDto,
   type LeadPriorityApi,
   type LeadSourceApi,
@@ -45,7 +58,7 @@ import {
 import { changedKeys, externalKeys, rebaseDraft } from "@/lib/crm/crossTab";
 import { formatDateTime, formatINR, relative } from "@/lib/crm/format";
 import { QUICK_LABEL, QUICK_STATUSES, staleDays } from "@/lib/crm/leadtools";
-import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL } from "@/lib/crm/types";
+import { FOLLOWUP_LABEL, LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL } from "@/lib/crm/types";
 import { amountFieldError, mailtoHref, validEmail, validPhone } from "@/lib/crm/validation";
 import { Empty, Identity, PriorityBadge, selectCls } from "@/components/crm/ShellPrimitives";
 import { Button } from "@/components/ui/button";
@@ -60,6 +73,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PilotArchiveDialog, PilotLostReasonDialog } from "./PilotDialogs";
+import {
+  PilotCancelFollowUpDialog,
+  PilotEditFollowUpDialog,
+  PilotScheduleFollowUpDialog,
+} from "./PilotFollowUpDialogs";
 import { PilotShell } from "./PilotShell";
 
 const ACTIVITY_TYPE_LABEL: Record<ManualActivityTypeApi, string> = {
@@ -98,10 +116,13 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
   const navigate = useNavigate();
   const leadQuery = useLeadQuery(id);
   const activitiesQuery = useLeadActivitiesQuery(id, { limit: 100 });
+  const leadFollowUpsQuery = useLeadFollowUpsQuery(id);
   const updateMutation = useUpdateLeadMutation();
   const archiveMutation = useArchiveLeadMutation();
   const restoreMutation = useRestoreLeadMutation();
   const createActivityMutation = useCreateActivityMutation();
+  const completeFollowUpMutation = useCompleteFollowUpMutation();
+  const rescheduleFollowUpMutation = useRescheduleFollowUpMutation();
 
   const [edit, setEdit] = useState(false);
   const [lostOpen, setLostOpen] = useState(false);
@@ -109,6 +130,12 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
   const [archiveKind, setArchiveKind] = useState<"waste" | "deleted" | null>(null);
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [sideAlert, setSideAlert] = useState<{ message: string; isStale: boolean } | null>(null);
+
+  const [fuScheduleOpen, setFuScheduleOpen] = useState(false);
+  const [fuEditTarget, setFuEditTarget] = useState<FollowUpDto | null>(null);
+  const [fuCancelTarget, setFuCancelTarget] = useState<FollowUpDto | null>(null);
+  const [fuBusy, setFuBusy] = useState(false);
+  const fuBusyRef = useRef(false);
 
   const [actType, setActType] = useState<ManualActivityTypeApi>("note");
   const [actText, setActText] = useState("");
@@ -172,7 +199,71 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
 
   const archived = lead.lifecycleStatus !== "active";
   const acts = activitiesQuery.data?.items ?? [];
+  const leadFollowUps = leadFollowUpsQuery.data?.items ?? [];
+  const activeFollowUp =
+    leadFollowUps.find((f) => f.id === leadFollowUpsQuery.data?.activeFollowUpId) ?? null;
+  const pastFollowUps = leadFollowUps.filter((f) => f.id !== activeFollowUp?.id);
   const staleCount = archived ? undefined : staleDays(lead as never, new Date());
+
+  const completeLeadFollowUp = async (fu: FollowUpDto) => {
+    if (archived || fuBusyRef.current) return;
+    fuBusyRef.current = true;
+    setFuBusy(true);
+    setSideAlert(null);
+    try {
+      await completeFollowUpMutation.mutateAsync({
+        id: fu.id,
+        payload: { version: fu.version },
+        idempotencyKey: createIdempotencyKey(),
+      });
+      toast.success("Follow-up completed");
+    } catch (err) {
+      const stale = extractStaleConflict(err);
+      const msg = formatApiErrorMessage(err, "Could not complete follow-up.");
+      setSideAlert({
+        message: msg,
+        isStale: Boolean(stale || (isApiError(err) && err.code === "followup_already_closed")),
+      });
+      toast.error(msg);
+      if (stale || (isApiError(err) && err.code === "followup_already_closed")) {
+        void leadFollowUpsQuery.refetch();
+      }
+    } finally {
+      fuBusyRef.current = false;
+      setFuBusy(false);
+    }
+  };
+
+  const moveLeadFollowUpTomorrow = async (fu: FollowUpDto) => {
+    if (archived || fuBusyRef.current) return;
+    const nextDue = addIstOneDaySameTimeIso(fu.dueAt);
+    if (!nextDue) return;
+    fuBusyRef.current = true;
+    setFuBusy(true);
+    setSideAlert(null);
+    try {
+      await rescheduleFollowUpMutation.mutateAsync({
+        id: fu.id,
+        payload: { version: fu.version, dueAt: nextDue },
+        idempotencyKey: createIdempotencyKey(),
+      });
+      toast.success(`Moved to tomorrow, ${formatIstTimeLabel(fu.dueAt)}`);
+    } catch (err) {
+      const stale = extractStaleConflict(err);
+      const msg = formatApiErrorMessage(err, "Could not reschedule follow-up.");
+      setSideAlert({
+        message: msg,
+        isStale: Boolean(stale || (isApiError(err) && err.code === "followup_already_closed")),
+      });
+      toast.error(msg);
+      if (stale || (isApiError(err) && err.code === "followup_already_closed")) {
+        void leadFollowUpsQuery.refetch();
+      }
+    } finally {
+      fuBusyRef.current = false;
+      setFuBusy(false);
+    }
+  };
 
   const runSidePatch = async (patch: Record<string, unknown>, okMsg: string) => {
     setSideAlert(null);
@@ -330,12 +421,13 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
           </Button>
           <Button
             type="button"
-            disabled
-            className="h-9 px-4 opacity-60"
-            title="Follow-ups connect in B2B2"
+            disabled={archived}
+            onClick={() => setFuScheduleOpen(true)}
+            className={archived ? "h-9 px-4 opacity-60" : "h-9 px-4"}
+            title={archived ? "Restore archived lead to schedule follow-ups" : "Schedule follow-up"}
           >
             <CalendarPlus className="size-4" />
-            Follow-up (B2B2)
+            Follow-up
           </Button>
         </div>
       }
@@ -396,6 +488,7 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
                   setSideAlert(null);
                   void leadQuery.refetch();
                   void activitiesQuery.refetch();
+                  void leadFollowUpsQuery.refetch();
                 }}
               >
                 <RefreshCw className="size-3.5" />
@@ -672,16 +765,164 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
             )}
           </section>
 
-          <section className="surface p-5">
-            <h2 className="mb-2 font-semibold">Follow-ups (B2B2)</h2>
-            <p className="text-xs text-muted-foreground">
-              Follow-up APIs (`followupsApi.ts`) are prepared; active scheduling and `/follow-ups`
-              UI migrate in Checkpoint B2B2.
-            </p>
-            {lead.nextFollowUp && (
-              <p className="mt-2 text-xs font-medium">
-                Next booked: {formatDateTime(lead.nextFollowUp)}
-              </p>
+          <section className="surface p-5" data-testid="pilot-lead-followups-panel">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="font-semibold">Follow-ups (MariaDB)</h2>
+              <Link
+                to="/follow-ups"
+                search={{ pilot: 1 }}
+                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              >
+                Agenda
+                <ArrowUpRight className="size-3.5" />
+              </Link>
+            </div>
+
+            {leadFollowUpsQuery.isLoading ? (
+              <div className="h-20 animate-pulse rounded-lg bg-muted" />
+            ) : leadFollowUpsQuery.isError ? (
+              <div role="alert" className="grid gap-2 text-xs text-destructive">
+                <span>
+                  {formatApiErrorMessage(
+                    leadFollowUpsQuery.error,
+                    "Failed to load follow-ups for this lead.",
+                  )}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void leadFollowUpsQuery.refetch()}
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : activeFollowUp ? (
+              <div
+                data-testid="pilot-detail-active-fu"
+                className="grid gap-2 rounded-lg border bg-card p-3 text-xs"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                  <span className="fu-type">{FOLLOWUP_LABEL[activeFollowUp.type]}</span>
+                  <span className="num text-[11px] text-muted-foreground">
+                    v{activeFollowUp.version}
+                  </span>
+                </div>
+                <div className="num text-sm font-semibold">
+                  {formatDateTime(activeFollowUp.dueAt)}
+                </div>
+                {activeFollowUp.note && (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {activeFollowUp.note}
+                  </p>
+                )}
+                {!archived ? (
+                  <div className="mt-1 flex flex-wrap gap-1.5 border-t pt-2.5">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 rounded-full px-2.5 text-xs"
+                      disabled={fuBusy}
+                      onClick={() => setFuEditTarget(activeFollowUp)}
+                    >
+                      <CalendarSync className="size-3" />
+                      Edit / Reschedule
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 rounded-full px-2.5 text-xs"
+                      disabled={fuBusy}
+                      onClick={() => void moveLeadFollowUpTomorrow(activeFollowUp)}
+                    >
+                      <SunMedium className="size-3" />
+                      Tomorrow {formatIstTimeLabel(activeFollowUp.dueAt)}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 rounded-full px-2.5 text-xs text-destructive"
+                      disabled={fuBusy}
+                      onClick={() => setFuCancelTarget(activeFollowUp)}
+                    >
+                      <XCircle className="size-3" />
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="ml-auto h-7 rounded-full px-2.5 text-xs"
+                      disabled={fuBusy}
+                      onClick={() => void completeLeadFollowUp(activeFollowUp)}
+                    >
+                      <Check className="size-3" />
+                      Complete
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">
+                    Archived lead — restore to modify or complete this follow-up.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-lg border p-3 text-xs">
+                <p className="text-muted-foreground">No active follow-up scheduled.</p>
+                {!archived && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="mt-2 h-7 rounded-full px-3 text-xs"
+                    onClick={() => setFuScheduleOpen(true)}
+                  >
+                    <CalendarPlus className="size-3" />
+                    Schedule follow-up
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {pastFollowUps.length > 0 && (
+              <div className="mt-4 border-t pt-3">
+                <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                  Recent follow-up history ({pastFollowUps.length})
+                </h3>
+                <ul className="grid gap-2 text-xs">
+                  {pastFollowUps.slice(0, 6).map((pf) => (
+                    <li key={pf.id} className="rounded-md border p-2">
+                      <div className="flex flex-wrap items-center justify-between gap-1">
+                        <span className="font-medium">
+                          {FOLLOWUP_LABEL[pf.type]} ·{" "}
+                          <span className="num">
+                            {formatDateTime(pf.completedAt ?? pf.cancelledAt ?? pf.dueAt)}
+                          </span>
+                        </span>
+                        <span
+                          className={`fu-flag ${
+                            pf.status === "completed" ? "is-done" : "is-muted"
+                          }`}
+                        >
+                          {pf.status === "completed"
+                            ? "Done"
+                            : pf.replacedBy
+                              ? "Replaced"
+                              : "Cancelled"}
+                        </span>
+                      </div>
+                      {pf.note && (
+                        <p className="mt-1 line-clamp-2 text-muted-foreground">{pf.note}</p>
+                      )}
+                      {pf.cancelReason && (
+                        <p className="mt-1 text-muted-foreground">Reason: {pf.cancelReason}</p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </section>
 
@@ -719,6 +960,26 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
           setArchiveError(null);
         }}
         onConfirm={(reason) => void handleConfirmArchive(reason)}
+      />
+
+      <PilotScheduleFollowUpDialog
+        open={fuScheduleOpen}
+        onOpenChange={setFuScheduleOpen}
+        leadId={lead.id}
+        leadName={lead.name}
+        leadCompany={lead.company}
+      />
+
+      <PilotEditFollowUpDialog
+        followUp={fuEditTarget}
+        leadName={lead.name}
+        onOpenChange={(o) => !o && setFuEditTarget(null)}
+      />
+
+      <PilotCancelFollowUpDialog
+        followUp={fuCancelTarget}
+        leadName={lead.name}
+        onOpenChange={(o) => !o && setFuCancelTarget(null)}
       />
     </PilotShell>
   );

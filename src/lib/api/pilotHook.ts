@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useAuthStore } from "@/lib/auth/authClient";
+import { useResolvedAuthState } from "@/lib/auth/authClient";
 import {
   normalizePilotParam,
   readLeadPilotSessionOptIn,
@@ -21,38 +21,46 @@ export function parsePilotSearch(s: Record<string, unknown>): PilotSearchFlag {
 }
 
 /**
- * Resolves Dev Lead Pilot activation safely without SSR/client hydration mismatches.
+ * Resolves Dev Lead Pilot activation safely without SSR/client hydration mismatches
+ * and without prematurely mounting local CRM `<Shell>` while pilot/session opt-in is unresolved.
  * Strictly returns `{ leadPilotAvailable: false, pilotActive: false }` in production
  * or whenever server `DEV_LEAD_PILOT` is disabled.
  */
 export function useLeadPilotState(searchPilot?: PilotParamValue): {
   leadPilotAvailable: boolean;
   pilotActive: boolean;
+  pilotResolved: boolean;
 } {
-  const authStatus = useAuthStore((s) => s.status);
-  const serverAvailable = useAuthStore((s) => s.leadPilotAvailable);
+  const { status: authStatus, leadPilotAvailable: serverAvailable } = useResolvedAuthState();
   const leadPilotAvailable = authStatus === "authenticated" && serverAvailable;
   const [sessionOptIn, setSessionOptIn] = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
   const normalizedSearch = normalizePilotParam(searchPilot);
 
   useEffect(() => {
     if (!leadPilotAvailable) {
       setSessionOptIn(false);
-      setLeadPilotSessionOptIn(false);
+      setSessionChecked(authStatus !== "unknown");
+      if (authStatus !== "unknown") {
+        setLeadPilotSessionOptIn(false);
+      }
       return;
     }
     if (normalizedSearch === "1") {
       setLeadPilotSessionOptIn(true);
       setSessionOptIn(true);
+      setSessionChecked(true);
       return;
     }
     if (normalizedSearch === "0") {
       setLeadPilotSessionOptIn(false);
       setSessionOptIn(false);
+      setSessionChecked(true);
       return;
     }
     setSessionOptIn(readLeadPilotSessionOptIn());
-  }, [leadPilotAvailable, normalizedSearch]);
+    setSessionChecked(true);
+  }, [authStatus, leadPilotAvailable, normalizedSearch]);
 
   const pilotActive = resolveLeadPilotActive({
     leadPilotAvailable,
@@ -60,5 +68,9 @@ export function useLeadPilotState(searchPilot?: PilotParamValue): {
     sessionOptIn,
   });
 
-  return { leadPilotAvailable, pilotActive };
+  const pilotResolved =
+    authStatus !== "unknown" &&
+    (!leadPilotAvailable || normalizedSearch !== undefined || sessionChecked);
+
+  return { leadPilotAvailable, pilotActive, pilotResolved };
 }

@@ -5,7 +5,7 @@ import { User, Palette, Clock, SlidersHorizontal, Bell, Shield, Database, Sun, M
 import { Shell, selectCls } from "@/components/crm/Shell";
 import { useCRM, type Prefs } from "@/lib/crm/store";
 import { TIMEZONE, formatDateTime, initials } from "@/lib/crm/format";
-import { logoutOwner, useAuthStore } from "@/lib/auth/authClient";
+import { logoutOwner, useResolvedAuthState } from "@/lib/auth/authClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,9 +50,7 @@ function Settings() {
   const [owner, setOwner] = useState(s.owner);
   const [business, setBusiness] = useState(s.business);
   const [email, setEmail] = useState(s.email);
-  const authUser = useAuthStore((x) => x.user);
-  const idleExpiresAt = useAuthStore((x) => x.idleExpiresAt);
-  const expiresAt = useAuthStore((x) => x.expiresAt);
+  const { user: authUser, idleExpiresAt, expiresAt } = useResolvedAuthState();
   const [sessionBusy, setSessionBusy] = useState<"logout" | "logout-all" | null>(null);
   const p = (patch: Partial<Prefs>) => { s.preferences(patch); toast.success("Preference saved"); };
   const Choice = <T extends string>({ value, options, onChange }: { value: T; options: readonly (readonly [T, string, React.ReactNode?])[]; onChange: (v: T) => void }) => (

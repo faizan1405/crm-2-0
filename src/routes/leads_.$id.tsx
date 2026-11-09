@@ -12,6 +12,7 @@ import { buildLeadContext } from "@/lib/ai/context";
 import { toast } from "sonner";
 import { ArrowLeft, Phone, MessageCircle, Mail, CalendarPlus, Check, Pencil, Sparkles } from "lucide-react";
 import { Shell, PriorityBadge, selectCls, Identity } from "@/components/crm/Shell";
+import { AppShellSkeleton } from "@/components/crm/ShellPrimitives";
 import { FollowUpDialog, LostReasonDialog } from "@/components/crm/Dialogs";
 import { useCRM } from "@/lib/crm/store";
 import { formatINR, formatDateTime, relative, digits } from "@/lib/crm/format";
@@ -49,9 +50,12 @@ export const Route = createFileRoute("/leads_/$id")({
 function LeadDetailEntry() {
   const { id } = Route.useParams();
   const search = Route.useSearch();
-  const { pilotActive } = useLeadPilotState(search.pilot);
+  const { pilotActive, pilotResolved } = useLeadPilotState(search.pilot);
   if (pilotActive) {
     return <PilotLeadDetailPage id={id} />;
+  }
+  if (!pilotResolved) {
+    return <AppShellSkeleton />;
   }
   return <LocalLeadDetail />;
 }

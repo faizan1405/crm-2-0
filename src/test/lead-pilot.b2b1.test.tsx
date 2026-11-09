@@ -1,15 +1,16 @@
 import type * as React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PilotAddLeadDialog } from "@/components/pilot/PilotAddLeadDialog";
 import { PilotLeadDetailPage } from "@/components/pilot/PilotLeadDetailPage";
 import { PilotLeadsBinPage } from "@/components/pilot/PilotLeadsBinPage";
 import { PilotLeadsPage } from "@/components/pilot/PilotLeadsPage";
-import { setLeadPilotSessionOptIn } from "@/lib/api/pilotGate";
+import { setLeadPilotSessionOptIn, type PilotParamValue } from "@/lib/api/pilotGate";
 import { useLeadPilotState } from "@/lib/api/pilotHook";
 import type { LeadActivityDto, LeadDto } from "@/lib/api/schemas";
-import { hydrateAuthFromSsr } from "@/lib/auth/authClient";
+import { AuthSsrProvider, hydrateAuthFromSsr, useAuthStore } from "@/lib/auth/authClient";
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({
@@ -124,6 +125,14 @@ describe("B2B1 Lead Pilot UI & Storage Isolation", () => {
   });
 
   afterEach(() => {
+    useAuthStore.setState({
+      status: "unknown",
+      user: null,
+      idleExpiresAt: null,
+      expiresAt: null,
+      leadPilotAvailable: false,
+      lastCheckedAt: null,
+    });
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -147,6 +156,78 @@ describe("B2B1 Lead Pilot UI & Storage Isolation", () => {
     const { result } = renderHook(() => useLeadPilotState("1"));
     expect(result.current.leadPilotAvailable).toBe(false);
     expect(result.current.pilotActive).toBe(false);
+  });
+
+  it("resolves pilot from AuthSsrProvider on SSR & Commit #1 without mounting local CRM", () => {
+    function EntryProbe({ searchPilot }: { searchPilot?: PilotParamValue }) {
+      const { pilotActive, pilotResolved } = useLeadPilotState(searchPilot);
+      if (pilotActive) return <span>PILOT</span>;
+      if (!pilotResolved) return <span>SKELETON</span>;
+      return <span>LOCAL</span>;
+    }
+
+    useAuthStore.setState({
+      status: "unknown",
+      user: null,
+      idleExpiresAt: null,
+      expiresAt: null,
+      leadPilotAvailable: false,
+      lastCheckedAt: null,
+    });
+
+    const ssrSnapshot = {
+      checked: true,
+      authenticated: true,
+      user: {
+        id: "usr_owner",
+        name: "Owner Synthetic",
+        email: "owner@synthetic.example",
+        roleId: "owner" as const,
+      },
+      idleExpiresAt: null,
+      expiresAt: null,
+      leadPilotAvailable: true,
+    };
+
+    const ssrWithParam = renderToString(
+      <AuthSsrProvider value={ssrSnapshot}>
+        <EntryProbe searchPilot="1" />
+      </AuthSsrProvider>,
+    );
+    expect(ssrWithParam).toContain("PILOT");
+    expect(ssrWithParam).not.toContain("LOCAL");
+
+    const ssrWithoutParam = renderToString(
+      <AuthSsrProvider value={ssrSnapshot}>
+        <EntryProbe />
+      </AuthSsrProvider>,
+    );
+    expect(ssrWithoutParam).toContain("SKELETON");
+    expect(ssrWithoutParam).not.toContain("LOCAL");
+
+    setLeadPilotSessionOptIn(true);
+    const seen: string[] = [];
+    function TrackingProbe() {
+      const { pilotActive, pilotResolved } = useLeadPilotState(undefined);
+      const branch = pilotActive ? "PILOT" : !pilotResolved ? "SKELETON" : "LOCAL";
+      seen.push(branch);
+      return <span>{branch}</span>;
+    }
+    render(
+      <AuthSsrProvider value={ssrSnapshot}>
+        <TrackingProbe />
+      </AuthSsrProvider>,
+    );
+    expect(screen.getByText("PILOT")).toBeInTheDocument();
+    expect(seen).not.toContain("LOCAL");
+
+    const ssrProd = renderToString(
+      <AuthSsrProvider value={{ ...ssrSnapshot, leadPilotAvailable: false }}>
+        <EntryProbe searchPilot="1" />
+      </AuthSsrProvider>,
+    );
+    expect(ssrProd).toContain("LOCAL");
+    expect(ssrProd).not.toContain("PILOT");
   });
 
   it("keeps PilotLeadsPage & PilotLeadsBinPage completely isolated from localStorage CRM data", async () => {
@@ -188,6 +269,14 @@ describe("B2B1 Lead Pilot UI & Storage Isolation", () => {
           total: 1,
           limit: 7,
           offset: 0,
+        });
+      }
+      if (u.endsWith("/follow-ups")) {
+        return jsonRes({
+          ok: true,
+          leadId: serverLead.id,
+          items: [],
+          activeFollowUpId: null,
         });
       }
       return jsonRes({
@@ -342,6 +431,14 @@ describe("B2B1 Lead Pilot UI & Storage Isolation", () => {
           total: 0,
           limit: 100,
           offset: 0,
+        });
+      }
+      if (u.endsWith("/follow-ups")) {
+        return jsonRes({
+          ok: true,
+          leadId: "lead_conf_1",
+          items: [],
+          activeFollowUpId: null,
         });
       }
       if (init?.method === "PATCH") {

@@ -9,12 +9,13 @@ import {
   Scripts,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import { Toaster } from "@/components/ui/sonner";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import {
+  AuthSsrProvider,
   clearClientAuthState,
   hydrateAuthFromSsr,
   readInitialAuthState,
@@ -22,6 +23,7 @@ import {
   sanitizeRedirectTarget,
   subscribeAuthSync,
   useAuthStore,
+  useResolvedAuthState,
 } from "../lib/auth/authClient";
 
 function NotFoundComponent() {
@@ -92,9 +94,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Scale Flow CRM" },
-      { name: "description", content: "Scale Flow CRM 2.0 — leads, pipeline, follow-ups and payments." },
+      {
+        name: "description",
+        content: "Scale Flow CRM 2.0 — leads, pipeline, follow-ups and payments.",
+      },
       { property: "og:title", content: "Scale Flow CRM" },
-      { property: "og:description", content: "Scale Flow CRM 2.0 — leads, pipeline, follow-ups and payments." },
+      {
+        property: "og:description",
+        content: "Scale Flow CRM 2.0 — leads, pipeline, follow-ups and payments.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -105,7 +113,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap",
+      },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
     ],
   }),
@@ -144,14 +155,13 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const initialAuth = Route.useLoaderData();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const idleExpiresAt = useAuthStore((s) => s.idleExpiresAt);
+  const { idleExpiresAt } = useResolvedAuthState();
 
-  useState(() => {
-    if (initialAuth?.checked) {
+  useEffect(() => {
+    if (initialAuth?.checked && useAuthStore.getState().status === "unknown") {
       hydrateAuthFromSsr(initialAuth);
     }
-    return true;
-  });
+  }, [initialAuth]);
 
   useEffect(() => {
     const verifyProtectedSession = async (forceRefresh = false) => {
@@ -237,10 +247,12 @@ function RootComponent() {
   }, [pathname, idleExpiresAt]);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
-      <Toaster richColors position="top-right" />
-    </QueryClientProvider>
+    <AuthSsrProvider value={initialAuth ?? null}>
+      <QueryClientProvider client={queryClient}>
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+        <Toaster richColors position="top-right" />
+      </QueryClientProvider>
+    </AuthSsrProvider>
   );
 }

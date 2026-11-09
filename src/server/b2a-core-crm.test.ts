@@ -181,6 +181,20 @@ describe("B2A Validation, Normalization & Activity Safeguards", () => {
         version: 1,
       }).success,
     ).toBe(false);
+
+    expect(
+      updateFollowUpBodySchema.safeParse({
+        version: 1,
+        note: null,
+      }).success,
+    ).toBe(true);
+
+    expect(
+      updateFollowUpBodySchema.safeParse({
+        version: 2,
+        note: "Updated agenda",
+      }).success,
+    ).toBe(true);
   });
 
   it("builds privacy-safe contact edit summaries without logging raw PII values", () => {

@@ -342,7 +342,7 @@ export const followUpUpdateResponseSchema = z.object({
 export const followUpCompleteResponseSchema = z.object({
   ok: z.literal(true),
   followUp: followUpDtoSchema,
-  leadLastContact: z.string(),
+  leadLastContact: z.string().nullable(),
   leadNextFollowUp: z.string().nullable(),
   activity: leadActivityDtoSchema,
 });

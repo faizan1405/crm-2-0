@@ -1,5 +1,7 @@
 import { createIsomorphicFn } from "@tanstack/react-start";
+import { createContext, useContext } from "react";
 import { create } from "zustand";
+import { useShallow } from "zustand/react/shallow";
 import { sanitizeRedirectTarget } from "./redirect";
 
 export { sanitizeRedirectTarget };
@@ -42,6 +44,61 @@ export const useAuthStore = create<AuthStoreState>(() => ({
   leadPilotAvailable: false,
   lastCheckedAt: null,
 }));
+
+const AuthSsrContext = createContext<AuthSessionSnapshot | null>(null);
+
+/**
+ * Provides the SSR/loader auth snapshot during initial server render and hydration Commit #1
+ * so components agree on auth & feature flags even before Zustand client hydration commits.
+ */
+export const AuthSsrProvider = AuthSsrContext.Provider;
+
+export function useResolvedAuthState(): {
+  status: AuthStatus;
+  user: AuthenticatedOwner | null;
+  idleExpiresAt: string | null;
+  expiresAt: string | null;
+  leadPilotAvailable: boolean;
+} {
+  const store = useAuthStore(
+    useShallow((s) => ({
+      status: s.status,
+      user: s.user,
+      idleExpiresAt: s.idleExpiresAt,
+      expiresAt: s.expiresAt,
+      leadPilotAvailable: s.leadPilotAvailable,
+    })),
+  );
+  const ssr = useContext(AuthSsrContext);
+
+  if (store.status !== "unknown") {
+    return {
+      status: store.status,
+      user: store.status === "authenticated" ? store.user : null,
+      idleExpiresAt: store.status === "authenticated" ? store.idleExpiresAt : null,
+      expiresAt: store.status === "authenticated" ? store.expiresAt : null,
+      leadPilotAvailable: store.status === "authenticated" && store.leadPilotAvailable,
+    };
+  }
+
+  if (ssr?.checked) {
+    return {
+      status: ssr.authenticated ? "authenticated" : "unauthenticated",
+      user: ssr.authenticated ? ssr.user : null,
+      idleExpiresAt: ssr.authenticated ? ssr.idleExpiresAt : null,
+      expiresAt: ssr.authenticated ? ssr.expiresAt : null,
+      leadPilotAvailable: ssr.authenticated && Boolean(ssr.leadPilotAvailable),
+    };
+  }
+
+  return {
+    status: "unknown",
+    user: null,
+    idleExpiresAt: null,
+    expiresAt: null,
+    leadPilotAvailable: false,
+  };
+}
 
 export function hydrateAuthFromSsr(snapshot: AuthSessionSnapshot): void {
   if (!snapshot.checked) return;

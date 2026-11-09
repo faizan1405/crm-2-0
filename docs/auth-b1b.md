@@ -5,6 +5,7 @@
 ## 1. Implemented vs Planned Boundaries
 
 ### Implemented in B1B
+
 - **Database schema & migration:** [`src/server/db/schema.server.ts`](../src/server/db/schema.server.ts) + [`src/server/db/migrations/0000_b1b_owner_auth.sql`](../src/server/db/migrations/0000_b1b_owner_auth.sql) defining:
   - `crm_users` (unique email `uq_crm_users_email`, `role_id` `'owner'`, `account_status`, `password_hash`, `last_login_at`, `version`, UTC audit timestamps)
   - `crm_sessions` (FK `user_id -> crm_users.id` `ON DELETE CASCADE`, unique `uq_crm_sessions_token_hash` storing SHA-256 hex digest only, `expires_at`, sliding `idle_expires_at`, `last_seen_at`, `revoked_at`, `revoke_reason`, masked IP prefix, UA SHA-256)
@@ -25,13 +26,15 @@
   - `Settings -> Security` wires **Log out** and **Log out all sessions** while keeping in-app password inputs disabled cleanly.
 
 ### Intentionally Deferred (Not Implemented in B1B)
+
 - **Self-service in-app Owner password change UI/endpoint:** intentionally deferred; emergency credential rotation runs via the isolated CLI (`npm run auth:bootstrap -- --reset-password`).
 - **Employee authentication, roles & Team CRM login:** disabled in B1B; reserved for dedicated Team CRM checkpoint.
 - **CRM data APIs, OpenRouter integration, Data Vault ZIP server import:** untouched until B2–B5; localStorage/IndexedDB CRM data stays strictly local.
 
 ## 2. Database Migration & Owner Bootstrap Runbook
 
-1. Provide MySQL credentials via environment variables (`DB_HOST=127.0.0.1`, `DB_PORT=3306`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, or `DATABASE_URL`) and ensure `NODE_ENV=production` and `APP_ORIGIN=https://<crm-v2-domain>` on Hostinger. Set `AUTH_TRUST_PROXY=true` only behind a trusted reverse proxy (e.g., Hostinger Nginx/LiteSpeed).
+1. Provide MySQL credentials via environment variables (`DB_HOST=127.0.0.1`, `DB_PORT=3306`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, or `DATABASE_URL`) and ensure `NODE_ENV=production` and `APP_ORIGIN=https://<crm-v2-domain>` on Hostinger. Optionally set `AUTH_SECRET` (`>= 32` characters, documented in [`.env.example`](../.env.example) and validated by [`src/server/config/env.server.ts`](../src/server/config/env.server.ts)). Set `AUTH_TRUST_PROXY=true` only behind a trusted reverse proxy (e.g., Hostinger Nginx/LiteSpeed).
+   - For local development, `.env` (gitignored) is loaded both via `--env-file-if-exists=.env` in [`package.json`](../package.json) (`start`, `db:*`, `auth:bootstrap`) and via [`src/server/config/dotenv.server.ts`](../src/server/config/dotenv.server.ts) (using process-env precedence without overwriting already-set shell variables). Production builds run [`scripts/build-prod.mjs`](../scripts/build-prod.mjs) (`NODE_ENV=production`) so local `.env` `NODE_ENV=development` cannot leak development JSX (`jsxDEV`) into `.output/server`.
 2. Apply SQL migrations:
    ```bash
    npm run db:migrate

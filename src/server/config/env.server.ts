@@ -67,6 +67,8 @@ export const serverEnvSchema = z.object({
     }
     return cleaned;
   }, z.boolean().default(false)),
+  // Optional server secret (>=32 chars when supplied; opaque session tokens remain CSPRNG DB-backed)
+  AUTH_SECRET: z.preprocess(emptyToUndefined, z.string().min(32).optional()),
 
   // B1A/B1B keeps AI strictly in deterministic Demo mode; OpenRouter activates in B5.
   AI_PROVIDER: z.preprocess(emptyToUndefined, z.enum(["demo"]).default("demo")),
@@ -145,6 +147,7 @@ function readEnvSnapshot(
     AUTH_RATE_LIMIT_WINDOW_SECONDS: raw["AUTH_RATE_LIMIT_WINDOW_SECONDS"],
     AUTH_LOCKOUT_SECONDS: raw["AUTH_LOCKOUT_SECONDS"],
     AUTH_TRUST_PROXY: raw["AUTH_TRUST_PROXY"],
+    AUTH_SECRET: raw["AUTH_SECRET"],
     AI_PROVIDER: raw["AI_PROVIDER"],
     DEV_LEAD_PILOT: raw["DEV_LEAD_PILOT"],
   };

@@ -8,10 +8,10 @@
   },
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "node scripts/build-prod.mjs",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
-    "start": "node .output/server/index.mjs",
+    "start": "node --env-file-if-exists=.env .output/server/index.mjs",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",

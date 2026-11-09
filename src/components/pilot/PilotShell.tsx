@@ -15,17 +15,19 @@ import {
   Sun,
   Database,
   Trash2,
+  CalendarClock,
 } from "lucide-react";
-import { logoutOwner, useAuthStore } from "@/lib/auth/authClient";
+import { logoutOwner, useResolvedAuthState } from "@/lib/auth/authClient";
 import { setLeadPilotSessionOptIn } from "@/lib/api/pilotGate";
 import { formatDate, initials } from "@/lib/crm/format";
-import { ScaleMark } from "@/components/crm/ShellPrimitives";
+import { AppShellSkeleton, ScaleMark } from "@/components/crm/ShellPrimitives";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const PILOT_LINKS = [
   { to: "/leads" as const, label: "Leads (Pilot)", icon: Users, pilot: true },
+  { to: "/follow-ups" as const, label: "Follow-ups (Pilot)", icon: CalendarClock, pilot: true },
   { to: "/leads/bin" as const, label: "Waste & deleted", icon: Trash2, pilot: true },
 ];
 
@@ -48,8 +50,7 @@ export function PilotShell({
   children: ReactNode;
 }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
-  const authStatus = useAuthStore((s) => s.status);
-  const authUser = useAuthStore((s) => s.user);
+  const { status: authStatus, user: authUser } = useResolvedAuthState();
   const navigate = useNavigate();
 
   const [mounted, setMounted] = useState(false);
@@ -83,20 +84,7 @@ export function PilotShell({
   };
 
   if (!mounted || authStatus !== "authenticated") {
-    return (
-      <div className="flex min-h-screen bg-background">
-        <div className="hidden w-[248px] shrink-0 bg-sidebar md:block" />
-        <div className="flex-1 p-8">
-          <div className="h-10 w-72 animate-pulse rounded-md bg-muted" />
-          <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="h-28 animate-pulse rounded-xl bg-muted" />
-            ))}
-          </div>
-          <div className="mt-6 h-64 animate-pulse rounded-xl bg-muted" />
-        </div>
-      </div>
-    );
+    return <AppShellSkeleton />;
   }
 
   const ownerName = authUser?.name ?? "Owner";
@@ -106,15 +94,17 @@ export function PilotShell({
     <nav aria-label="Lead Pilot navigation" className="sb-nav">
       <div className="sb-group">
         <div className="sb-group-label">
-          <span>B2B1 Server Pilot</span>
+          <span>B2B2 Server Pilot</span>
         </div>
         <div>
           {PILOT_LINKS.map((item) => {
             const active =
               item.to === "/leads/bin"
                 ? path.startsWith("/leads/bin")
-                : path === "/leads" ||
-                  (path.startsWith("/leads/") && !path.startsWith("/leads/bin"));
+                : item.to === "/follow-ups"
+                  ? path === "/follow-ups" || path.startsWith("/follow-ups/")
+                  : path === "/leads" ||
+                    (path.startsWith("/leads/") && !path.startsWith("/leads/bin"));
             return (
               <Link
                 key={item.to}
@@ -221,7 +211,8 @@ export function PilotShell({
           <span className="flex min-w-0 items-center gap-2">
             <Database className="size-4 shrink-0 text-primary" aria-hidden />
             <span className="min-w-0">
-              <b>Dev Lead Pilot (Synthetic MariaDB)</b> — Server-backed Leads & Activities only.{" "}
+              <b>Dev CRM Pilot (Synthetic MariaDB)</b> — Server-backed Leads, Activities &
+              Follow-ups only.{" "}
               <span className="hidden sm:inline">
                 Browser-local CRM records and IndexedDB proofs remain untouched.
               </span>
@@ -259,10 +250,14 @@ export function PilotShell({
               </span>
             </Link>
             <div className="crumb hidden min-w-0 items-center gap-1.5 text-[13px] sm:flex">
-              <span className="text-muted-foreground">B2B1 Pilot</span>
+              <span className="text-muted-foreground">B2B2 Pilot</span>
               <ChevronRight className="size-3.5 text-muted-foreground" />
               <span className="truncate font-medium">
-                {path.startsWith("/leads/bin") ? "Waste & Recently Deleted" : "Leads"}
+                {path.startsWith("/follow-ups")
+                  ? "Follow-ups"
+                  : path.startsWith("/leads/bin")
+                    ? "Waste & Recently Deleted"
+                    : "Leads"}
               </span>
             </div>
             <button
@@ -315,11 +310,22 @@ export function PilotShell({
         <Link
           to="/leads"
           search={{ pilot: 1 }}
-          aria-current={!path.startsWith("/leads/bin") ? "page" : undefined}
+          aria-current={
+            !path.startsWith("/leads/bin") && !path.startsWith("/follow-ups") ? "page" : undefined
+          }
           className="flex min-h-12 min-w-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl text-[10px] font-medium"
         >
           <Users className="size-5" />
           Leads
+        </Link>
+        <Link
+          to="/follow-ups"
+          search={{ pilot: 1 }}
+          aria-current={path.startsWith("/follow-ups") ? "page" : undefined}
+          className="flex min-h-12 min-w-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl text-[10px] font-medium"
+        >
+          <CalendarClock className="size-5" />
+          Follow-ups
         </Link>
         <Link
           to="/leads/bin"

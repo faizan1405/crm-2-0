@@ -14,7 +14,7 @@ import {
   SlidersHorizontal, FolderKanban, Sparkles, LogOut } from "lucide-react";
 import { useCRM } from "@/lib/crm/store";
 import { useSession, useAccess, routeAllowed, type PreviewSession } from "@/lib/crm/session";
-import { logoutOwner, useAuthStore } from "@/lib/auth/authClient";
+import { logoutOwner, useResolvedAuthState } from "@/lib/auth/authClient";
 import { exitPreview } from "@/lib/crm/preview";
 import { NotificationCenter } from "./NotificationCenter";
 import { cn } from "@/lib/utils";
@@ -27,7 +27,7 @@ import { Button } from "@/components/ui/button";
 import { AddLeadDialog } from "./AddLeadDialog";
 import { FollowUpDialog } from "./Dialogs";
 import { NAV_GROUPS, GROUPS_KEY, effectiveOpen, parseOpenGroups, toggleGroup, visibleGroups, type GroupId } from "@/lib/crm/navGroups";
-import { ScaleMark, Identity, Stat, PriorityBadge, Empty, selectCls } from "./ShellPrimitives";
+import { AppShellSkeleton, ScaleMark, Identity, Stat, PriorityBadge, Empty, selectCls } from "./ShellPrimitives";
 
 export { ScaleMark, Identity, Stat, PriorityBadge, Empty, selectCls };
 
@@ -54,11 +54,12 @@ const NAV = [
   { to: "/settings", label: "Settings", mobile: "Settings", icon: Settings, section: "Manage" },
 ] as const;
 const MOBILE_MAIN = ["/", "/leads", "/pipeline", "/follow-ups"];
-function usePreferenceEffects() {
+function usePreferenceEffects(enabled: boolean) {
   const { theme, accent, density, timeFormat, dateStyle } = useCRM();
   displayPrefs.hour12 = timeFormat === "12h";
   displayPrefs.longDate = dateStyle === "long";
   useEffect(() => {
+    if (!enabled) return;
     // During an Employee Preview the working copy lives only in memory — never reload Owner data over it.
     if (!useSession.getState().preview) void useCRM.persist.rehydrate();
     // Multi-tab sync: another tab saved → reload the shared store here (no polling).
@@ -66,7 +67,7 @@ function usePreferenceEffects() {
     window.addEventListener("storage", onStorage);
     startAutomationRunner();
     return () => window.removeEventListener("storage", onStorage);
-  }, []);
+  }, [enabled]);
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => document.documentElement.classList.toggle("dark", theme === "dark" || (theme === "system" && mq.matches));
@@ -110,9 +111,8 @@ export function Shell({ title, subtitle, actions, children }: { title: string; s
   const [callPick, setCallPick] = useState(false), [callQ, setCallQ] = useState("");
   const [collapsed, setCollapsed] = useState(false), [drawer, setDrawer] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  const authStatus = useAuthStore((s) => s.status);
-  const authUser = useAuthStore((s) => s.user);
-  usePreferenceEffects();
+  const { status: authStatus, user: authUser } = useResolvedAuthState();
+  usePreferenceEffects(authStatus === "authenticated");
   const { preview, can } = useAccess();
   const navigate = useNavigate();
   const nav = NAV.filter(n => routeAllowed(preview, n.to));
@@ -148,7 +148,7 @@ export function Shell({ title, subtitle, actions, children }: { title: string; s
   const current = NAV.find(n => isActive(path, n.to));
   const group = NAV_GROUPS.find(g => current && (g.items as readonly string[]).includes(current.to))?.label ?? "Workspace";
   const callable = !callPick ? [] : leads.filter(l => !["won","lost"].includes(l.status) && `${l.name} ${l.company ?? ""} ${l.phone}`.toLowerCase().includes(callQ.toLowerCase()));
-  if (!mounted || authStatus !== "authenticated") return <div className="flex min-h-screen bg-background"><div className="hidden w-[248px] shrink-0 bg-sidebar md:block" /><div className="flex-1 p-8"><div className="h-10 w-72 animate-pulse rounded-md bg-muted" /><div className="mt-8 grid gap-4 sm:grid-cols-3">{[0,1,2].map(i => <div key={i} className="h-28 animate-pulse rounded-xl bg-muted" />)}</div><div className="mt-6 h-64 animate-pulse rounded-xl bg-muted" /></div></div>;
+  if (!mounted || authStatus !== "authenticated") return <AppShellSkeleton />;
   return (
     <div className="crm-workspace flex min-h-screen bg-background" data-collapsed={collapsed ? "true" : "false"}>
       <aside className="sb hidden md:flex" aria-label="Sidebar">

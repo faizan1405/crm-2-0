@@ -4,7 +4,7 @@ import type { CrmDatabase } from "../db/index.server";
 import { crmFollowUps, crmLeadActivities, crmLeads } from "../db/schema.server";
 import { parseUtcDateTime, toMysqlUtcDateTime } from "../db/utc.server";
 import { generateServerId } from "../auth/security.server";
-import { followUpBucketServer, parseBusinessDateTimeToUtc } from "./dates.server";
+import { followUpBucketServer, mysqlUtcToIso, parseBusinessDateTimeToUtc } from "./dates.server";
 import { CrmServiceError, isMysqlDuplicateKeyError } from "./errors.server";
 import {
   hashIdempotentRequest,
@@ -55,7 +55,7 @@ async function lockLeadFollowUpsRow(
   followUpId: string,
 ): Promise<{
   followUp: FollowUpRow;
-  lead: { id: string; lifecycleStatus: string; version: number };
+  lead: { id: string; lifecycleStatus: string; version: number; lastContactAt: string | null };
 }> {
   const rows = await tx
     .select({
@@ -63,6 +63,7 @@ async function lockLeadFollowUpsRow(
       leadId: crmLeads.id,
       leadLifecycleStatus: crmLeads.lifecycleStatus,
       leadVersion: crmLeads.version,
+      leadLastContactAt: crmLeads.lastContactAt,
     })
     .from(crmFollowUps)
     .innerJoin(crmLeads, eq(crmFollowUps.leadId, crmLeads.id))
@@ -81,6 +82,7 @@ async function lockLeadFollowUpsRow(
       id: joined.leadId,
       lifecycleStatus: joined.leadLifecycleStatus,
       version: joined.leadVersion,
+      lastContactAt: joined.leadLastContactAt,
     },
   };
 }
@@ -573,10 +575,11 @@ export async function rescheduleFollowUpRecord(
       await assertFollowUpAffectedRow(Promise.resolve(updRes), followUpId);
 
       const syncedDue = await recomputeLeadNextFollowUpInTx(tx, ownerUserId, followUp.leadId);
-      const dueChanged = parsedDue?.ok && nextDueMysql !== followUp.dueAt;
+      const dueChanged = Boolean(parsedDue?.ok && nextDueMysql !== followUp.dueAt);
+      const noteChanged = nextNote !== followUp.note;
 
       let actDto: LeadActivityDto | null = null;
-      if (dueChanged) {
+      if (dueChanged || noteChanged) {
         const actRow = {
           id: generateServerId("act"),
           legacyId: null,
@@ -584,7 +587,7 @@ export async function rescheduleFollowUpRecord(
           leadId: followUp.leadId,
           actorUserId,
           type: "followup",
-          text: "Follow-up rescheduled",
+          text: dueChanged ? "Follow-up rescheduled" : "Follow-up note updated",
           outcome: null,
           opId: null,
           idempotencyKey: null,
@@ -638,7 +641,7 @@ export async function completeFollowUpRecord(
   body: {
     ok: true;
     followUp: FollowUpDto;
-    leadLastContact: string;
+    leadLastContact: string | null;
     leadNextFollowUp: string | null;
     activity: LeadActivityDto;
   };
@@ -652,7 +655,7 @@ export async function completeFollowUpRecord(
   return runWithIdempotency<{
     ok: true;
     followUp: FollowUpDto;
-    leadLastContact: string;
+    leadLastContact: string | null;
     leadNextFollowUp: string | null;
     activity: LeadActivityDto;
   }>(
@@ -714,11 +717,11 @@ export async function completeFollowUpRecord(
         );
       await assertFollowUpAffectedRow(Promise.resolve(updRes), followUpId);
 
-      // Completing a follow-up updates lead.lastContact & clears/recomputes nextFollowUp (store.ts:831-832).
+      // Completing a scheduled follow-up task clears/recomputes nextFollowUp without fabricating
+      // a real customer contact (`lastContact` updates only on genuine saved calls/sends).
       await tx
         .update(crmLeads)
         .set({
-          lastContactAt: nowStr,
           updatedByUserId: actorUserId,
           updatedAt: nowStr,
         })
@@ -757,7 +760,7 @@ export async function completeFollowUpRecord(
         body: {
           ok: true,
           followUp: toFollowUpDto(updatedRow),
-          leadLastContact: now.toISOString(),
+          leadLastContact: mysqlUtcToIso(lead.lastContactAt) ?? null,
           leadNextFollowUp: syncedDue ? parseUtcDateTime(syncedDue).toISOString() : null,
           activity: toLeadActivityDto(actRow),
         },
