@@ -1073,7 +1073,17 @@ export async function handleCrmApiRequest(
           // Verify Lead exists & belongs to Owner before listing its Quotations.
           await getLeadRecord(auth.db, auth.userId, leadId);
           const result = await listQuotationsRecords(auth.db, auth.userId, { leadId });
-          return jsonResponse({ ok: true, leadId, items: result.items, total: result.total }, 200);
+          return jsonResponse(
+            {
+              ok: true,
+              leadId,
+              items: result.items,
+              total: result.total,
+              limit: result.limit,
+              offset: result.offset,
+            },
+            200,
+          );
         }
       }
 
@@ -2307,7 +2317,7 @@ export async function handleCrmApiRequest(
         if (sub === "archive") {
           if (request.method !== "POST") return methodNotAllowed(["POST"]);
 
-          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
           if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
 
           const auth = await requireAuthenticatedOwnerDb(request, env);
@@ -2341,7 +2351,7 @@ export async function handleCrmApiRequest(
         if (sub === "restore") {
           if (request.method !== "POST") return methodNotAllowed(["POST"]);
 
-          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
           if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
 
           const auth = await requireAuthenticatedOwnerDb(request, env);

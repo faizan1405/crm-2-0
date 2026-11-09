@@ -99,7 +99,7 @@ describe("B4A Quotation Financial Calculations (Integer-Paise Precision)", () =>
     expect(m1.amountPaise + m2.amountPaise + m3.amountPaise).toBe(10_000_000);
   });
 
-  it("rejects milestone percentages not totaling 100%", () => {
+  it("rejects milestone percentages not totaling exactly 100.00% (including 99.95% and 100.05%)", () => {
     expect(() =>
       calculateQuotationFinancials({
         packagePrice: 50000,
@@ -108,7 +108,27 @@ describe("B4A Quotation Financial Calculations (Integer-Paise Precision)", () =>
           { label: "M2", percentage: 40 }, // total 90%
         ],
       }),
-    ).toThrow("Milestone percentages must total exactly 100%");
+    ).toThrow("Milestone percentages must total exactly 100.00%");
+
+    expect(() =>
+      calculateQuotationFinancials({
+        packagePrice: 50000,
+        milestones: [
+          { label: "M1", percentage: 50 },
+          { label: "M2", percentage: 49.95 }, // total 99.95%
+        ],
+      }),
+    ).toThrow("Milestone percentages must total exactly 100.00% (currently 99.95%)");
+
+    expect(() =>
+      calculateQuotationFinancials({
+        packagePrice: 50000,
+        milestones: [
+          { label: "M1", percentage: 50 },
+          { label: "M2", percentage: 50.05 }, // total 100.05%
+        ],
+      }),
+    ).toThrow("Milestone percentages must total exactly 100.00% (currently 100.05%)");
   });
 
   it("rejects negative monetary amounts and invalid discounts", () => {

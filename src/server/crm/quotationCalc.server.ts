@@ -193,20 +193,21 @@ export function calculateQuotationFinancials(
   const milestones: CalculatedQuotationMilestone[] = [];
 
   if (rawMilestones.length > 0) {
-    let totalPct = 0;
+    let totalBasisPoints = 0;
     for (const ms of rawMilestones) {
       if (ms.percentage !== undefined) {
         const pct = Number(ms.percentage);
         if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
           throw new Error("Milestone percentage must be between 0% and 100%.");
         }
-        totalPct += pct;
+        totalBasisPoints += Math.round(pct * 100);
       }
     }
 
-    if (totalPct > 0 && Math.abs(totalPct - 100) > 0.05) {
+    if (totalBasisPoints > 0 && totalBasisPoints !== 10000) {
+      const currentPct = (totalBasisPoints / 100).toFixed(2);
       throw new Error(
-        `Milestone percentages must total exactly 100% (currently ${totalPct.toFixed(2)}%).`,
+        `Milestone percentages must total exactly 100.00% (currently ${currentPct}%).`,
       );
     }
 
@@ -252,7 +253,7 @@ export function calculateQuotationFinancials(
     }
 
     // If explicit amounts were specified, verify total matches quotation total
-    if (totalPct === 0 && allocatedPaise !== totalAmountPaise && totalAmountPaise > 0) {
+    if (totalBasisPoints === 0 && allocatedPaise !== totalAmountPaise && totalAmountPaise > 0) {
       throw new Error(
         `Milestone amounts sum (₹${(allocatedPaise / 100).toFixed(2)}) must equal quotation total (₹${(totalAmountPaise / 100).toFixed(2)}).`,
       );

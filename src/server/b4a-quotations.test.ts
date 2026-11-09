@@ -453,7 +453,7 @@ describe("B4A Client Quotation Financial Engine & Precision Calculations", () =>
           { label: "Final", percentage: 40 }, // Sums to 90%
         ],
       }),
-    ).toThrow(/total exactly 100%/i);
+    ).toThrow(/total exactly 100(\.00)?%/i);
 
     expect(() =>
       calculateQuotationFinancials({
@@ -463,7 +463,7 @@ describe("B4A Client Quotation Financial Engine & Precision Calculations", () =>
           { label: "Final", percentage: 50 }, // Sums to 110%
         ],
       }),
-    ).toThrow(/total exactly 100%/i);
+    ).toThrow(/total exactly 100(\.00)?%/i);
   });
 });
 

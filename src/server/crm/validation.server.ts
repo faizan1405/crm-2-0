@@ -226,7 +226,11 @@ export function buildLeadEditSummary(
 const optionalTrimmedString = (max: number) =>
   z.preprocess(
     (v) =>
-      typeof v === "string" && v.trim() === "" ? undefined : typeof v === "string" ? v.trim() : v,
+      v === null || (typeof v === "string" && v.trim() === "")
+        ? undefined
+        : typeof v === "string"
+          ? v.trim()
+          : v,
     z.string().min(1).max(max).optional(),
   );
 
@@ -1162,6 +1166,7 @@ export const updateQuotationBodySchema = z
     paymentTerms: optionalTrimmedString(1000),
     notes: optionalTrimmedString(20_000),
     messageBody: optionalTrimmedString(10_000),
+    changeSummary: optionalTrimmedString(500),
     expectedVersion: z.number().int().min(1, "expectedVersion must be >= 1").optional(),
     idempotencyKey: optionalTrimmedString(128),
   })
@@ -1172,6 +1177,7 @@ export const changeQuotationStatusBodySchema = z
   .object({
     status: z.enum(QUOTATION_STATUSES),
     reason: optionalTrimmedString(500),
+    userConfirmedSent: z.boolean().optional(),
     expectedVersion: z.number().int().min(1, "expectedVersion must be >= 1").optional(),
     idempotencyKey: optionalTrimmedString(128),
   })

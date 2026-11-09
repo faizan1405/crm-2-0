@@ -16,6 +16,7 @@ import {
   Database,
   Trash2,
   CalendarClock,
+  FileText,
 } from "lucide-react";
 import { logoutOwner, useResolvedAuthState } from "@/lib/auth/authClient";
 import { setLeadPilotSessionOptIn } from "@/lib/api/pilotGate";
@@ -30,6 +31,7 @@ import { clearPilotWhatsAppPending } from "./pilotWhatsAppLauncher";
 const PILOT_LINKS = [
   { to: "/leads" as const, label: "Leads (Pilot)", icon: Users, pilot: true },
   { to: "/deals" as const, label: "Finance (Pilot)", icon: Wallet, pilot: true },
+  { to: "/sales-studio" as const, label: "Sales Studio (Pilot)", icon: FileText, pilot: true },
   { to: "/follow-ups" as const, label: "Follow-ups (Pilot)", icon: CalendarClock, pilot: true },
   { to: "/leads/bin" as const, label: "Waste & deleted", icon: Trash2, pilot: true },
 ];
@@ -109,8 +111,12 @@ export function PilotShell({
                 ? path.startsWith("/leads/bin")
                 : item.to === "/follow-ups"
                   ? path === "/follow-ups" || path.startsWith("/follow-ups/")
-                  : path === "/leads" ||
-                    (path.startsWith("/leads/") && !path.startsWith("/leads/bin"));
+                  : item.to === "/deals"
+                    ? path === "/deals" || path.startsWith("/deals/")
+                    : item.to === "/sales-studio"
+                      ? path === "/sales-studio" || path.startsWith("/sales-studio/")
+                      : path === "/leads" ||
+                        (path.startsWith("/leads/") && !path.startsWith("/leads/bin"));
             return (
               <Link
                 key={item.to}

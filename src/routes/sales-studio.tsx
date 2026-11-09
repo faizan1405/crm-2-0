@@ -1,11 +1,17 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { FileText, LayoutTemplate, MessagesSquare } from "lucide-react";
+import { Database, FileText, LayoutTemplate, MessagesSquare } from "lucide-react";
 import { Shell } from "@/components/crm/Shell";
 import { useCRM } from "@/lib/crm/store";
 import { QuotationsPanel } from "@/components/studio/QuotationsPanel";
 import { TemplatesPanel } from "@/components/studio/TemplatesPanel";
 import { DemosPanel } from "@/components/studio/DemosPanel";
 import { onRovingKeyDown, roving } from "@/lib/a11y/tabKeys";
+import { useResolvedAuthState } from "@/lib/auth/authClient";
+import { setLeadPilotSessionOptIn } from "@/lib/api/pilotGate";
+import { parsePilotSearch, useLeadPilotState } from "@/lib/api/pilotHook";
+import { AppShellSkeleton } from "@/components/crm/ShellPrimitives";
+import { PilotSalesStudioPage } from "@/components/pilot/PilotSalesStudioPage";
+import { Button } from "@/components/ui/button";
 
 type Tab = "quotations" | "templates" | "demos";
 const TABS: { key: Tab; label: string; icon: typeof FileText }[] = [
@@ -13,10 +19,15 @@ const TABS: { key: Tab; label: string; icon: typeof FileText }[] = [
   { key: "templates", label: "WhatsApp Templates", icon: MessagesSquare },
   { key: "demos", label: "Demo Library", icon: LayoutTemplate },
 ];
-interface StudioSearch { tab?: Tab | undefined; client?: string | undefined }
+interface StudioSearch {
+  tab?: Tab | undefined;
+  client?: string | undefined;
+  pilot?: 1 | 0 | undefined;
+}
 
 export const Route = createFileRoute("/sales-studio")({
   validateSearch: (s: Record<string, unknown>): StudioSearch => ({
+    ...parsePilotSearch(s),
     ...(s["tab"] === "templates" || s["tab"] === "demos" || s["tab"] === "quotations" ? { tab: s["tab"] } : {}),
     ...(typeof s["client"] === "string" ? { client: s["client"] } : {}),
   }),
@@ -30,17 +41,52 @@ export const Route = createFileRoute("/sales-studio")({
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
-  component: SalesStudio,
+  component: SalesStudioEntry,
 });
+
+function SalesStudioEntry() {
+  const search = Route.useSearch();
+  const { pilotActive, pilotResolved } = useLeadPilotState(search.pilot);
+
+  if (pilotActive) {
+    return <PilotSalesStudioPage search={search} />;
+  }
+  if (!pilotResolved) {
+    return <AppShellSkeleton />;
+  }
+  return <SalesStudio />;
+}
 
 function SalesStudio() {
   const { tab = "quotations", client } = Route.useSearch();
   const navigate = useNavigate({ from: "/sales-studio" });
   const { quotationTemplates, waTemplates, demos } = useCRM();
+  const auth = useResolvedAuthState();
+  const leadPilotAvailable = auth.status === "authenticated" && auth.leadPilotAvailable;
+
   const go = (patch: StudioSearch) => navigate({ search: (s) => ({ ...s, ...patch }), replace: true });
   const counts: Record<Tab, number> = { quotations: quotationTemplates.length, templates: waTemplates.length, demos: demos.length };
   return (
-    <Shell title="Sales Studio" subtitle="One place for quotation packages, message templates and demo links — used by every WhatsApp message in the CRM">
+    <Shell
+      title="Sales Studio"
+      subtitle="One place for quotation packages, message templates and demo links — used by every WhatsApp message in the CRM"
+      actions={
+        leadPilotAvailable ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full gap-1.5"
+            onClick={() => {
+              setLeadPilotSessionOptIn(true);
+              void navigate({ to: "/sales-studio", search: { pilot: 1 } });
+            }}
+          >
+            <Database className="size-4" />
+            Dev Quotation Pilot
+          </Button>
+        ) : undefined
+      }
+    >
       <div role="tablist" aria-label="Sales Studio areas" onKeyDown={onRovingKeyDown} className="fu-tabs mb-5">
         {TABS.map((t) => <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} tabIndex={roving(tab === t.key)} className="fu-tab" onClick={() => go({ tab: t.key })}><t.icon className="size-4" />{t.label}<span className="fu-count num">{counts[t.key]}</span></button>)}
       </div>

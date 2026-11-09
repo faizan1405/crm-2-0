@@ -17,11 +17,14 @@ import {
   Sparkles,
   SunMedium,
   XCircle,
+  FileText,
+  Plus,
 } from "lucide-react";
 import { useCreateActivityMutation, useLeadActivitiesQuery } from "@/lib/api/activitiesApi";
 import { useLeadCallsQuery } from "@/lib/api/callsApi";
 import { createIdempotencyKey } from "@/lib/api/client";
 import { useLeadWhatsAppMessagesQuery } from "@/lib/api/whatsappApi";
+import { useLeadQuotationsQuery } from "@/lib/api/quotationsApi";
 import {
   extractDuplicateLeadConflict,
   extractFieldValidationErrors,
@@ -63,6 +66,7 @@ import { amountFieldError, mailtoHref, validEmail, validPhone } from "@/lib/crm/
 import { WA_LABEL } from "@/lib/crm/whatsapp";
 import { Empty, Identity, PriorityBadge, selectCls } from "@/components/crm/ShellPrimitives";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -81,6 +85,8 @@ import {
   PilotEditFollowUpDialog,
   PilotScheduleFollowUpDialog,
 } from "./PilotFollowUpDialogs";
+import { PilotNewQuotationDialog } from "./PilotNewQuotationDialog";
+import { PilotQuotationDetailDrawer } from "./PilotQuotationDetailDrawer";
 import { PilotShell } from "./PilotShell";
 import { PilotWhatsAppButton, PilotWhatsAppDialog } from "./PilotWhatsAppDialog";
 import { usePilotWhatsAppLauncher } from "./pilotWhatsAppLauncher";
@@ -124,6 +130,7 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
   const waMessagesQuery = useLeadWhatsAppMessagesQuery(id, { limit: 25 });
   const activitiesQuery = useLeadActivitiesQuery(id, { limit: 100 });
   const leadFollowUpsQuery = useLeadFollowUpsQuery(id);
+  const leadQuotationsQuery = useLeadQuotationsQuery(id);
   const { target: callTarget, dialLead, openLogOnly, close: closeCall } = usePilotCallLauncher();
   const {
     target: waTarget,
@@ -149,6 +156,9 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
   const [fuCancelTarget, setFuCancelTarget] = useState<FollowUpDto | null>(null);
   const [fuBusy, setFuBusy] = useState(false);
   const fuBusyRef = useRef(false);
+
+  const [newQuoteOpen, setNewQuoteOpen] = useState(false);
+  const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
 
   const [actType, setActType] = useState<ManualActivityTypeApi>("note");
   const [actText, setActText] = useState("");
@@ -217,6 +227,7 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
   const waTotal = waMessagesQuery.data?.total ?? 0;
   const acts = activitiesQuery.data?.items ?? [];
   const leadFollowUps = leadFollowUpsQuery.data?.items ?? [];
+  const leadQuotations = leadQuotationsQuery.data?.items ?? [];
   const activeFollowUp =
     leadFollowUps.find((f) => f.id === leadFollowUpsQuery.data?.activeFollowUpId) ?? null;
   const pastFollowUps = leadFollowUps.filter((f) => f.id !== activeFollowUp?.id);
@@ -1095,6 +1106,90 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
             )}
           </section>
 
+          <section className="surface p-5" data-testid="pilot-lead-quotations-panel">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <h2 className="font-semibold">Quotations (MariaDB)</h2>
+                {leadQuotations.length > 0 && (
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                    {leadQuotations.length}
+                  </span>
+                )}
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1 rounded-full text-xs"
+                disabled={archived}
+                onClick={() => setNewQuoteOpen(true)}
+              >
+                <Plus className="size-3.5" />
+                New Quote
+              </Button>
+            </div>
+
+            {leadQuotationsQuery.isLoading ? (
+              <p className="text-xs text-muted-foreground">Loading quotations…</p>
+            ) : leadQuotationsQuery.isError ? (
+              <p className="text-xs text-destructive">
+                Failed to load quotations: {formatApiErrorMessage(leadQuotationsQuery.error)}
+              </p>
+            ) : leadQuotations.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border/80 p-4 text-center">
+                <p className="text-xs text-muted-foreground">No proposals or quotations created for this lead yet.</p>
+                {!archived && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="mt-2 text-xs text-primary"
+                    onClick={() => setNewQuoteOpen(true)}
+                  >
+                    + Create First Proposal
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                {leadQuotations.map((q) => (
+                  <button
+                    key={q.id}
+                    type="button"
+                    onClick={() => setSelectedQuoteId(q.id)}
+                    className="flex flex-col gap-1 rounded-xl border border-border/70 bg-card p-3 text-left transition hover:border-primary/50 hover:bg-muted/30"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-xs font-medium text-muted-foreground">
+                        {q.quotationNumber}
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+                          q.status === "accepted" && "bg-emerald-500/10 text-emerald-500",
+                          q.status === "sent" && "bg-blue-500/10 text-blue-500",
+                          q.status === "draft" && "bg-amber-500/10 text-amber-500",
+                          q.status === "rejected" && "bg-rose-500/10 text-rose-500",
+                        )}
+                      >
+                        {q.status}
+                      </span>
+                    </div>
+                    <div className="text-xs font-semibold text-foreground line-clamp-1">
+                      {q.title}
+                    </div>
+                    <div className="flex items-center justify-between pt-1 text-[11px] text-muted-foreground">
+                      <span>{q.items?.length ?? 0} item{(q.items?.length ?? 0) === 1 ? "" : "s"}</span>
+                      <span className="font-mono font-medium text-foreground">
+                        {formatINR(q.totalAmount)}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
           {mailtoHref(lead.email) && (
             <Button variant="outline" asChild>
               <a href={mailtoHref(lead.email)!}>
@@ -1149,6 +1244,20 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
         followUp={fuCancelTarget}
         leadName={lead.name}
         onOpenChange={(o) => !o && setFuCancelTarget(null)}
+      />
+
+      <PilotNewQuotationDialog
+        open={newQuoteOpen}
+        onOpenChange={setNewQuoteOpen}
+        preselectedLeadId={lead.id}
+        onCreated={(id) => {
+          setSelectedQuoteId(id);
+        }}
+      />
+
+      <PilotQuotationDetailDrawer
+        quotationId={selectedQuoteId}
+        onClose={() => setSelectedQuoteId(null)}
       />
 
       <PilotCallDialog target={callTarget} onClose={closeCall} />

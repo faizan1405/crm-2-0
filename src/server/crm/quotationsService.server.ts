@@ -1,5 +1,5 @@
 import "@tanstack/react-start/server-only";
-import { and, desc, eq, isNull, like, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, like, or, sql } from "drizzle-orm";
 import type { CrmDatabase } from "../db/index.server";
 import {
   crmDeals,
@@ -28,6 +28,15 @@ import {
   type QuotationStatus,
 } from "./quotationCalc.server";
 import { parseStrictInrInputToPaise } from "../db/money.server";
+
+function safeCalculateFinancials(input: Parameters<typeof calculateQuotationFinancials>[0]) {
+  try {
+    return calculateQuotationFinancials(input);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Financial calculation error.";
+    throw new CrmServiceError(400, "validation_error", msg);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Template Types & DTOs
@@ -120,6 +129,7 @@ export interface UpdateQuotationInput {
   paymentTerms?: string | null | undefined;
   notes?: string | null | undefined;
   messageBody?: string | null | undefined;
+  changeSummary?: string | null | undefined;
   expectedVersion?: number | undefined;
 }
 
@@ -538,7 +548,7 @@ export async function createQuotationRecord(
   }
 
   // Perform financial calculations
-  const financials = calculateQuotationFinancials({
+  const financials = safeCalculateFinancials({
     items: input.items,
     packagePrice: input.packagePrice,
     discountType: input.discountType,
@@ -758,7 +768,7 @@ export async function listQuotationsRecords(
     const itemRows = await db
       .select()
       .from(crmQuotationItems)
-      .where(sql`${crmQuotationItems.quotationId} IN (${sql.raw(quoteIds.map((id) => `'${id}'`).join(","))})`)
+      .where(inArray(crmQuotationItems.quotationId, quoteIds))
       .orderBy(crmQuotationItems.sortOrder);
 
     for (const it of itemRows) {
@@ -770,7 +780,7 @@ export async function listQuotationsRecords(
     const milestoneRows = await db
       .select()
       .from(crmQuotationMilestones)
-      .where(sql`${crmQuotationMilestones.quotationId} IN (${sql.raw(quoteIds.map((id) => `'${id}'`).join(","))})`)
+      .where(inArray(crmQuotationMilestones.quotationId, quoteIds))
       .orderBy(crmQuotationMilestones.sortOrder);
 
     for (const ms of milestoneRows) {
@@ -840,7 +850,7 @@ export async function updateQuotationRecord(
       }
 
       // Recalculate financials
-      const financials = calculateQuotationFinancials({
+      const financials = safeCalculateFinancials({
         items: input.items ?? existing.items.map((i) => ({
           description: i.description,
           quantity: i.quantity,
@@ -937,6 +947,36 @@ export async function updateQuotationRecord(
           await tx.insert(crmQuotationMilestones).values(milestoneRows);
         }
       }
+
+      // Save revision snapshot for update
+      const [revCount] = await tx
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(crmQuotationRevisions)
+        .where(eq(crmQuotationRevisions.quotationId, id));
+      const nextRev = (revCount?.count ?? 0) + 1;
+      const revisionSnapshot = {
+        title,
+        clientName,
+        clientCompany,
+        subtotal: financials.subtotalDecimal,
+        discount: financials.discountAmountDecimal,
+        tax: financials.gstAmountDecimal,
+        total: financials.totalAmountDecimal,
+        items: financials.items,
+        milestones: financials.milestones,
+        status: existing.status,
+        messageBody: input.messageBody !== undefined ? input.messageBody?.trim() || null : existing.messageBody,
+      };
+
+      await tx.insert(crmQuotationRevisions).values({
+        id: generateServerId("qrev"),
+        quotationId: id,
+        revisionNumber: nextRev,
+        snapshotJson: JSON.stringify(revisionSnapshot),
+        changeSummary: input.changeSummary?.trim() || `Draft updated to ₹${financials.totalAmountDecimal} (v${nextVersion})`,
+        createdByUserId: actorUserId,
+        createdAt: nowUtc,
+      });
 
       // Record audit event
       await tx.insert(crmQuotationAuditEvents).values({

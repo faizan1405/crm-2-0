@@ -1174,8 +1174,8 @@ export const leadQuotationsListResponseSchema = z.object({
   leadId: z.string(),
   items: z.array(quotationDtoSchema),
   total: z.number().int().min(0),
-  limit: z.number().int().min(1),
-  offset: z.number().int().min(0),
+  limit: z.number().int().min(1).default(50),
+  offset: z.number().int().min(0).default(0),
 });
 export type LeadQuotationsListResponse = z.infer<typeof leadQuotationsListResponseSchema>;
 

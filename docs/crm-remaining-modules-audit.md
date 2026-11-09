@@ -13,7 +13,17 @@
 
 As of Checkpoint B3C-QA, the core transactional sales loop—**Authentication, Leads, Lead Activities, Follow-ups, Call Logging, WhatsApp Confirmed Logging, Deals, Payments, Payment Proofs, and Financial Audit History**—is fully implemented with MariaDB 11.4 schemas, Nitro REST APIs, and isolated development pilots (`/leads?pilot=1`, `/follow-ups?pilot=1`, `/deals?pilot=1`).
 
-However, several CRM capabilities remain operating strictly out of browser-local storage (`localStorage` key `scale-flow-crm-2-demo` and browser IndexedDB). This audit inventories every module in the repository to establish an authoritative dependency-based roadmap for Phase B4 and B5.
+However, several CRM capabilities remain operating strictly out of browser-local storage. This audit inventories every module in the repository to establish an authoritative dependency-based roadmap for Phase B4 and B5.
+
+### 1.1 Confirmed Source Files & Storage Persistence Architecture
+To avoid any confusion with generic naming conventions, the actual codebase layout and storage keys are verified as:
+- **Routing Engine:** TanStack Router via `src/routes/*` (e.g., `src/routes/sales-studio.tsx`, `src/routes/deals.tsx`, `src/routes/leads.tsx`, `src/routes/follow-ups.tsx`, `src/routes/projects.tsx`). There is **no** `src/pages/` directory.
+- **Components:** Modular React presentation components in `src/components/crm/*` and `src/components/shell/*`.
+- **Primary Client State Store:** Single Zustand store in `src/lib/crm/store.ts` persisted to `localStorage` under the exact key:
+  `scale-flow-crm-2-demo` (there is **no** `crm_store_v2` key).
+- **Navigation State:** Collapsible sidebar group state persisted under `scale-flow-sidebar-groups`.
+- **Private Attachment Storage:** Browser IndexedDB database named `scale-flow-payment-proofs` via `src/lib/crm/proofRepo.ts`.
+- **Server Pilot Architecture:** Pure server-backed pilots (`PilotShell`) running isolated from `scale-flow-crm-2-demo`, activated only in development with explicit `?pilot=1` query parameters.
 
 ---
 
