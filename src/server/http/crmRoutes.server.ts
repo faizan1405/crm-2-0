@@ -1,4 +1,5 @@
 import "@tanstack/react-start/server-only";
+import { Readable } from "node:stream";
 import { ZodError } from "zod";
 import { resolveAuthenticatedSession } from "../auth/authService.server";
 import {
@@ -56,6 +57,14 @@ import {
   voidPaymentRecord,
 } from "../crm/paymentsService.server";
 import {
+  attachPaymentProofRecord,
+  getActivePaymentProof,
+  listPaymentProofHistory,
+  readPaymentProofContent,
+  removePaymentProofRecord,
+  replacePaymentProofRecord,
+} from "../crm/proofService.server";
+import {
   archiveLeadBodySchema,
   cancelDealBodySchema,
   cancelFollowUpBodySchema,
@@ -80,7 +89,10 @@ import {
   listLeadWhatsAppQuerySchema,
   listLeadsQuerySchema,
   listPaymentsQuerySchema,
+  listProofHistoryQuerySchema,
   listWhatsAppQuerySchema,
+  removeProofBodySchema,
+  replaceProofBodySchema,
   restoreLeadBodySchema,
   updateDealBodySchema,
   updateFollowUpBodySchema,
@@ -231,6 +243,305 @@ async function parseJsonObject(
       ok: false,
       response: jsonResponse(
         { ok: false, error: { code: "validation_error", message: "Malformed JSON request body." } },
+        400,
+      ),
+    };
+  }
+}
+
+interface ParsedProofUpload {
+  originalFileName: string;
+  fileBuffer: Buffer;
+  reason?: string | undefined;
+  idempotencyKey?: string | undefined;
+}
+
+const MAX_PROOF_BYTES = 10 * 1024 * 1024; // 10 MiB
+
+async function parseProofUploadRequest(
+  request: Request,
+): Promise<{ ok: true; payload: ParsedProofUpload } | { ok: false; response: Response }> {
+  const clHeader = request.headers.get("content-length");
+  if (clHeader && Number(clHeader) > MAX_PROOF_BYTES) {
+    return {
+      ok: false,
+      response: jsonResponse(
+        {
+          ok: false,
+          error: {
+            code: "file_too_large",
+            message: "Payment proof file exceeds the 10 MiB size limit.",
+          },
+        },
+        400,
+      ),
+    };
+  }
+
+  const contentType = (request.headers.get("content-type") ?? "").toLowerCase();
+
+  // 1. Multipart form data
+  if (contentType.startsWith("multipart/form-data")) {
+    try {
+      const formData = await request.formData();
+      const fileEntry = formData.get("file") ?? formData.get("proof");
+      if (!fileEntry || typeof fileEntry === "string") {
+        return {
+          ok: false,
+          response: jsonResponse(
+            {
+              ok: false,
+              error: {
+                code: "validation_error",
+                message: "A file must be attached in field 'file' or 'proof'.",
+              },
+            },
+            400,
+          ),
+        };
+      }
+
+      const file = fileEntry as unknown as {
+        name?: string;
+        arrayBuffer: () => Promise<ArrayBuffer>;
+      };
+      const originalFileName = file.name || "payment-proof";
+      const arrayBuffer = await file.arrayBuffer();
+      const fileBuffer = Buffer.from(arrayBuffer);
+
+      if (fileBuffer.length === 0) {
+        return {
+          ok: false,
+          response: jsonResponse(
+            {
+              ok: false,
+              error: {
+                code: "empty_file",
+                message: "Payment proof file is empty (0 bytes).",
+              },
+            },
+            400,
+          ),
+        };
+      }
+
+      if (fileBuffer.length > MAX_PROOF_BYTES) {
+        return {
+          ok: false,
+          response: jsonResponse(
+            {
+              ok: false,
+              error: {
+                code: "file_too_large",
+                message: "Payment proof file exceeds the 10 MiB size limit.",
+              },
+            },
+            400,
+          ),
+        };
+      }
+
+      const reasonVal = formData.get("reason");
+      const reason =
+        typeof reasonVal === "string" && reasonVal.trim() ? reasonVal.trim() : undefined;
+      const idKeyVal = formData.get("idempotencyKey");
+      const idempotencyKey =
+        typeof idKeyVal === "string" && idKeyVal.trim()
+          ? idKeyVal.trim()
+          : (request.headers.get("idempotency-key") ?? undefined);
+
+      return {
+        ok: true,
+        payload: {
+          originalFileName,
+          fileBuffer,
+          reason,
+          idempotencyKey,
+        },
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        response: jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "validation_error",
+              message:
+                "Unable to parse multipart form data: " +
+                (err instanceof Error ? err.message : String(err)),
+            },
+          },
+          400,
+        ),
+      };
+    }
+  }
+
+  // 2. JSON Base64 upload
+  if (contentType.includes("application/json")) {
+    const parsedJson = await parseJsonObject(request);
+    if (!parsedJson.ok) return parsedJson;
+    const data = parsedJson.data;
+
+    const base64Val = data["contentBase64"];
+    const base64 = typeof base64Val === "string" ? base64Val.trim() : "";
+    if (!base64) {
+      return {
+        ok: false,
+        response: jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "validation_error",
+              message: "Missing 'contentBase64' field in JSON upload.",
+            },
+          },
+          400,
+        ),
+      };
+    }
+
+    let fileBuffer: Buffer;
+    try {
+      fileBuffer = Buffer.from(base64, "base64");
+    } catch {
+      return {
+        ok: false,
+        response: jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "validation_error",
+              message: "Invalid base64 encoding in 'contentBase64'.",
+            },
+          },
+          400,
+        ),
+      };
+    }
+
+    if (fileBuffer.length === 0) {
+      return {
+        ok: false,
+        response: jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "empty_file",
+              message: "Payment proof file is empty (0 bytes).",
+            },
+          },
+          400,
+        ),
+      };
+    }
+
+    if (fileBuffer.length > MAX_PROOF_BYTES) {
+      return {
+        ok: false,
+        response: jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "file_too_large",
+              message: "Payment proof file exceeds the 10 MiB size limit.",
+            },
+          },
+          400,
+        ),
+      };
+    }
+
+    const fileNameVal = data["fileName"];
+    const fileName =
+      typeof fileNameVal === "string" && fileNameVal.trim() ? fileNameVal.trim() : "payment-proof";
+    const reasonVal = data["reason"];
+    const reason = typeof reasonVal === "string" && reasonVal.trim() ? reasonVal.trim() : undefined;
+    const idempotencyKeyVal = data["idempotencyKey"];
+    const idempotencyKey =
+      typeof idempotencyKeyVal === "string" && idempotencyKeyVal.trim()
+        ? idempotencyKeyVal.trim()
+        : (request.headers.get("idempotency-key") ?? undefined);
+
+    return {
+      ok: true,
+      payload: {
+        originalFileName: fileName,
+        fileBuffer,
+        reason,
+        idempotencyKey,
+      },
+    };
+  }
+
+  // 3. Raw binary stream
+  try {
+    const arrayBuffer = await request.arrayBuffer();
+    const fileBuffer = Buffer.from(arrayBuffer);
+
+    if (fileBuffer.length === 0) {
+      return {
+        ok: false,
+        response: jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "empty_file",
+              message: "Payment proof file is empty (0 bytes).",
+            },
+          },
+          400,
+        ),
+      };
+    }
+
+    if (fileBuffer.length > MAX_PROOF_BYTES) {
+      return {
+        ok: false,
+        response: jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "file_too_large",
+              message: "Payment proof file exceeds the 10 MiB size limit.",
+            },
+          },
+          400,
+        ),
+      };
+    }
+
+    const fileNameHeader = request.headers.get("x-file-name");
+    const originalFileName = fileNameHeader
+      ? decodeURIComponent(fileNameHeader.trim())
+      : "payment-proof";
+    const reasonHeader = request.headers.get("x-reason");
+    const reason = reasonHeader ? decodeURIComponent(reasonHeader.trim()) : undefined;
+    const idempotencyKey = request.headers.get("idempotency-key") ?? undefined;
+
+    return {
+      ok: true,
+      payload: {
+        originalFileName,
+        fileBuffer,
+        reason,
+        idempotencyKey,
+      },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      response: jsonResponse(
+        {
+          ok: false,
+          error: {
+            code: "validation_error",
+            message:
+              "Unable to read binary request body: " +
+              (err instanceof Error ? err.message : String(err)),
+          },
+        },
         400,
       ),
     };
@@ -1364,6 +1675,232 @@ export async function handleCrmApiRequest(
           res.status,
           res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
         );
+      }
+
+      // Proof subroutes: /api/v1/payments/:id/proof*
+      if (segments[4] === "proof") {
+        // Subresource actions: /api/v1/payments/:id/proof/:action
+        if (segments.length === 6) {
+          const action = segments[5];
+
+          // POST /api/v1/payments/:id/proof/replace
+          if (action === "replace") {
+            if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+            const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
+            if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+            const auth = await requireAuthenticatedOwnerDb(request, env);
+            if (!auth.ok) return auth.response;
+
+            const upload = await parseProofUploadRequest(request);
+            if (!upload.ok) return upload.response;
+
+            const replaceInput = replaceProofBodySchema.parse({ reason: upload.payload.reason });
+            const idemKey = resolveEffectiveIdempotencyKey({
+              headerKey: request.headers.get("idempotency-key"),
+              bodyKey: upload.payload.idempotencyKey,
+            });
+
+            const res = await replacePaymentProofRecord(
+              auth.db,
+              auth.userId,
+              auth.userId,
+              paymentId,
+              {
+                originalFileName: upload.payload.originalFileName,
+                streamOrBuffer: upload.payload.fileBuffer,
+              },
+              replaceInput,
+              { idempotencyKey: idemKey },
+            );
+
+            return jsonResponse(
+              res.body,
+              res.status,
+              res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+            );
+          }
+
+          // GET /api/v1/payments/:id/proof/download
+          if (action === "download") {
+            if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+            const auth = await requireAuthenticatedOwnerDb(request, env);
+            if (!auth.ok) return auth.response;
+
+            const proofIdParam = parsedUrl.searchParams.get("proofId") || undefined;
+            const downloadRes = await readPaymentProofContent(auth.db, auth.userId, paymentId, {
+              proofId: proofIdParam,
+            });
+
+            const isDownload =
+              parsedUrl.searchParams.get("download") === "1" ||
+              parsedUrl.searchParams.get("download") === "true";
+            const dispositionType = isDownload ? "attachment" : "inline";
+            const safeName = downloadRes.proof.originalFileName.replace(/["\r\n\\]/g, "_");
+
+            const headers = new Headers();
+            headers.set("content-type", downloadRes.proof.mimeType);
+            headers.set("content-length", String(downloadRes.byteSize));
+            headers.set(
+              "content-disposition",
+              `${dispositionType}; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(downloadRes.proof.originalFileName)}`,
+            );
+            headers.set("x-content-type-options", "nosniff");
+            headers.set("cache-control", "private, no-store, must-revalidate");
+            headers.set("pragma", "no-cache");
+            headers.set("x-frame-options", "DENY");
+            headers.set("referrer-policy", "no-referrer");
+
+            if (downloadRes.proof.mimeType === "application/pdf") {
+              headers.set(
+                "content-security-policy",
+                "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+              );
+            }
+
+            const webStream = Readable.toWeb(downloadRes.stream as Readable);
+            return new Response(webStream as unknown as BodyInit, { status: 200, headers });
+          }
+
+          // GET /api/v1/payments/:id/proof/history
+          if (action === "history") {
+            if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+            const auth = await requireAuthenticatedOwnerDb(request, env);
+            if (!auth.ok) return auth.response;
+
+            const query = listProofHistoryQuerySchema.parse(searchParamsObject(parsedUrl));
+            const result = await listPaymentProofHistory(auth.db, auth.userId, paymentId, query);
+            return jsonResponse({ ok: true, ...result }, 200);
+          }
+
+          return null;
+        }
+
+        // Direct proof endpoint: /api/v1/payments/:id/proof
+        if (segments.length === 5) {
+          // GET /api/v1/payments/:id/proof (Active proof metadata)
+          if (request.method === "GET") {
+            const auth = await requireAuthenticatedOwnerDb(request, env);
+            if (!auth.ok) return auth.response;
+
+            const proof = await getActivePaymentProof(auth.db, auth.userId, paymentId);
+            if (!proof) {
+              throw new CrmServiceError(404, "proof_not_found", "No active payment proof found.");
+            }
+            return jsonResponse({ ok: true, proof }, 200);
+          }
+
+          // POST /api/v1/payments/:id/proof (Attach proof)
+          if (request.method === "POST") {
+            const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
+            if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+            const auth = await requireAuthenticatedOwnerDb(request, env);
+            if (!auth.ok) return auth.response;
+
+            const upload = await parseProofUploadRequest(request);
+            if (!upload.ok) return upload.response;
+
+            const idemKey = resolveEffectiveIdempotencyKey({
+              headerKey: request.headers.get("idempotency-key"),
+              bodyKey: upload.payload.idempotencyKey,
+            });
+
+            const res = await attachPaymentProofRecord(
+              auth.db,
+              auth.userId,
+              auth.userId,
+              paymentId,
+              {
+                originalFileName: upload.payload.originalFileName,
+                streamOrBuffer: upload.payload.fileBuffer,
+              },
+              { idempotencyKey: idemKey },
+            );
+
+            return jsonResponse(
+              res.body,
+              res.status,
+              res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+            );
+          }
+
+          // PUT /api/v1/payments/:id/proof (Replace proof)
+          if (request.method === "PUT") {
+            const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
+            if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+            const auth = await requireAuthenticatedOwnerDb(request, env);
+            if (!auth.ok) return auth.response;
+
+            const upload = await parseProofUploadRequest(request);
+            if (!upload.ok) return upload.response;
+
+            const replaceInput = replaceProofBodySchema.parse({ reason: upload.payload.reason });
+            const idemKey = resolveEffectiveIdempotencyKey({
+              headerKey: request.headers.get("idempotency-key"),
+              bodyKey: upload.payload.idempotencyKey,
+            });
+
+            const res = await replacePaymentProofRecord(
+              auth.db,
+              auth.userId,
+              auth.userId,
+              paymentId,
+              {
+                originalFileName: upload.payload.originalFileName,
+                streamOrBuffer: upload.payload.fileBuffer,
+              },
+              replaceInput,
+              { idempotencyKey: idemKey },
+            );
+
+            return jsonResponse(
+              res.body,
+              res.status,
+              res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+            );
+          }
+
+          // DELETE /api/v1/payments/:id/proof (Remove proof)
+          if (request.method === "DELETE") {
+            const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
+            if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+            const auth = await requireAuthenticatedOwnerDb(request, env);
+            if (!auth.ok) return auth.response;
+
+            let reason: string | undefined;
+            if (hasRequestBodyHint(request)) {
+              const parsed = await parseJsonObject(request, { allowEmpty: true });
+              if (parsed.ok && parsed.data["reason"]) {
+                reason = String(parsed.data["reason"]);
+              }
+            }
+            if (!reason) {
+              reason =
+                parsedUrl.searchParams.get("reason") ||
+                request.headers.get("x-reason") ||
+                undefined;
+            }
+
+            const removeInput = removeProofBodySchema.parse({ reason });
+            const res = await removePaymentProofRecord(
+              auth.db,
+              auth.userId,
+              auth.userId,
+              paymentId,
+              removeInput,
+            );
+
+            return jsonResponse(res.body, res.status);
+          }
+
+          return methodNotAllowed(["GET", "POST", "PUT", "DELETE"]);
+        }
       }
 
       return null;

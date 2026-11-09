@@ -24,6 +24,13 @@ export type CrmErrorCode =
   | "lead_archived"
   | "lead_already_archived"
   | "lead_not_archived"
+  | "proof_already_exists"
+  | "proof_not_found"
+  | "invalid_file_type"
+  | "file_too_large"
+  | "empty_file"
+  | "file_corrupted"
+  | "storage_error"
   | "idempotency_key_mismatch"
   | "crm_unavailable";
 
@@ -35,13 +42,13 @@ export interface CrmErrorPayload {
 }
 
 export class CrmServiceError extends Error {
-  readonly status: 400 | 403 | 404 | 409 | 503;
+  readonly status: 400 | 403 | 404 | 409 | 500 | 503;
   readonly code: CrmErrorCode;
   readonly details: Record<string, unknown> | undefined;
   readonly conflict: Record<string, unknown> | undefined;
 
   constructor(
-    status: 400 | 403 | 404 | 409 | 503,
+    status: 400 | 403 | 404 | 409 | 500 | 503,
     code: CrmErrorCode,
     message: string,
     options?: {

@@ -639,6 +639,9 @@ export const FINANCE_EVENT_TYPES = [
   "deal.won_date_verified",
   "payment.recorded",
   "payment.voided",
+  "proof.uploaded",
+  "proof.replaced",
+  "proof.removed",
 ] as const;
 export type FinanceEventType = (typeof FINANCE_EVENT_TYPES)[number];
 
@@ -955,3 +958,35 @@ export const financeSummaryQuerySchema = z
     }
   });
 export type FinanceSummaryQuery = z.infer<typeof financeSummaryQuerySchema>;
+
+export const replaceProofBodySchema = z
+  .object({
+    reason: optionalTrimmedString(500),
+    expectedProofVersion: z
+      .number()
+      .int()
+      .min(1, "Expected integer record version >= 1.")
+      .optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type ReplaceProofInput = z.infer<typeof replaceProofBodySchema>;
+
+export const removeProofBodySchema = z
+  .object({
+    reason: optionalTrimmedString(500),
+    expectedProofVersion: z
+      .number()
+      .int()
+      .min(1, "Expected integer record version >= 1.")
+      .optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type RemoveProofInput = z.infer<typeof removeProofBodySchema>;
+
+export const listProofHistoryQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type ListProofHistoryQuery = z.infer<typeof listProofHistoryQuerySchema>;

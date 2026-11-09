@@ -678,6 +678,64 @@ export const crmFinanceEvents = mysqlTable(
   ],
 );
 
+/**
+ * Dedicated payment-proof attachment metadata (Checkpoint B3B).
+ * Supports JPEG, PNG, WebP, and PDF up to 10 MiB.
+ * Physical files are stored strictly outside public web roots with private streaming.
+ * Exactly one active proof is allowed per payment via `active_payment_lock`.
+ * Historical replaced/removed records and files remain auditable (immutable evidence).
+ */
+export const crmPaymentProofs = mysqlTable(
+  "crm_payment_proofs",
+  {
+    id: crmId("id").primaryKey(),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    paymentId: crmId("payment_id")
+      .notNull()
+      .references(() => crmPayments.id, { onDelete: "restrict" }),
+    dealId: crmId("deal_id")
+      .notNull()
+      .references(() => crmDeals.id, { onDelete: "restrict" }),
+    legacyAttachmentId: varchar("legacy_attachment_id", { length: 128 }),
+    originalFileName: varchar("original_file_name", { length: 255 }).notNull(),
+    fileExtension: varchar("file_extension", { length: 16 }).notNull(),
+    mimeType: varchar("mime_type", { length: 64 }).notNull(),
+    fileSize: int("file_size").notNull(),
+    sha256Hash: char("sha256_hash", { length: 64 }).notNull(),
+    storageDriver: varchar("storage_driver", { length: 32 }).notNull().default("local-fs"),
+    storageKey: varchar("storage_key", { length: 255 }).notNull(),
+    lifecycleStatus: varchar("lifecycle_status", { length: 24 }).notNull().default("active"),
+    activePaymentLock: varchar("active_payment_lock", { length: 64 }),
+    replacedByProofId: crmId("replaced_by_proof_id").references(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (): any => crmPaymentProofs.id,
+      { onDelete: "restrict" },
+    ),
+    replacementReason: text("replacement_reason"),
+    removalReason: text("removal_reason"),
+    uploadedByUserId: crmId("uploaded_by_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    removedByUserId: crmId("removed_by_user_id").references(() => crmUsers.id, {
+      onDelete: "restrict",
+    }),
+    version: int("version").notNull().default(1),
+    uploadedAt: utcDateTime("uploaded_at").notNull(),
+    removedAt: utcDateTime("removed_at"),
+    createdAt: utcDateTime("created_at").notNull(),
+    updatedAt: utcDateTime("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("uq_crm_payment_proofs_active_pay").on(table.ownerUserId, table.activePaymentLock),
+    index("idx_crm_payment_proofs_owner_payment").on(table.ownerUserId, table.paymentId),
+    index("idx_crm_payment_proofs_owner_deal").on(table.ownerUserId, table.dealId),
+    index("idx_crm_payment_proofs_sha256").on(table.sha256Hash),
+    index("idx_crm_payment_proofs_storage_key").on(table.storageKey),
+  ],
+);
+
 export const b1aFoundationSchema = {
   crmSchemaMeta,
 } as const;
@@ -695,6 +753,7 @@ export const crmFinanceSchema = {
   crmDealMilestones,
   crmPayments,
   crmFinanceEvents,
+  crmPaymentProofs,
 } as const;
 
 export const crmCoreSchema = {

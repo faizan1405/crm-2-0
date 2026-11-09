@@ -1,5 +1,5 @@
 import "@tanstack/react-start/server-only";
-import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { generateServerId } from "../auth/security.server";
 import type { CrmDatabase } from "../db/index.server";
 import {
@@ -16,6 +16,7 @@ import {
   crmDeals,
   crmFinanceEvents,
   crmLeadActivities,
+  crmPaymentProofs,
   crmPayments,
 } from "../db/schema.server";
 import { toMysqlUtcDateTime } from "../db/utc.server";
@@ -452,7 +453,25 @@ export async function listPaymentsForDeal(
   });
 
   const total = filtered.length;
-  const items = filtered.slice(query.offset, query.offset + query.limit).map(toPaymentDto);
+  const pagedRows = filtered.slice(query.offset, query.offset + query.limit);
+  const paymentIds = pagedRows.map((p) => p.id);
+
+  const proofRows =
+    paymentIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(crmPaymentProofs)
+          .where(
+            and(
+              eq(crmPaymentProofs.ownerUserId, ownerUserId),
+              inArray(crmPaymentProofs.paymentId, paymentIds),
+              isNotNull(crmPaymentProofs.activePaymentLock),
+            ),
+          );
+
+  const proofMap = new Map(proofRows.map((p) => [p.paymentId, p]));
+  const items = pagedRows.map((p) => toPaymentDto(p, proofMap.get(p.id) ?? null));
 
   return {
     items,
@@ -514,8 +533,26 @@ export async function listAllPayments(
           .limit(query.limit)
           .offset(query.offset);
 
+  const paymentIds = rows.map((p) => p.id);
+  const proofRows =
+    paymentIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(crmPaymentProofs)
+          .where(
+            and(
+              eq(crmPaymentProofs.ownerUserId, ownerUserId),
+              inArray(crmPaymentProofs.paymentId, paymentIds),
+              isNotNull(crmPaymentProofs.activePaymentLock),
+            ),
+          );
+
+  const proofMap = new Map(proofRows.map((p) => [p.paymentId, p]));
+  const items = rows.map((p) => toPaymentDto(p, proofMap.get(p.id) ?? null));
+
   return {
-    items: rows.map(toPaymentDto),
+    items,
     total,
     limit: query.limit,
     offset: query.offset,
@@ -527,16 +564,29 @@ export async function getPaymentRecord(
   ownerUserId: string,
   paymentId: string,
 ): Promise<PaymentDto> {
-  const rows = await db
-    .select()
-    .from(crmPayments)
-    .where(and(eq(crmPayments.id, paymentId), eq(crmPayments.ownerUserId, ownerUserId)))
-    .limit(1);
-  const row = rows[0];
+  const [paymentRows, proofRows] = await Promise.all([
+    db
+      .select()
+      .from(crmPayments)
+      .where(and(eq(crmPayments.id, paymentId), eq(crmPayments.ownerUserId, ownerUserId)))
+      .limit(1),
+    db
+      .select()
+      .from(crmPaymentProofs)
+      .where(
+        and(
+          eq(crmPaymentProofs.ownerUserId, ownerUserId),
+          eq(crmPaymentProofs.paymentId, paymentId),
+          eq(crmPaymentProofs.activePaymentLock, paymentId),
+        ),
+      )
+      .limit(1),
+  ]);
+  const row = paymentRows[0];
   if (!row) {
     throw new CrmServiceError(404, "not_found", "Payment not found.");
   }
-  return toPaymentDto(row);
+  return toPaymentDto(row, proofRows[0] ?? null);
 }
 
 /**

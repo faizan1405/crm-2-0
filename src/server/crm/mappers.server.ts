@@ -8,6 +8,7 @@ import type {
   crmFollowUps,
   crmLeadActivities,
   crmLeads,
+  crmPaymentProofs,
   crmPayments,
   crmWhatsAppLogs,
 } from "../db/schema.server";
@@ -15,6 +16,8 @@ import { decimalStringToPaise, decimalStringToRupees } from "../db/money.server"
 import { parseUtcDateTime } from "../db/utc.server";
 import { mysqlUtcToIso, toIstParts } from "./dates.server";
 import type { DealFinancialSummaryDto } from "./financeCalc.server";
+import type { ProofStorageDriverKind } from "../storage/proofStorage.server";
+import type { ProofKind } from "../storage/proofValidation.server";
 import type {
   ActivityType,
   CallOutcome,
@@ -39,6 +42,56 @@ export type LeadActivityRow = InferSelectModel<typeof crmLeadActivities>;
 export type FollowUpRow = InferSelectModel<typeof crmFollowUps>;
 export type CallLogRow = InferSelectModel<typeof crmCallLogs>;
 export type WhatsAppLogRow = InferSelectModel<typeof crmWhatsAppLogs>;
+export type PaymentProofRow = InferSelectModel<typeof crmPaymentProofs>;
+
+export interface PaymentProofDto {
+  id: string;
+  legacyAttachmentId: string | null;
+  paymentId: string;
+  dealId: string;
+  originalFileName: string;
+  fileExtension: string;
+  mimeType: ProofKind;
+  fileSize: number;
+  sha256: string;
+  storageDriver: ProofStorageDriverKind;
+  lifecycleStatus: "active" | "replaced" | "removed";
+  version: number;
+  uploadedByUserId: string;
+  uploadedAt: string;
+  removedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  downloadUrl: string;
+}
+
+export function toPaymentProofDto(row: PaymentProofRow): PaymentProofDto {
+  const uploadedAt = mysqlUtcToIso(row.uploadedAt) ?? row.uploadedAt;
+  const removedAt = mysqlUtcToIso(row.removedAt);
+  const createdAt = mysqlUtcToIso(row.createdAt) ?? row.createdAt;
+  const updatedAt = mysqlUtcToIso(row.updatedAt) ?? row.updatedAt;
+
+  return {
+    id: row.id,
+    legacyAttachmentId: row.legacyAttachmentId ?? null,
+    paymentId: row.paymentId,
+    dealId: row.dealId,
+    originalFileName: row.originalFileName,
+    fileExtension: row.fileExtension,
+    mimeType: row.mimeType as ProofKind,
+    fileSize: row.fileSize,
+    sha256: row.sha256Hash,
+    storageDriver: row.storageDriver as ProofStorageDriverKind,
+    lifecycleStatus: row.lifecycleStatus as "active" | "replaced" | "removed",
+    version: row.version,
+    uploadedByUserId: row.uploadedByUserId,
+    uploadedAt,
+    ...(removedAt ? { removedAt } : {}),
+    createdAt,
+    updatedAt,
+    downloadUrl: `/api/v1/payments/${encodeURIComponent(row.paymentId)}/proof/download`,
+  };
+}
 
 export interface LeadDto {
   id: string;
@@ -434,6 +487,8 @@ export interface PaymentDto {
   recordedByUserId: string;
   updatedByUserId: string;
   version: number;
+  hasProof?: boolean;
+  proof?: PaymentProofDto | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -524,9 +579,20 @@ export function toDealDto(
   };
 }
 
-export function toPaymentDto(row: PaymentRow): PaymentDto {
+export function toPaymentDto(
+  row: PaymentRow,
+  activeProof?: unknown,
+): PaymentDto {
   const voidedAt = mysqlUtcToIso(row.voidedAt);
   const amountPaise = decimalStringToPaise(row.amount);
+  const proofRow =
+    activeProof &&
+    typeof activeProof === "object" &&
+    "lifecycleStatus" in activeProof &&
+    (activeProof as PaymentProofRow).lifecycleStatus === "active"
+      ? (activeProof as PaymentProofRow)
+      : null;
+
   return {
     id: row.id,
     legacyId: row.legacyId ?? null,
@@ -549,6 +615,8 @@ export function toPaymentDto(row: PaymentRow): PaymentDto {
     recordedByUserId: row.recordedByUserId,
     updatedByUserId: row.updatedByUserId,
     version: row.version,
+    hasProof: Boolean(proofRow),
+    ...(proofRow ? { proof: toPaymentProofDto(proofRow) } : {}),
     createdAt: mysqlUtcToIso(row.createdAt) ?? row.createdAt,
     updatedAt: mysqlUtcToIso(row.updatedAt) ?? row.updatedAt,
   };

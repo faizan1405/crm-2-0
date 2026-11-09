@@ -72,6 +72,17 @@ See [`docs/crm-b3a-finance-backend.md`](./crm-b3a-finance-backend.md) for the fu
 - `GET /api/v1/deals/:id/payments` / `POST /api/v1/deals/:id/payments` / `GET /api/v1/payments` / `GET /api/v1/payments/:id` / `POST /api/v1/payments/:id/void`
 - `GET /api/v1/finance/summary`
 
+### Private Payment-Proof Storage (Added in B3B, Migration `0006`)
+
+See [`docs/crm-b3b-payment-proofs.md`](./crm-b3b-payment-proofs.md) for full storage driver specifications, magic-byte sniffing, atomic replacement, and audit-retained proof retention:
+
+- `POST /api/v1/payments/:id/proof` — Attaches active proof (`JPEG`, `PNG`, `WebP`, `PDF`, `<= 10 MiB`).
+- `GET /api/v1/payments/:id/proof` — Returns active proof metadata (`PaymentProofDto`).
+- `PUT /api/v1/payments/:id/proof` / `POST /api/v1/payments/:id/proof/replace` — Atomically replaces proof; marks old proof `replaced` without physical deletion.
+- `DELETE /api/v1/payments/:id/proof` — Removes active proof; sets `removed`, preserves physical evidence for audit.
+- `GET /api/v1/payments/:id/proof/download` — Authenticated streaming download (`X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`, PDF sandbox CSP, optional `download=1`).
+- `GET /api/v1/payments/:id/proof/history` — Chronological proof history for this payment.
+
 ## 3. Idempotency & Optimistic Concurrency
 
 - All mutating `POST` / `PATCH` / `DELETE` routes accept the `Idempotency-Key` HTTP header (and body `idempotencyKey` / `opId` where supported).
