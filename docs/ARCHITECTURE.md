@@ -8,7 +8,8 @@ TanStack Start v1 / TanStack Router, React 19, TypeScript, Vite 8 (installed pro
 - `src/components/crm/`: Shell, add-lead and shared dialogs. `src/components/ui/`: reusable design-system controls.
 - `src/lib/crm/types.ts`: entity contracts and enum labels.
 - `demo.ts`: literal demo fixtures; dates pinned to October 2026, not a rolling dataset.
-- `store.ts`: sole data/actions/preference source, Zustand persistence under `scale-flow-crm-2-demo`, version 2. No API calls. Shell hydrates it after mount and applies theme/date preferences.
+- `store.ts`: sole data/actions/preference source, Zustand persistence under `scale-flow-crm-2-demo`, version 10 (migrations v3–v10). No API calls. Shell hydrates it after mount and applies theme/date preferences.
+- **Backend foundation (B1A, `feat/b1a-backend-foundation`):** `vite.config.ts` targets Nitro `node-server` (`.output/server/index.mjs`); `src/server.ts` routes `/api/*` via `src/server/http/apiRouter.server.ts` (`src/server/**` enforces `@tanstack/react-start/server-only`); `src/server/db/` prepares MySQL + Drizzle conventions without active auth or CRM APIs yet.
 - `finance.ts`: collected, outstanding, payment status, overdue, summary; `insights.ts`: deterministic priorities/chase; `parse.ts`: demo text extraction; `dates.ts`: business calendar/range/input conversion; `validation.ts`: edit rules.
 - Vitest tests live beside the pure modules and store, with a route-match test in `src/test`.
 

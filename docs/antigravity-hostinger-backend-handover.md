@@ -1,10 +1,12 @@
 # Antigravity + Hostinger Backend Handover — CRM V2
 Specification only. **No backend has been written or deployed.** Do not start without explicit Owner approval. Do not touch CRM V1 or its GitHub repository.
 
-> **H0 status (6 Nov 2026 UTC):** verified against current code. Everything in §A describes code that exists today. Everything in §B–§H is a **proposed** contract — no endpoint, table, server or OpenRouter call exists yet.
+> **H0 status (6 Nov 2026 UTC):** verified against current code. Everything in §A describes frontend code that exists today. Everything in §B–§H is a **proposed** contract — no auth, CRM APIs, DB tables, or OpenRouter calls exist yet.
+>
+> **B1A update (branch `feat/b1a-backend-foundation`):** Added Nitro `node-server` runtime target, `src/server/**` foundation, `.env.example`, Drizzle + `mysql2` config, and secret-free `GET /api/v1/health` only; corrected Vite version and Data Vault ZIP payment-proof findings below.
 
 ## A. Existing frontend architecture
-- **Framework:** TanStack Start v1 (React 19, TanStack Router file routes), Vite 7, Tailwind CSS v4, TypeScript strict, vitest (706 tests as of H0).
+- **Framework:** TanStack Start v1 (React 19, TanStack Router file routes), Vite 8 (installed `8.1.5`), Tailwind CSS v4, TypeScript strict, vitest (706 frontend tests as of H0, plus B1A foundation/vault tests).
 - **Routes (`src/routes`):** `/` dashboard, `/inbox`, `/leads`, `/leads/$id`, `/leads/bin`, `/pipeline`, `/follow-ups`, `/ai-copilot`, `/deals`, `/projects`, `/projects/$id`, `/sales-studio`, `/notes`, `/my-performance`, `/analytics`, `/daily-briefing`, `/team-performance`, `/team-activity`, `/team`, `/team/preview/$id`, `/team/workspace/$id`, `/automation`, `/crm-config`, `/data-vault`, `/settings`, `/login`.
 - **State:** one zustand store `src/lib/crm/store.ts` (with `projectStore.ts` slice) persisted via a guarded localStorage adapter; this store is the single swap point for a real API. Store actions already enforce validation, version checks and record synchronisation.
 - **Browser storage:**
@@ -54,7 +56,7 @@ Must stay deterministic (never replaced by a model): financial totals and status
 - CRM V1 and its repository stay untouched; CRM V2 deploys separately (own domain/subdomain, own database).
 - Migration: Owner exports from Data Vault → server imports into a **staging** database → counts and finance totals reconciled against `recordCount` and `financeSummary` → Owner signs off → switch.
 - Rollback: keep the browser export and the pre-import DB snapshot; switching back = re-point to the previous build; never delete source data.
-- Proof files must be exported separately from IndexedDB (not in localStorage).
+- Proof files live in IndexedDB (`scale-flow-payment-proofs`, not in localStorage), **and the Phase 3B.5 Data Vault ZIP export (`vault.ts`, `data-vault.tsx`) already reads them from IndexedDB, bundles them under `files/payment-proofs/`, and checksums them in `data/attachment-metadata.json` + `manifest.json` (verified in B1A).** Only server-side ingestion/migration into private Hostinger storage needs to be built in B4.
 - No overwriting live data; imports are idempotent by record id.
 - No production changes have been made by this checkpoint.
 
@@ -71,7 +73,7 @@ Must stay deterministic (never replaced by a model): financial totals and status
 **Deterministic forever:** finance totals/statuses, payment validation, KPIs, duplicate detection, dates/time zone, stage age, permissions. The model writes, summarises and recommends; it never produces financial figures.
 
 ## G. Migration & deployment sequence (proposed)
-1. Owner approval of this document. 2. Build backend on a **staging** environment only. 3. Owner exports Data Vault JSON **and** payment-proof files (IndexedDB `scale-flow-payment-proofs` — not in the JSON today; a proof export step must be built). 4. Import into staging idempotently by record id; never delete or overwrite. 5. Reconcile record counts per entity, `financeSummary` totals, payments per deal and proof file count/checksums. 6. Restore test: back up staging, restore into a second copy, reconcile again. 7. Owner reviews staging with real data. 8. Switch CRM V2 frontend to the API provider; keep browser data untouched as fallback. 9. Rollback = re-point to previous build + pre-import snapshot. CRM V1 (crm.joinscaleflow.in) and repo `faizan1405/CRM` are never modified.
+1. Owner approval of this document. 2. Build backend on a **staging** environment only. 3. Owner generates a **full Data Vault ZIP backup** (`ScaleFlow_Backup_Full_*.zip`, which already bundles CRM JSON modules under `data/*.json` **and** IndexedDB `scale-flow-payment-proofs` binaries under `files/payment-proofs/` with SHA-256 checksums, verified in B1A — only the server-side ZIP importer needs to be built in B4). 4. Import into staging idempotently by record id; never delete or overwrite. 5. Reconcile record counts per entity, `financeSummary` totals, payments per deal and proof file count/checksums. 6. Restore test: back up staging, restore into a second copy, reconcile again. 7. Owner reviews staging with real data. 8. Switch CRM V2 frontend to the API provider; keep browser data untouched as fallback. 9. Rollback = re-point to previous build + pre-import snapshot. CRM V1 (crm.joinscaleflow.in) and repo `faizan1405/CRM` are never modified.
 
 ## H. Recommended backend implementation order
 1. Auth (Owner) + sessions + server authorization. 2. Database schema mirroring §A with `version` columns. 3. Leads/activities/follow-ups API. 4. Deals/payments with transactions + proof file storage. 5. Projects/tasks/support with 409 conflicts. 6. Data Vault export/import + restore verification. 7. Store swap in `store.ts`. 8. Server scheduling for automations. 9. OpenRouter endpoint (§F). 10. Employee accounts (Team CRM, separately approved).

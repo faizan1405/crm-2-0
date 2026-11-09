@@ -7,8 +7,13 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
+  // Target Node.js (`.output/server/index.mjs`) for Hostinger / standard Node hosting.
+  // Inside a Lovable sandbox build, LOVABLE_NITRO_PRESET still overrides automatically.
+  nitro: {
+    preset: "node-server",
+  },
   tanstackStart: {
-    // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
+    // Redirect TanStack Start's bundled server entry to src/server.ts (SSR + /api/* wrapper).
     // nitro/vite builds from this
     server: { entry: "server" },
   },
