@@ -6,9 +6,9 @@ import {
   loadServerEnv,
   type DatabaseConnectionConfig,
 } from "../config/env.server";
-import { authSchema } from "./schema.server";
+import { appSchema } from "./schema.server";
 
-export type CrmDatabase = MySql2Database<typeof authSchema>;
+export type CrmDatabase = MySql2Database<typeof appSchema>;
 
 export interface DatabaseStatusReport {
   configured: boolean;
@@ -91,7 +91,7 @@ export function getDatabase(): CrmDatabase | null {
 
   const pool = mysql.createPool(buildMysqlPoolOptions(cfg));
   cachedPool = pool;
-  cachedDb = drizzle(pool, { schema: authSchema, mode: "default" });
+  cachedDb = drizzle(pool, { schema: appSchema, mode: "default" });
   cachedConfigKey = key;
   return cachedDb;
 }

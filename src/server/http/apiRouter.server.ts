@@ -19,6 +19,7 @@ import {
   shouldUseSecureCookie,
   verifyCsrfAndOrigin,
 } from "../auth/security.server";
+import { handleCrmApiRequest } from "./crmRoutes.server";
 
 const API_SECURITY_HEADERS: Record<string, string> = {
   "content-type": "application/json; charset=utf-8",
@@ -435,6 +436,11 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
         200,
         { "set-cookie": clearCookie },
       );
+    }
+
+    const crmResponse = await handleCrmApiRequest(request, pathname, env);
+    if (crmResponse) {
+      return crmResponse;
     }
 
     return jsonResponse(

@@ -8,6 +8,13 @@
       "when": 1794221859221,
       "tag": "0000_b1b_owner_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1794222986313,
+      "tag": "0001_b2a_core_crm",
+      "breakpoints": true
     }
   ]
 }
