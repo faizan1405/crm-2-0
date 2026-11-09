@@ -16,7 +16,6 @@ import {
   Layers,
   LayoutGrid,
   List,
-  MessageCircle,
   PhoneCall,
   Pin,
   Plus,
@@ -30,6 +29,7 @@ import {
 import { useCreateActivityMutation, useLeadActivitiesQuery } from "@/lib/api/activitiesApi";
 import { useLeadCallsQuery } from "@/lib/api/callsApi";
 import { createIdempotencyKey } from "@/lib/api/client";
+import { useLeadWhatsAppMessagesQuery } from "@/lib/api/whatsappApi";
 import { extractStaleConflict, formatApiErrorMessage, isApiError } from "@/lib/api/errors";
 import { useCompleteFollowUpMutation, useLeadFollowUpsQuery } from "@/lib/api/followupsApi";
 import {
@@ -60,18 +60,15 @@ import {
 import type { LeadsSearch } from "@/lib/crm/leadsSearch";
 import { FOLLOWUP_LABEL, LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL } from "@/lib/crm/types";
 import { telHref } from "@/lib/crm/validation";
+import { WA_LABEL } from "@/lib/crm/whatsapp";
 import { Empty, Identity, PriorityBadge, selectCls } from "@/components/crm/ShellPrimitives";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { PilotAddLeadDialog } from "./PilotAddLeadDialog";
-import {
-  PilotCallDialog,
-  PilotCallLink,
-  type PilotCallLeadRef,
-  usePilotCallLauncher,
-} from "./PilotCallDialog";
+import { PilotCallDialog, PilotCallLink } from "./PilotCallDialog";
+import { type PilotCallLeadRef, usePilotCallLauncher } from "./pilotCallLauncher";
 import { PilotArchiveDialog, PilotLostReasonDialog } from "./PilotDialogs";
 import {
   PilotCancelFollowUpDialog,
@@ -79,6 +76,8 @@ import {
   PilotScheduleFollowUpDialog,
 } from "./PilotFollowUpDialogs";
 import { PilotShell } from "./PilotShell";
+import { PilotWhatsAppButton, PilotWhatsAppDialog } from "./PilotWhatsAppDialog";
+import { type PilotWhatsAppLeadRef, usePilotWhatsAppLauncher } from "./pilotWhatsAppLauncher";
 
 const PAGE_SIZE = 50;
 
@@ -109,6 +108,11 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
   const [addOpen, setAddOpen] = useState(false);
   const [followUpTarget, setFollowUpTarget] = useState<LeadDto | null>(null);
   const { target: callTarget, dialLead, openLogOnly, close: closeCall } = usePilotCallLauncher();
+  const {
+    target: waTarget,
+    openComposer: openWhatsAppComposer,
+    close: closeWhatsApp,
+  } = usePilotWhatsAppLauncher();
 
   const [lostTarget, setLostTarget] = useState<LeadDto | null>(null);
   const [lostError, setLostError] = useState<string | null>(null);
@@ -645,6 +649,7 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
               quickSel={quickSel(selectedLead)}
               onDial={dialLead}
               onLogCall={(l) => openLogOnly(l, "Leads workspace")}
+              onOpenWhatsApp={openWhatsAppComposer}
               onRemove={(kind) => {
                 setArchiveError(null);
                 setArchiveTarget({ lead: selectedLead, kind });
@@ -741,6 +746,12 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
                   >
                     <PhoneCall className="size-4" />
                   </Button>
+                  <PilotWhatsAppButton
+                    lead={l}
+                    composerSource="Leads cards"
+                    compact
+                    onOpenComposer={openWhatsAppComposer}
+                  />
                   <Button
                     type="button"
                     size="icon"
@@ -1007,6 +1018,7 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
       />
 
       <PilotCallDialog target={callTarget} onClose={closeCall} />
+      <PilotWhatsAppDialog target={waTarget} onClose={closeWhatsApp} />
     </PilotShell>
   );
 }
@@ -1020,6 +1032,7 @@ function PilotLeadInspector({
   quickSel,
   onDial,
   onLogCall,
+  onOpenWhatsApp,
   onRemove,
 }: {
   lead: LeadDto;
@@ -1030,9 +1043,11 @@ function PilotLeadInspector({
   quickSel: React.ReactNode;
   onDial: (lead: LeadDto | PilotCallLeadRef, dialSource: string) => void;
   onLogCall: (lead: LeadDto) => void;
+  onOpenWhatsApp: (lead: LeadDto | PilotWhatsAppLeadRef, composerSource: string) => void;
   onRemove: (kind: "waste" | "deleted") => void;
 }) {
   const callsQuery = useLeadCallsQuery(lead.id, { limit: 5 });
+  const waMessagesQuery = useLeadWhatsAppMessagesQuery(lead.id, { limit: 5 });
   const activitiesQuery = useLeadActivitiesQuery(lead.id, { limit: 7 });
   const leadFollowUpsQuery = useLeadFollowUpsQuery(lead.id);
   const createActivityMutation = useCreateActivityMutation();
@@ -1138,17 +1153,11 @@ function PilotLeadInspector({
           <PhoneCall className="size-3.5" />
           Log call
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="rounded-full opacity-60"
-          disabled
-          title="WhatsApp templates connect in later checkpoints"
-        >
-          <MessageCircle className="size-3.5" />
-          WhatsApp
-        </Button>
+        <PilotWhatsAppButton
+          lead={lead}
+          composerSource="Leads workspace"
+          onOpenComposer={onOpenWhatsApp}
+        />
         <Button
           type="button"
           variant="outline"
@@ -1381,6 +1390,51 @@ function PilotLeadInspector({
                     {c.notes && (
                       <p className="mt-1 line-clamp-2 text-muted-foreground">{c.notes}</p>
                     )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div data-testid="pilot-inspector-whatsapp-panel">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="eyebrow">WhatsApp (MariaDB)</span>
+              <span className="num text-[11px] text-muted-foreground">
+                {waMessagesQuery.data?.total ?? 0} confirmed
+              </span>
+            </div>
+            {waMessagesQuery.isLoading ? (
+              <div className="h-14 animate-pulse rounded-lg bg-muted" />
+            ) : waMessagesQuery.isError ? (
+              <p role="alert" className="text-xs text-destructive">
+                {formatApiErrorMessage(waMessagesQuery.error, "Could not load WhatsApp messages.")}
+              </p>
+            ) : (waMessagesQuery.data?.items ?? []).length === 0 ? (
+              <div className="flex items-center justify-between gap-2 rounded-lg border p-3 text-xs">
+                <span className="text-muted-foreground">No confirmed WhatsApp messages yet.</span>
+                <PilotWhatsAppButton
+                  lead={lead}
+                  composerSource="Leads workspace"
+                  onOpenComposer={onOpenWhatsApp}
+                  className="h-7 rounded-full px-2.5 text-xs"
+                />
+              </div>
+            ) : (
+              <ul className="grid gap-1.5 text-xs">
+                {(waMessagesQuery.data?.items ?? []).map((m) => (
+                  <li key={m.id} className="rounded-lg border bg-card p-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold">
+                        {WA_LABEL[m.purpose]}{" "}
+                        <span className="font-normal text-muted-foreground">
+                          (Owner-confirmed sent)
+                        </span>
+                      </span>
+                      <span className="num text-[11px] text-muted-foreground">
+                        {relative(m.confirmedAt)}
+                      </span>
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-muted-foreground">{m.messageText}</p>
                   </li>
                 ))}
               </ul>

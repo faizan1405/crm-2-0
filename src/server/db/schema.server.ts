@@ -314,6 +314,57 @@ export const crmCallLogs = mysqlTable(
 );
 
 /**
+ * B2B4: Explicit owner-confirmed outgoing WhatsApp message logs persisted atomically
+ * alongside `crm_lead_activities` (`type = 'whatsapp'`) and `crm_leads` version tracking.
+ * Never claims delivery or two-way client reply (`confirmation_status = 'owner_confirmed_sent'`).
+ */
+export const crmWhatsAppLogs = mysqlTable(
+  "crm_whatsapp_logs",
+  {
+    id: crmId("id").primaryKey(),
+    legacyId: crmId("legacy_id"),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "cascade" }),
+    leadId: crmId("lead_id")
+      .notNull()
+      .references(() => crmLeads.id, { onDelete: "cascade" }),
+    actorUserId: crmId("actor_user_id")
+      .notNull()
+      .references(() => crmUsers.id),
+    purpose: varchar("purpose", { length: 24 }).notNull(),
+    templateId: varchar("template_id", { length: 64 }),
+    templateName: varchar("template_name", { length: 120 }),
+    recipientPhone: varchar("recipient_phone", { length: 20 }).notNull(),
+    messageText: text("message_text").notNull(),
+    confirmationStatus: varchar("confirmation_status", { length: 32 })
+      .notNull()
+      .default("owner_confirmed_sent"),
+    composerSource: varchar("composer_source", { length: 64 }).notNull(),
+    leadActivityId: crmId("lead_activity_id").notNull(),
+    opId: varchar("op_id", { length: 128 }),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }),
+    confirmedAt: utcDateTime("confirmed_at").notNull(),
+    confirmedIstDate: istDateChar("confirmed_ist_date").notNull(),
+    confirmedIstTime: char("confirmed_ist_time", { length: 5 }).notNull(),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    uniqueIndex("uq_crm_wa_logs_owner_legacy").on(table.ownerUserId, table.legacyId),
+    uniqueIndex("uq_crm_wa_logs_owner_op").on(table.ownerUserId, table.opId),
+    uniqueIndex("uq_crm_wa_logs_owner_idem").on(
+      table.ownerUserId,
+      table.leadId,
+      table.idempotencyKey,
+    ),
+    index("idx_crm_wa_logs_lead_confirmed").on(table.leadId, table.confirmedAt),
+    index("idx_crm_wa_logs_owner_confirmed").on(table.ownerUserId, table.confirmedAt),
+    index("idx_crm_wa_logs_owner_ist_date").on(table.ownerUserId, table.confirmedIstDate),
+    index("idx_crm_wa_logs_activity").on(table.leadActivityId),
+  ],
+);
+
+/**
  * B2A: Supporting tag definitions & Lead tag mappings (mirrors src/lib/crm/customize.ts TagDef).
  */
 export const crmTagDefs = mysqlTable(
@@ -462,6 +513,7 @@ export const crmCoreSchema = {
   crmLeadActivities,
   crmFollowUps,
   crmCallLogs,
+  crmWhatsAppLogs,
   crmTagDefs,
   crmLeadTags,
   crmCustomFields,

@@ -44,15 +44,24 @@ import {
   createCallLogBodySchema,
   createFollowUpBodySchema,
   createLeadBodySchema,
+  createWhatsAppLogBodySchema,
   listActivitiesQuerySchema,
   listCallsQuerySchema,
   listFollowUpsQuerySchema,
   listLeadCallsQuerySchema,
+  listLeadWhatsAppQuerySchema,
   listLeadsQuerySchema,
+  listWhatsAppQuerySchema,
   restoreLeadBodySchema,
   updateFollowUpBodySchema,
   updateLeadBodySchema,
 } from "../crm/validation.server";
+import {
+  createWhatsAppLogRecord,
+  getWhatsAppLogRecord,
+  listWhatsAppLogs,
+  listWhatsAppLogsForLead,
+} from "../crm/whatsappService.server";
 import { getDatabase, type CrmDatabase } from "../db/index.server";
 
 const CRM_API_HEADERS: Record<string, string> = {
@@ -344,8 +353,8 @@ function hasRequestBodyHint(request: Request): boolean {
 }
 
 /**
- * Handles all Core CRM `/api/v1/leads*`, `/api/v1/follow-ups*`, and `/api/v1/calls*` endpoints.
- * Returns `null` if the pathname does not match any CRM route.
+ * Handles all Core CRM `/api/v1/leads*`, `/api/v1/follow-ups*`, `/api/v1/calls*`, and
+ * `/api/v1/whatsapp-messages*` endpoints. Returns `null` if the pathname does not match any CRM route.
  */
 export async function handleCrmApiRequest(
   request: Request,
@@ -355,7 +364,8 @@ export async function handleCrmApiRequest(
   if (
     !pathname.startsWith("/api/v1/leads") &&
     !pathname.startsWith("/api/v1/follow-ups") &&
-    !pathname.startsWith("/api/v1/calls")
+    !pathname.startsWith("/api/v1/calls") &&
+    !pathname.startsWith("/api/v1/whatsapp-messages")
   ) {
     return null;
   }
@@ -643,6 +653,18 @@ export async function handleCrmApiRequest(
           const result = await listCallLogsForLead(auth.db, auth.userId, leadId, query);
           return jsonResponse({ ok: true, ...result }, 200);
         }
+
+        // GET /api/v1/leads/:id/whatsapp-messages
+        if (subresource === "whatsapp-messages") {
+          if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const query = listLeadWhatsAppQuerySchema.parse(searchParamsObject(parsedUrl));
+          const result = await listWhatsAppLogsForLead(auth.db, auth.userId, leadId, query);
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
       }
 
       return null;
@@ -866,6 +888,68 @@ export async function handleCrmApiRequest(
 
           const call = await getCallLogRecord(auth.db, auth.userId, callId);
           return jsonResponse({ ok: true, call }, 200);
+        }
+
+        return methodNotAllowed(["GET"]);
+      }
+
+      return null;
+    }
+
+    if (resource === "whatsapp-messages") {
+      // GET|POST /api/v1/whatsapp-messages
+      if (segments.length === 3) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const query = listWhatsAppQuerySchema.parse(searchParamsObject(parsedUrl));
+          const result = await listWhatsAppLogs(auth.db, auth.userId, query);
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
+
+        if (request.method === "POST") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = createWhatsAppLogBodySchema.parse(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+            opId: input.opId,
+          });
+
+          const res = await createWhatsAppLogRecord(auth.db, auth.userId, auth.userId, input, {
+            idempotencyKey: idemKey,
+          });
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        return methodNotAllowed(["GET", "POST"]);
+      }
+
+      // GET /api/v1/whatsapp-messages/:id
+      if (segments.length === 4) {
+        const idSeg = decodeIdSegment(segments[3] ?? "");
+        if (!idSeg.ok) return idSeg.response;
+        const messageId = idSeg.value;
+
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const message = await getWhatsAppLogRecord(auth.db, auth.userId, messageId);
+          return jsonResponse({ ok: true, message }, 200);
         }
 
         return methodNotAllowed(["GET"]);

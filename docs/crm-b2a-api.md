@@ -17,6 +17,7 @@ Migration [`src/server/db/migrations/0001_b2a_core_crm.sql`](../src/server/db/mi
 | `crm_lead_field_values` | Typed custom field values per Lead                    | `uq_crm_lead_field_values_lead_field`, `idx_crm_lead_field_values_owner_field`                                                                                                                                                                                                                              |
 | `crm_idempotency_keys`  | Retry-safe request de-duplication (24h TTL)           | `uq_crm_idempotency_owner_scope_key` (`request_hash` SHA-256 + stored status/response, `scope` widened to `varchar(128)` in `0002`)                                                                                                                                                                     |
 | `crm_call_logs`         | User-recorded call outcomes + stage/activity audit (`0003`) | `uq_crm_call_logs_owner_legacy`, `uq_crm_call_logs_owner_op`, `uq_crm_call_logs_owner_idem`, `idx_crm_call_logs_lead_occurred`, `idx_crm_call_logs_owner_ist_date`, FK `lead_activity_id` -> `crm_lead_activities` |
+| `crm_whatsapp_logs`     | Owner-confirmed outgoing WhatsApp logs + activity audit (`0004`) | `uq_crm_wa_logs_owner_legacy`, `uq_crm_wa_logs_owner_op`, `uq_crm_wa_logs_owner_idem`, `idx_crm_wa_logs_lead_confirmed`, `idx_crm_wa_logs_owner_ist_date`, FK `lead_activity_id` -> `crm_lead_activities` |
 
 ## 2. Authenticated Owner REST Endpoints (`/api/v1`)
 
@@ -53,6 +54,13 @@ All endpoints require an authenticated active Owner cookie session (`401`/`403`/
 - `POST /api/v1/calls` — Records one explicit user-confirmed call outcome (`recordingSource: "user_recorded"`) inside an InnoDB transaction with `expectedLeadVersion` optimistic locking (`409 stale_conflict`), stage confirmation/lost-reason checks, atomic `"call"` (+ `"status"`) activity creation, and honest contact tracking (`Not picked`/`Busy` never update `last_contact_at`).
 - `GET /api/v1/leads/:id/calls` — Per-lead call history and summary.
 - `GET /api/v1/calls/:id` — Single `CallLogDto` (`404` on foreign or missing ID).
+
+### WhatsApp Messages (Added in B2B4, Migration `0004`)
+
+- `GET /api/v1/whatsapp-messages` — Paginated Owner-confirmed WhatsApp logs joined with lead summary (`leadId`, `purpose`, `dateIst`, `leadLifecycle`).
+- `POST /api/v1/whatsapp-messages` — Records one explicitly Owner-confirmed outgoing WhatsApp message (`confirmedSent: true`, `confirmationStatus: "owner_confirmed_sent"`) inside an InnoDB transaction with `expectedLeadVersion` optimistic locking (`409 stale_conflict`), recipient phone verification against the locked server lead, atomic `"whatsapp"` activity creation, and honest contact tracking (`last_contact_at`, `status`, and `quick_status` remain unchanged).
+- `GET /api/v1/leads/:id/whatsapp-messages` — Per-lead confirmed WhatsApp message history.
+- `GET /api/v1/whatsapp-messages/:id` — Single `WhatsAppLogDto` (`404` on foreign or missing ID).
 
 ## 3. Idempotency & Optimistic Concurrency
 

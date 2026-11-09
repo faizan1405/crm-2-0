@@ -48,6 +48,41 @@ export const QUICK_LABEL: Record<QuickStatus, string> = {
 export const FOLLOWUP_TYPES = ["call", "whatsapp", "meeting", "email"] as const;
 export type FollowUpType = (typeof FOLLOWUP_TYPES)[number];
 
+export const WA_PURPOSES = ["followup", "quotation", "samples", "custom"] as const;
+export type WaPurpose = (typeof WA_PURPOSES)[number];
+
+export const WA_PURPOSE_LABEL: Record<WaPurpose, string> = {
+  followup: "Follow-up",
+  quotation: "Quotation",
+  samples: "Samples / Demos",
+  custom: "Custom message",
+};
+
+/**
+ * Only explicit manual owner confirmation is permitted in B2B4.
+ * Never accept "delivered", "read", or "verified_sent" without WhatsApp Business API webhooks.
+ */
+export const WA_CONFIRMATION_STATUSES = ["owner_confirmed_sent"] as const;
+export type WaConfirmationStatus = (typeof WA_CONFIRMATION_STATUSES)[number];
+
+/**
+ * Mirrors src/lib/crm/whatsapp.ts `waNumber`.
+ * Normalizes a 10-digit Indian mobile (or 0-prefixed 11-digit / 91-prefixed 12-digit)
+ * to `91XXXXXXXXXX`; returns `null` if invalid.
+ */
+export function normalizeWhatsAppRecipientPhone(raw: string): string | null {
+  const digits = raw.replace(/\D/g, "");
+  const local =
+    digits.length === 10
+      ? digits
+      : digits.length === 11 && digits.startsWith("0")
+        ? digits.slice(1)
+        : digits.length === 12 && digits.startsWith("91")
+          ? digits.slice(2)
+          : null;
+  return local && /^[6-9]\d{9}$/.test(local) ? `91${local}` : null;
+}
+
 export const CALL_OUTCOMES = [
   "Connected",
   "Not picked",
@@ -503,3 +538,65 @@ export const listLeadCallsQuerySchema = z.object({
 });
 
 export type ListLeadCallsQuery = z.infer<typeof listLeadCallsQuerySchema>;
+
+export const createWhatsAppLogBodySchema = z.object({
+  leadId: z.string().trim().min(1, "Lead is required").max(64),
+  purpose: z.enum(WA_PURPOSES, {
+    errorMap: () => ({ message: "Pick a valid WhatsApp message purpose" }),
+  }),
+  templateId: optionalTrimmedString(64),
+  templateName: optionalTrimmedString(120),
+  recipientPhone: optionalTrimmedString(32).refine(
+    (v) => v === undefined || normalizeWhatsAppRecipientPhone(v) !== null,
+    "Phone number must be a valid Indian mobile for WhatsApp.",
+  ),
+  messageText: z
+    .string({ required_error: "Write or paste a WhatsApp message before confirming send." })
+    .transform((v) => v.replace(/\r\n?/g, "\n").trim())
+    .refine((v) => v.length >= 1, "Write or paste a WhatsApp message before confirming send.")
+    .refine((v) => v.length <= 4096, "WhatsApp message cannot exceed 4096 characters."),
+  confirmedSent: z.literal(true, {
+    errorMap: () => ({
+      message: "Confirm you actually sent the message in WhatsApp before logging.",
+    }),
+  }),
+  confirmationStatus: z
+    .enum(WA_CONFIRMATION_STATUSES, {
+      errorMap: () => ({
+        message: "Only manual owner confirmation ('owner_confirmed_sent') is supported.",
+      }),
+    })
+    .default("owner_confirmed_sent"),
+  composerSource: z.preprocess(
+    (v) =>
+      typeof v === "string" && v.trim() === "" ? undefined : typeof v === "string" ? v.trim() : v,
+    z.string().min(1).max(64).default("CRM"),
+  ),
+  expectedLeadVersion: z.number().int().min(1, "Expected integer record version >= 1.").optional(),
+  opId: optionalTrimmedString(128),
+  idempotencyKey: optionalTrimmedString(128),
+});
+
+export type CreateWhatsAppLogInput = z.infer<typeof createWhatsAppLogBodySchema>;
+
+export const listWhatsAppQuerySchema = z.object({
+  leadId: optionalTrimmedString(64),
+  purpose: z.enum(["all", ...WA_PURPOSES]).default("all"),
+  dateIst: optionalTrimmedString(10).refine(
+    (v) => v === undefined || isValidCalendarDay(v),
+    "dateIst must be a valid YYYY-MM-DD calendar date",
+  ),
+  leadLifecycle: z.enum(["active", "all", "waste", "deleted"]).default("active"),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+export type ListWhatsAppQuery = z.infer<typeof listWhatsAppQuerySchema>;
+
+export const listLeadWhatsAppQuerySchema = z.object({
+  purpose: z.enum(["all", ...WA_PURPOSES]).default("all"),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+export type ListLeadWhatsAppQuery = z.infer<typeof listLeadWhatsAppQuerySchema>;

@@ -72,6 +72,9 @@ export const CALL_OUTCOMES_API = [
   "Lost",
 ] as const;
 
+export const WA_PURPOSES_API = ["followup", "quotation", "samples", "custom"] as const;
+export const WA_CONFIRMATION_STATUSES_API = ["owner_confirmed_sent"] as const;
+
 export type LeadSourceApi = (typeof LEAD_SOURCES_API)[number];
 export type LeadStatusApi = (typeof LEAD_STATUSES_API)[number];
 export type LeadPriorityApi = (typeof LEAD_PRIORITIES_API)[number];
@@ -81,6 +84,8 @@ export type ManualActivityTypeApi = (typeof MANUAL_ACTIVITY_TYPES_API)[number];
 export type ActivityTypeApi = (typeof ALL_ACTIVITY_TYPES_API)[number];
 export type FollowUpTypeApi = (typeof FOLLOWUP_TYPES_API)[number];
 export type CallOutcomeApi = (typeof CALL_OUTCOMES_API)[number];
+export type WaPurposeApi = (typeof WA_PURPOSES_API)[number];
+export type WaConfirmationStatusApi = (typeof WA_CONFIRMATION_STATUSES_API)[number];
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const CALENDAR_YMD_HM_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?$/;
@@ -309,6 +314,44 @@ export const callSummarySchema = z.object({
 
 export type CallLogSummary = z.infer<typeof callSummarySchema>;
 
+export const waMessageDtoSchema = z.object({
+  id: z.string(),
+  legacyId: z.string().nullable(),
+  leadId: z.string(),
+  actorUserId: z.string(),
+  purpose: z.enum(WA_PURPOSES_API),
+  templateId: z.string().optional(),
+  templateName: z.string().optional(),
+  recipientPhone: z.string(),
+  messageText: z.string(),
+  confirmationStatus: z.literal("owner_confirmed_sent"),
+  composerSource: z.string(),
+  leadActivityId: z.string(),
+  opId: z.string().optional(),
+  confirmedAt: z.string(),
+  confirmedAtIst: z.string(),
+  confirmedIstDate: z.string(),
+  confirmedIstTime: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type WaMessageDto = z.infer<typeof waMessageDtoSchema>;
+
+export const waMessageWithLeadDtoSchema = waMessageDtoSchema.extend({
+  lead: z.object({
+    id: z.string(),
+    name: z.string(),
+    phone: z.string(),
+    company: z.string().optional(),
+    status: z.enum(LEAD_STATUSES_API),
+    priority: z.enum(LEAD_PRIORITIES_API),
+    lifecycleStatus: z.enum(LEAD_LIFECYCLE_API),
+  }),
+});
+
+export type WaMessageWithLeadDto = z.infer<typeof waMessageWithLeadDtoSchema>;
+
 export const leadsListResponseSchema = z.object({
   ok: z.literal(true),
   items: z.array(leadDtoSchema),
@@ -452,6 +495,41 @@ export const callCreateResponseSchema = z.object({
 });
 
 export type CallCreateResponse = z.infer<typeof callCreateResponseSchema>;
+
+export const waMessagesListResponseSchema = z.object({
+  ok: z.literal(true),
+  items: z.array(waMessageWithLeadDtoSchema),
+  total: z.number().int().min(0),
+  limit: z.number().int().min(1),
+  offset: z.number().int().min(0),
+});
+
+export type WaMessagesListResponse = z.infer<typeof waMessagesListResponseSchema>;
+
+export const leadWaMessagesListResponseSchema = z.object({
+  ok: z.literal(true),
+  leadId: z.string(),
+  items: z.array(waMessageDtoSchema),
+  total: z.number().int().min(0),
+  limit: z.number().int().min(1),
+  offset: z.number().int().min(0),
+});
+
+export type LeadWaMessagesListResponse = z.infer<typeof leadWaMessagesListResponseSchema>;
+
+export const waMessageGetResponseSchema = z.object({
+  ok: z.literal(true),
+  message: waMessageDtoSchema,
+});
+
+export const waMessageCreateResponseSchema = z.object({
+  ok: z.literal(true),
+  message: waMessageDtoSchema,
+  lead: leadDtoSchema,
+  activity: leadActivityDtoSchema,
+});
+
+export type WaMessageCreateResponse = z.infer<typeof waMessageCreateResponseSchema>;
 
 export const duplicateMatchSchema = z.object({
   id: z.string(),

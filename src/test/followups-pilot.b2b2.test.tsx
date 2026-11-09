@@ -249,6 +249,16 @@ describe("B2B2 Follow-ups Pilot UI, Conflict Handling & Storage Isolation", () =
           summary: { total: 0, connected: 0, attempts: 0 },
         });
       }
+      if (url.startsWith("/api/v1/leads/lead_a/whatsapp-messages")) {
+        return jsonRes({
+          ok: true,
+          leadId: "lead_a",
+          items: [],
+          total: 0,
+          limit: 3,
+          offset: 0,
+        });
+      }
       return jsonRes({
         ok: true,
         items: [],
@@ -266,7 +276,7 @@ describe("B2B2 Follow-ups Pilot UI, Conflict Handling & Storage Isolation", () =
     expect(screen.queryByText("Local Owner Protected Client")).toBeNull();
     expect(screen.getByText("Initial pricing review")).toBeInTheDocument();
 
-    // Open lead inspector sheet -> dialer tel: link & Log call are enabled, WhatsApp stays disabled, lastContact stays "Never".
+    // Open lead inspector sheet -> dialer tel: link, Log call, and WhatsApp are enabled, lastContact stays "Never".
     fireEvent.click(screen.getByRole("button", { name: "View" }));
     expect(await screen.findByText("Never")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Call Aarav Synthetic/i })).toHaveAttribute(
@@ -274,7 +284,10 @@ describe("B2B2 Follow-ups Pilot UI, Conflict Handling & Storage Isolation", () =
       "tel:9820001122",
     );
     expect(screen.getByRole("button", { name: "Log call" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "WhatsApp" })).toBeDisabled();
+    const inspector = screen.getByRole("dialog");
+    expect(
+      within(inspector).getByRole("button", { name: /WhatsApp Aarav Synthetic/i }),
+    ).toBeEnabled();
 
     // Complete follow-up from inspector -> preserves lastContact as null ("Never"), moves to History.
     fireEvent.click(screen.getByRole("button", { name: "Complete" }));
@@ -603,6 +616,16 @@ describe("B2B2 Follow-ups Pilot UI, Conflict Handling & Storage Isolation", () =
           limit: 25,
           offset: 0,
           summary: { total: 0, connected: 0, attempts: 0 },
+        });
+      }
+      if (url.startsWith("/api/v1/leads/lead_arch_1/whatsapp-messages")) {
+        return jsonRes({
+          ok: true,
+          leadId: "lead_arch_1",
+          items: [],
+          total: 0,
+          limit: 25,
+          offset: 0,
         });
       }
       return jsonRes({ ok: false }, 404);

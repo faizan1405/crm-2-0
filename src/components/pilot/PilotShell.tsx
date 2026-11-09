@@ -24,7 +24,8 @@ import { AppShellSkeleton, ScaleMark } from "@/components/crm/ShellPrimitives";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { clearPilotCallPending } from "./PilotCallDialog";
+import { clearPilotCallPending } from "./pilotCallLauncher";
+import { clearPilotWhatsAppPending } from "./pilotWhatsAppLauncher";
 
 const PILOT_LINKS = [
   { to: "/leads" as const, label: "Leads (Pilot)", icon: Users, pilot: true },
@@ -75,6 +76,7 @@ export function PilotShell({
 
   const exitPilot = () => {
     clearPilotCallPending();
+    clearPilotWhatsAppPending();
     setLeadPilotSessionOptIn(false);
     void navigate({ to: "/leads", search: {} });
   };
@@ -83,6 +85,7 @@ export function PilotShell({
     if (signingOut) return;
     setSigningOut(true);
     clearPilotCallPending();
+    clearPilotWhatsAppPending();
     void logoutOwner({ allSessions: false });
   };
 
@@ -97,7 +100,7 @@ export function PilotShell({
     <nav aria-label="Lead Pilot navigation" className="sb-nav">
       <div className="sb-group">
         <div className="sb-group-label">
-          <span>B2B3 Server Pilot</span>
+          <span>B2B4 Server Pilot</span>
         </div>
         <div>
           {PILOT_LINKS.map((item) => {
@@ -214,8 +217,8 @@ export function PilotShell({
           <span className="flex min-w-0 items-center gap-2">
             <Database className="size-4 shrink-0 text-primary" aria-hidden />
             <span className="min-w-0">
-              <b>Dev CRM Pilot (Synthetic MariaDB)</b> — Server-backed Leads, Calls, Activities &
-              Follow-ups only.{" "}
+              <b>Dev CRM Pilot (Synthetic MariaDB)</b> — Server-backed Leads, Calls, WhatsApp,
+              Activities & Follow-ups only.{" "}
               <span className="hidden sm:inline">
                 Browser-local CRM records and IndexedDB proofs remain untouched.
               </span>
@@ -253,7 +256,7 @@ export function PilotShell({
               </span>
             </Link>
             <div className="crumb hidden min-w-0 items-center gap-1.5 text-[13px] sm:flex">
-              <span className="text-muted-foreground">B2B3 Pilot</span>
+              <span className="text-muted-foreground">B2B4 Pilot</span>
               <ChevronRight className="size-3.5 text-muted-foreground" />
               <span className="truncate font-medium">
                 {path.startsWith("/follow-ups")

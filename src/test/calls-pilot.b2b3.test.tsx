@@ -201,6 +201,16 @@ describe("B2B3 Server-Backed Call Logging Pilot UI & Honesty Guarantees", () => 
           offset: 0,
         });
       }
+      if (url.startsWith("/api/v1/leads/lead_srv_1/whatsapp-messages")) {
+        return jsonRes({
+          ok: true,
+          leadId: "lead_srv_1",
+          items: [],
+          total: 0,
+          limit: 25,
+          offset: 0,
+        });
+      }
       if (url === "/api/v1/leads/lead_srv_1/follow-ups") {
         return jsonRes({
           ok: true,
@@ -328,6 +338,16 @@ describe("B2B3 Server-Backed Call Logging Pilot UI & Honesty Guarantees", () => 
           items: [],
           total: 0,
           limit: 100,
+          offset: 0,
+        });
+      }
+      if (url.startsWith("/api/v1/leads/lead_srv_1/whatsapp-messages")) {
+        return jsonRes({
+          ok: true,
+          leadId: "lead_srv_1",
+          items: [],
+          total: 0,
+          limit: 25,
           offset: 0,
         });
       }
@@ -535,6 +555,9 @@ describe("B2B3 Server-Backed Call Logging Pilot UI & Honesty Guarantees", () => 
       }
       if (url.includes("/activities")) {
         return jsonRes({ ok: true, leadId: "lead_1", items: [], total: 0, limit: 7, offset: 0 });
+      }
+      if (url.includes("/whatsapp-messages")) {
+        return jsonRes({ ok: true, leadId: "lead_1", items: [], total: 0, limit: 5, offset: 0 });
       }
       if (url.includes("/follow-ups?")) {
         return jsonRes({

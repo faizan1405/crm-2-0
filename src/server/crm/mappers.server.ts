@@ -1,6 +1,12 @@
 import "@tanstack/react-start/server-only";
 import type { InferSelectModel } from "drizzle-orm";
-import type { crmCallLogs, crmFollowUps, crmLeadActivities, crmLeads } from "../db/schema.server";
+import type {
+  crmCallLogs,
+  crmFollowUps,
+  crmLeadActivities,
+  crmLeads,
+  crmWhatsAppLogs,
+} from "../db/schema.server";
 import { decimalStringToRupees } from "../db/money.server";
 import { parseUtcDateTime } from "../db/utc.server";
 import { mysqlUtcToIso, toIstParts } from "./dates.server";
@@ -13,12 +19,15 @@ import type {
   LeadSource,
   LeadStatus,
   QuickStatus,
+  WaConfirmationStatus,
+  WaPurpose,
 } from "./validation.server";
 
 export type LeadRow = InferSelectModel<typeof crmLeads>;
 export type LeadActivityRow = InferSelectModel<typeof crmLeadActivities>;
 export type FollowUpRow = InferSelectModel<typeof crmFollowUps>;
 export type CallLogRow = InferSelectModel<typeof crmCallLogs>;
+export type WhatsAppLogRow = InferSelectModel<typeof crmWhatsAppLogs>;
 
 export interface LeadDto {
   id: string;
@@ -121,6 +130,40 @@ export interface CallLogDto {
 }
 
 export interface CallLogWithLeadDto extends CallLogDto {
+  lead: {
+    id: string;
+    name: string;
+    phone: string;
+    company?: string;
+    status: LeadStatus;
+    priority: LeadPriority;
+    lifecycleStatus: LeadLifecycleStatus;
+  };
+}
+
+export interface WhatsAppLogDto {
+  id: string;
+  legacyId: string | null;
+  leadId: string;
+  actorUserId: string;
+  purpose: WaPurpose;
+  templateId?: string;
+  templateName?: string;
+  recipientPhone: string;
+  messageText: string;
+  confirmationStatus: WaConfirmationStatus;
+  composerSource: string;
+  leadActivityId: string;
+  opId?: string;
+  confirmedAt: string;
+  confirmedAtIst: string;
+  confirmedIstDate: string;
+  confirmedIstTime: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WhatsAppLogWithLeadDto extends WhatsAppLogDto {
   lead: {
     id: string;
     name: string;
@@ -263,6 +306,40 @@ export function toCallLogDto(row: CallLogRow): CallLogDto {
     atIst: ist.istDateTime,
     occurredIstDate: row.occurredIstDate,
     occurredIstTime: row.occurredIstTime,
+    createdAt: mysqlUtcToIso(row.createdAt) ?? row.createdAt,
+    updatedAt: mysqlUtcToIso(row.updatedAt) ?? row.updatedAt,
+  };
+}
+
+export function toWhatsAppLogDto(row: WhatsAppLogRow): WhatsAppLogDto {
+  const atDate = parseUtcDateTime(row.confirmedAt);
+  const confirmedAt = Number.isNaN(atDate.getTime()) ? row.confirmedAt : atDate.toISOString();
+  const ist = Number.isNaN(atDate.getTime())
+    ? {
+        istDate: row.confirmedIstDate,
+        istTime: row.confirmedIstTime,
+        istDateTime: `${row.confirmedIstDate}T${row.confirmedIstTime}:00+05:30`,
+      }
+    : toIstParts(atDate);
+
+  return {
+    id: row.id,
+    legacyId: row.legacyId ?? null,
+    leadId: row.leadId,
+    actorUserId: row.actorUserId,
+    purpose: row.purpose as WaPurpose,
+    ...(row.templateId ? { templateId: row.templateId } : {}),
+    ...(row.templateName ? { templateName: row.templateName } : {}),
+    recipientPhone: row.recipientPhone,
+    messageText: row.messageText,
+    confirmationStatus: "owner_confirmed_sent",
+    composerSource: row.composerSource,
+    leadActivityId: row.leadActivityId,
+    ...(row.opId ? { opId: row.opId } : {}),
+    confirmedAt,
+    confirmedAtIst: ist.istDateTime,
+    confirmedIstDate: row.confirmedIstDate,
+    confirmedIstTime: row.confirmedIstTime,
     createdAt: mysqlUtcToIso(row.createdAt) ?? row.createdAt,
     updatedAt: mysqlUtcToIso(row.updatedAt) ?? row.updatedAt,
   };

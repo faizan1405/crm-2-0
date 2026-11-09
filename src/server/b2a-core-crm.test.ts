@@ -272,6 +272,7 @@ describe("B2A Request Idempotency Helpers", () => {
       `followup:complete:${sampleFuId}`,
       `followup:cancel:${sampleFuId}`,
       `call:create:${sampleLeadId}`,
+      `whatsapp:create:${sampleLeadId}`,
     ]) {
       expect(s.length).toBeLessThanOrEqual(maxScopeLen);
     }
@@ -312,6 +313,20 @@ describe("B2A API Fail-Closed Auth, CSRF & Method Discipline", () => {
       body: { leadId: "lead_1", outcome: "Connected", dialSource: "CRM" },
     },
     { method: "GET", path: "/api/v1/calls/call_1" },
+    { method: "GET", path: "/api/v1/leads/lead_1/whatsapp-messages" },
+    { method: "GET", path: "/api/v1/whatsapp-messages" },
+    {
+      method: "POST",
+      path: "/api/v1/whatsapp-messages",
+      body: {
+        leadId: "lead_1",
+        purpose: "followup",
+        messageText: "Hi Synthetic",
+        confirmedSent: true,
+        composerSource: "CRM",
+      },
+    },
+    { method: "GET", path: "/api/v1/whatsapp-messages/wa_1" },
   ];
 
   it("fails closed (503/401) on every B2A endpoint without an active DB/session", async () => {
@@ -383,5 +398,13 @@ describe("B2A API Fail-Closed Auth, CSRF & Method Discipline", () => {
     );
     expect(badCallMethod!.status).toBe(405);
     expect(badCallMethod!.headers.get("allow")).toBe("GET");
+
+    const badWaMethod = await handleApiRequest(
+      new Request("http://127.0.0.1:4173/api/v1/whatsapp-messages/wa_1", {
+        method: "DELETE",
+      }),
+    );
+    expect(badWaMethod!.status).toBe(405);
+    expect(badWaMethod!.headers.get("allow")).toBe("GET");
   });
 });

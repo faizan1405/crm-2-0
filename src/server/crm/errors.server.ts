@@ -10,6 +10,8 @@ export type CrmErrorCode =
   | "followup_already_closed"
   | "call_op_conflict"
   | "call_conflict"
+  | "whatsapp_op_conflict"
+  | "whatsapp_conflict"
   | "lead_archived"
   | "lead_already_archived"
   | "lead_not_archived"

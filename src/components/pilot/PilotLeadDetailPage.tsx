@@ -10,7 +10,6 @@ import {
   CalendarSync,
   Check,
   Mail,
-  MessageCircle,
   Pencil,
   PhoneCall,
   RefreshCw,
@@ -22,6 +21,7 @@ import {
 import { useCreateActivityMutation, useLeadActivitiesQuery } from "@/lib/api/activitiesApi";
 import { useLeadCallsQuery } from "@/lib/api/callsApi";
 import { createIdempotencyKey } from "@/lib/api/client";
+import { useLeadWhatsAppMessagesQuery } from "@/lib/api/whatsappApi";
 import {
   extractDuplicateLeadConflict,
   extractFieldValidationErrors,
@@ -60,6 +60,7 @@ import { formatDateTime, formatINR, relative } from "@/lib/crm/format";
 import { QUICK_LABEL, QUICK_STATUSES, staleDays } from "@/lib/crm/leadtools";
 import { FOLLOWUP_LABEL, LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL } from "@/lib/crm/types";
 import { amountFieldError, mailtoHref, validEmail, validPhone } from "@/lib/crm/validation";
+import { WA_LABEL } from "@/lib/crm/whatsapp";
 import { Empty, Identity, PriorityBadge, selectCls } from "@/components/crm/ShellPrimitives";
 import { Button } from "@/components/ui/button";
 import {
@@ -73,13 +74,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PilotArchiveDialog, PilotLostReasonDialog } from "./PilotDialogs";
-import { PilotCallDialog, PilotCallLink, usePilotCallLauncher } from "./PilotCallDialog";
+import { PilotCallDialog, PilotCallLink } from "./PilotCallDialog";
+import { usePilotCallLauncher } from "./pilotCallLauncher";
 import {
   PilotCancelFollowUpDialog,
   PilotEditFollowUpDialog,
   PilotScheduleFollowUpDialog,
 } from "./PilotFollowUpDialogs";
 import { PilotShell } from "./PilotShell";
+import { PilotWhatsAppButton, PilotWhatsAppDialog } from "./PilotWhatsAppDialog";
+import { usePilotWhatsAppLauncher } from "./pilotWhatsAppLauncher";
 
 const ACTIVITY_TYPE_LABEL: Record<ManualActivityTypeApi, string> = {
   note: "Note",
@@ -117,9 +121,15 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
   const navigate = useNavigate();
   const leadQuery = useLeadQuery(id);
   const callsQuery = useLeadCallsQuery(id, { limit: 25 });
+  const waMessagesQuery = useLeadWhatsAppMessagesQuery(id, { limit: 25 });
   const activitiesQuery = useLeadActivitiesQuery(id, { limit: 100 });
   const leadFollowUpsQuery = useLeadFollowUpsQuery(id);
   const { target: callTarget, dialLead, openLogOnly, close: closeCall } = usePilotCallLauncher();
+  const {
+    target: waTarget,
+    openComposer: openWhatsAppComposer,
+    close: closeWhatsApp,
+  } = usePilotWhatsAppLauncher();
   const updateMutation = useUpdateLeadMutation();
   const archiveMutation = useArchiveLeadMutation();
   const restoreMutation = useRestoreLeadMutation();
@@ -203,6 +213,8 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
   const archived = lead.lifecycleStatus !== "active";
   const callItems = callsQuery.data?.items ?? [];
   const callSummary = callsQuery.data?.summary ?? { total: 0, connected: 0, attempts: 0 };
+  const waItems = waMessagesQuery.data?.items ?? [];
+  const waTotal = waMessagesQuery.data?.total ?? 0;
   const acts = activitiesQuery.data?.items ?? [];
   const leadFollowUps = leadFollowUpsQuery.data?.items ?? [];
   const activeFollowUp =
@@ -401,16 +413,12 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
             <PhoneCall className="size-4" />
             Log call
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled
-            className="h-9 px-4 opacity-60"
-            title="WhatsApp connects in later checkpoints"
-          >
-            <MessageCircle className="size-4" />
-            WhatsApp
-          </Button>
+          <PilotWhatsAppButton
+            lead={lead}
+            composerSource="Lead detail"
+            onOpenComposer={openWhatsAppComposer}
+            className="h-9 px-4 text-sm"
+          />
           <Button
             type="button"
             variant="outline"
@@ -490,6 +498,7 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
                   setSideAlert(null);
                   void leadQuery.refetch();
                   void callsQuery.refetch();
+                  void waMessagesQuery.refetch();
                   void activitiesQuery.refetch();
                   void leadFollowUpsQuery.refetch();
                 }}
@@ -667,6 +676,79 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
                         {c.notes}
                       </p>
                     )}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+
+          <section className="surface p-5" data-testid="pilot-lead-whatsapp-panel">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-semibold">WhatsApp (MariaDB)</h2>
+                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase">
+                  Owner-confirmed sent
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                <span className="num">
+                  {waTotal} {waTotal === 1 ? "confirmed message" : "confirmed messages"}
+                </span>
+                {!archived && (
+                  <PilotWhatsAppButton
+                    lead={lead}
+                    composerSource="Lead detail"
+                    onOpenComposer={openWhatsAppComposer}
+                    className="h-7 rounded-full px-3 text-xs"
+                  />
+                )}
+              </div>
+            </div>
+
+            {waMessagesQuery.isLoading ? (
+              <div className="h-16 animate-pulse rounded-lg bg-muted" />
+            ) : waMessagesQuery.isError ? (
+              <div role="alert" className="grid gap-2 text-xs text-destructive">
+                <span>
+                  {formatApiErrorMessage(waMessagesQuery.error, "Failed to load WhatsApp logs.")}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void waMessagesQuery.refetch()}
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : waItems.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No confirmed WhatsApp messages logged yet. Opening WhatsApp does not log
+                automatically — records save only when you confirm the message was sent.
+              </p>
+            ) : (
+              <ol className="grid gap-2.5 text-sm">
+                {waItems.map((m) => (
+                  <li key={m.id} className="rounded-lg border bg-card p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-semibold">{WA_LABEL[m.purpose]}</span>
+                        {m.templateName && (
+                          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                            {m.templateName}
+                          </span>
+                        )}
+                        <span className="rounded bg-primary-soft px-1.5 py-0.5 text-[10px] font-medium uppercase text-primary">
+                          Owner-confirmed sent
+                        </span>
+                      </div>
+                      <span className="num text-xs text-muted-foreground">
+                        {m.composerSource} · {formatDateTime(m.confirmedAt)}
+                      </span>
+                    </div>
+                    <p className="mt-1.5 whitespace-pre-line break-words text-xs text-muted-foreground">
+                      {m.messageText}
+                    </p>
                   </li>
                 ))}
               </ol>
@@ -1070,6 +1152,7 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
       />
 
       <PilotCallDialog target={callTarget} onClose={closeCall} />
+      <PilotWhatsAppDialog target={waTarget} onClose={closeWhatsApp} />
     </PilotShell>
   );
 }

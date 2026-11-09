@@ -13,7 +13,6 @@ import {
   Clock,
   Flame,
   ListTodo,
-  MessageCircle,
   PanelRightOpen,
   PhoneCall,
   Plus,
@@ -26,6 +25,7 @@ import { toast } from "sonner";
 import { useLeadActivitiesQuery } from "@/lib/api/activitiesApi";
 import { useLeadCallsQuery } from "@/lib/api/callsApi";
 import { createIdempotencyKey } from "@/lib/api/client";
+import { useLeadWhatsAppMessagesQuery } from "@/lib/api/whatsappApi";
 import { extractStaleConflict, formatApiErrorMessage, isApiError } from "@/lib/api/errors";
 import {
   addIstOneDaySameTimeIso,
@@ -45,6 +45,7 @@ import {
 } from "@/lib/api/schemas";
 import { formatDateTime, formatINR } from "@/lib/crm/format";
 import { FOLLOWUP_LABEL, STATUS_LABEL } from "@/lib/crm/types";
+import { WA_LABEL } from "@/lib/crm/whatsapp";
 import { onRovingKeyDown, roving } from "@/lib/a11y/tabKeys";
 import { cn } from "@/lib/utils";
 import { Empty, PriorityBadge, selectCls } from "@/components/crm/ShellPrimitives";
@@ -56,18 +57,16 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import {
-  PilotCallDialog,
-  PilotCallLink,
-  type PilotCallLeadRef,
-  usePilotCallLauncher,
-} from "./PilotCallDialog";
+import { PilotCallDialog, PilotCallLink } from "./PilotCallDialog";
+import { type PilotCallLeadRef, usePilotCallLauncher } from "./pilotCallLauncher";
 import {
   PilotCancelFollowUpDialog,
   PilotEditFollowUpDialog,
   PilotScheduleFollowUpDialog,
 } from "./PilotFollowUpDialogs";
 import { PilotShell } from "./PilotShell";
+import { PilotWhatsAppButton, PilotWhatsAppDialog } from "./PilotWhatsAppDialog";
+import { type PilotWhatsAppLeadRef, usePilotWhatsAppLauncher } from "./pilotWhatsAppLauncher";
 
 type FollowUpTab = "overdue" | "today" | "upcoming" | "done";
 
@@ -104,6 +103,11 @@ export function PilotFollowUpsPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const inFlightRef = useRef<Set<string>>(new Set());
   const { target: callTarget, dialLead, openLogOnly, close: closeCall } = usePilotCallLauncher();
+  const {
+    target: waTarget,
+    openComposer: openWhatsAppComposer,
+    close: closeWhatsApp,
+  } = usePilotWhatsAppLauncher();
   const [actionAlert, setActionAlert] = useState<{
     message: string;
     isStale: boolean;
@@ -505,6 +509,13 @@ export function PilotFollowUpsPage() {
                         <PhoneCall className="size-3.5" />
                         Log call
                       </Button>
+                      <PilotWhatsAppButton
+                        lead={lead}
+                        composerSource="Follow-ups"
+                        onOpenComposer={openWhatsAppComposer}
+                        disabled={isBusy}
+                        className="border-0 bg-transparent shadow-none hover:bg-accent"
+                      />
                       <Button
                         type="button"
                         size="sm"
@@ -639,13 +650,14 @@ export function PilotFollowUpsPage() {
           </div>
           <ul className="grid gap-2 text-xs text-muted-foreground">
             <li className="rounded-lg border bg-card p-3">
-              <b className="text-foreground">Last contact preserved:</b> Completing a follow-up
-              marks the task done without inventing a call; only connected call logs update Last
-              contact.
+              <b className="text-foreground">Last contact preserved:</b> Completing a follow-up or
+              confirming an outgoing WhatsApp message does not fabricate two-way Last contact; only
+              connected call logs update Last contact.
             </li>
             <li className="rounded-lg border bg-card p-3">
-              <b className="text-foreground">Smart suggestions & reminders:</b> AI follow-up
-              prompts, WhatsApp composer, and automations remain local until B4–B5.
+              <b className="text-foreground">Smart suggestions & custom libraries:</b> AI follow-up
+              prompts, custom Sales Studio template libraries, and automations remain local until
+              B4–B5.
             </li>
           </ul>
           <Button type="button" variant="outline" size="sm" asChild className="w-full">
@@ -691,6 +703,10 @@ export function PilotFollowUpsPage() {
           setInspectLeadId(null);
           openLogOnly(l, "Follow-ups inspector");
         }}
+        onOpenWhatsApp={(l) => {
+          setInspectLeadId(null);
+          openWhatsAppComposer(l, "Follow-ups inspector");
+        }}
         onSchedule={(l) => {
           setInspectLeadId(null);
           setScheduleLeadTarget(l);
@@ -708,6 +724,7 @@ export function PilotFollowUpsPage() {
       />
 
       <PilotCallDialog target={callTarget} onClose={closeCall} />
+      <PilotWhatsAppDialog target={waTarget} onClose={closeWhatsApp} />
     </PilotShell>
   );
 }
@@ -717,6 +734,7 @@ function PilotFollowUpLeadInspector({
   onClose,
   onDial,
   onLogCall,
+  onOpenWhatsApp,
   onSchedule,
   onEdit,
   onCancel,
@@ -726,6 +744,7 @@ function PilotFollowUpLeadInspector({
   onClose: () => void;
   onDial: (lead: LeadDto | PilotCallLeadRef, dialSource: string) => void;
   onLogCall: (lead: LeadDto | PilotCallLeadRef) => void;
+  onOpenWhatsApp: (lead: LeadDto | PilotWhatsAppLeadRef, composerSource: string) => void;
   onSchedule: (lead: { id: string; name: string; company?: string }) => void;
   onEdit: (followUp: FollowUpDto, leadName: string) => void;
   onCancel: (followUp: FollowUpDto, leadName: string) => void;
@@ -733,6 +752,7 @@ function PilotFollowUpLeadInspector({
 }) {
   const leadQuery = useLeadQuery(leadId ?? undefined);
   const callsQuery = useLeadCallsQuery(leadId ?? "", { limit: 3 }, Boolean(leadId));
+  const waMessagesQuery = useLeadWhatsAppMessagesQuery(leadId ?? "", { limit: 3 }, Boolean(leadId));
   const leadFollowUpsQuery = useLeadFollowUpsQuery(leadId ?? undefined, Boolean(leadId));
   const activitiesQuery = useLeadActivitiesQuery(leadId ?? "", { limit: 5 }, Boolean(leadId));
 
@@ -799,17 +819,11 @@ function PilotFollowUpLeadInspector({
                 <PhoneCall className="size-3.5" />
                 Log call
               </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled
-                className="rounded-full opacity-60"
-                title="WhatsApp templates connect in later checkpoints"
-              >
-                <MessageCircle className="size-3.5" />
-                WhatsApp
-              </Button>
+              <PilotWhatsAppButton
+                lead={lead}
+                composerSource="Follow-ups inspector"
+                onOpenComposer={onOpenWhatsApp}
+              />
             </div>
 
             <dl className="fu-facts mx-4 mt-5">
@@ -938,6 +952,39 @@ function PilotFollowUpLeadInspector({
                 </ul>
               ) : (
                 <p className="text-xs text-muted-foreground">No calls logged yet.</p>
+              )}
+            </section>
+
+            <section className="mx-4 mt-5">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="eyebrow">Recent WhatsApp (MariaDB)</h3>
+                <span className="num text-[11px] text-muted-foreground">
+                  {waMessagesQuery.data?.total ?? 0} confirmed
+                </span>
+              </div>
+              {(waMessagesQuery.data?.items ?? []).length > 0 ? (
+                <ul className="grid gap-1.5 text-xs">
+                  {(waMessagesQuery.data?.items ?? []).map((m) => (
+                    <li key={m.id} className="rounded-md border bg-card p-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold">
+                          {WA_LABEL[m.purpose]}{" "}
+                          <span className="font-normal text-muted-foreground">
+                            (Owner-confirmed sent)
+                          </span>
+                        </span>
+                        <span className="num text-[11px] text-muted-foreground">
+                          {formatDateTime(m.confirmedAt)}
+                        </span>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-muted-foreground">{m.messageText}</p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No confirmed WhatsApp messages logged yet.
+                </p>
               )}
             </section>
 
