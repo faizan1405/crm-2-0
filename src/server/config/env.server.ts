@@ -70,9 +70,24 @@ export const serverEnvSchema = z.object({
 
   // B1A/B1B keeps AI strictly in deterministic Demo mode; OpenRouter activates in B5.
   AI_PROVIDER: z.preprocess(emptyToUndefined, z.enum(["demo"]).default("demo")),
+
+  // B2B1 Dev-only Lead API Pilot gate (server-enforced; always false in NODE_ENV=production).
+  DEV_LEAD_PILOT: z.preprocess((value) => {
+    const cleaned = emptyToUndefined(value);
+    if (cleaned === true || cleaned === "1" || cleaned === "true") return true;
+    if (cleaned === false || cleaned === "0" || cleaned === "false" || cleaned === undefined) {
+      return false;
+    }
+    return cleaned;
+  }, z.boolean().default(false)),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
+
+/** Server-enforced pilot gate: strictly disabled in production regardless of client URL/storage. */
+export function isLeadPilotAvailable(env: Pick<ServerEnv, "NODE_ENV" | "DEV_LEAD_PILOT">): boolean {
+  return env.NODE_ENV !== "production" && env.DEV_LEAD_PILOT === true;
+}
 
 export interface DatabaseConnectionConfig {
   configured: boolean;
@@ -101,6 +116,7 @@ export interface SafeRuntimeEnvSummary {
   sessionIdleTtlSeconds: number;
   sessionAbsoluteTtlSeconds: number;
   aiProvider: ServerEnv["AI_PROVIDER"];
+  leadPilotAvailable: boolean;
 }
 
 function readEnvSnapshot(
@@ -130,6 +146,7 @@ function readEnvSnapshot(
     AUTH_LOCKOUT_SECONDS: raw["AUTH_LOCKOUT_SECONDS"],
     AUTH_TRUST_PROXY: raw["AUTH_TRUST_PROXY"],
     AI_PROVIDER: raw["AI_PROVIDER"],
+    DEV_LEAD_PILOT: raw["DEV_LEAD_PILOT"],
   };
 }
 
@@ -217,5 +234,6 @@ export function summarizeSafeRuntimeEnv(env: ServerEnv): SafeRuntimeEnvSummary {
     sessionIdleTtlSeconds: env.SESSION_IDLE_TTL_SECONDS,
     sessionAbsoluteTtlSeconds: env.SESSION_ABSOLUTE_TTL_SECONDS,
     aiProvider: env.AI_PROVIDER,
+    leadPilotAvailable: isLeadPilotAvailable(env),
   };
 }

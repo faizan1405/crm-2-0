@@ -28,8 +28,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { AdditionalInfo, TagPicker } from "@/components/crm/Customize";
+import { parsePilotSearch, useLeadPilotState } from "@/lib/api/pilotHook";
+import { PilotLeadDetailPage } from "@/components/pilot/PilotLeadDetailPage";
 
 export const Route = createFileRoute("/leads_/$id")({
+  validateSearch: parsePilotSearch,
   head: () => ({
     meta: [
       { property: "og:type", content: "website" },
@@ -40,10 +43,20 @@ export const Route = createFileRoute("/leads_/$id")({
       { property: "og:description", content: "Lead profile, activity timeline and follow-ups." },
     ],
   }),
-  component: LeadDetail,
+  component: LeadDetailEntry,
 });
 
-function LeadDetail() {
+function LeadDetailEntry() {
+  const { id } = Route.useParams();
+  const search = Route.useSearch();
+  const { pilotActive } = useLeadPilotState(search.pilot);
+  if (pilotActive) {
+    return <PilotLeadDetailPage id={id} />;
+  }
+  return <LocalLeadDetail />;
+}
+
+function LocalLeadDetail() {
   const { id } = Route.useParams();
   const { leads, activities, followUps, deals, updateLead, completeFollowUp, addActivity, setQuickStatus, wasteLead, deleteLead } = useCRM();
   const navigate = useNavigate();

@@ -13,6 +13,7 @@ export interface RequestAuthContextState {
   user: PublicOwnerUser | null;
   idleExpiresAt: string | null;
   expiresAt: string | null;
+  leadPilotAvailable?: boolean;
   reason?:
     | "unconfigured"
     | "db_error"
@@ -42,6 +43,7 @@ export function getRequestAuthContext(): RequestAuthContextState {
       user: null,
       idleExpiresAt: null,
       expiresAt: null,
+      leadPilotAvailable: false,
       reason: "missing",
     }
   );

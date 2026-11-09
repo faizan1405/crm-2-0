@@ -16,6 +16,7 @@ export interface AuthSessionSnapshot {
   user: AuthenticatedOwner | null;
   idleExpiresAt: string | null;
   expiresAt: string | null;
+  leadPilotAvailable?: boolean;
   checked: boolean;
 }
 
@@ -26,6 +27,7 @@ interface AuthStoreState {
   user: AuthenticatedOwner | null;
   idleExpiresAt: string | null;
   expiresAt: string | null;
+  leadPilotAvailable: boolean;
   lastCheckedAt: number | null;
 }
 
@@ -37,6 +39,7 @@ export const useAuthStore = create<AuthStoreState>(() => ({
   user: null,
   idleExpiresAt: null,
   expiresAt: null,
+  leadPilotAvailable: false,
   lastCheckedAt: null,
 }));
 
@@ -47,6 +50,7 @@ export function hydrateAuthFromSsr(snapshot: AuthSessionSnapshot): void {
     user: snapshot.authenticated ? snapshot.user : null,
     idleExpiresAt: snapshot.authenticated ? snapshot.idleExpiresAt : null,
     expiresAt: snapshot.authenticated ? snapshot.expiresAt : null,
+    leadPilotAvailable: snapshot.authenticated ? Boolean(snapshot.leadPilotAvailable) : false,
     lastCheckedAt: Date.now(),
   });
 }
@@ -57,6 +61,7 @@ export function clearClientAuthState(): void {
     user: null,
     idleExpiresAt: null,
     expiresAt: null,
+    leadPilotAvailable: false,
     lastCheckedAt: Date.now(),
   });
 }
@@ -136,6 +141,7 @@ export const readInitialAuthState = createIsomorphicFn()
       user: ctx.user,
       idleExpiresAt: ctx.idleExpiresAt,
       expiresAt: ctx.expiresAt,
+      leadPilotAvailable: Boolean(ctx.authenticated && ctx.leadPilotAvailable),
       checked: true,
     };
   })
@@ -147,6 +153,7 @@ export const readInitialAuthState = createIsomorphicFn()
         user: state.user,
         idleExpiresAt: state.idleExpiresAt,
         expiresAt: state.expiresAt,
+        leadPilotAvailable: state.status === "authenticated" && state.leadPilotAvailable,
         checked: true,
       };
     }
@@ -155,6 +162,7 @@ export const readInitialAuthState = createIsomorphicFn()
       user: null,
       idleExpiresAt: null,
       expiresAt: null,
+      leadPilotAvailable: false,
       checked: false,
     };
   });
@@ -192,17 +200,20 @@ export async function refreshAuthSession(): Promise<RefreshSessionResult> {
       authenticated?: boolean;
       user?: AuthenticatedOwner;
       session?: { idleExpiresAt?: string; expiresAt?: string };
+      features?: { leadPilotAvailable?: boolean };
       error?: { code?: string; reason?: string; message?: string };
     } | null;
 
     if (response.ok && data?.ok && data.authenticated && data.user) {
       const idleExpiresAt = data.session?.idleExpiresAt ?? null;
       const expiresAt = data.session?.expiresAt ?? null;
+      const leadPilotAvailable = Boolean(data.features?.leadPilotAvailable);
       useAuthStore.setState({
         status: "authenticated",
         user: data.user,
         idleExpiresAt,
         expiresAt,
+        leadPilotAvailable,
         lastCheckedAt: Date.now(),
       });
       return {
@@ -270,6 +281,7 @@ export async function loginWithOwnerCredentials(
       authenticated?: boolean;
       user?: AuthenticatedOwner;
       session?: { idleExpiresAt?: string; expiresAt?: string };
+      features?: { leadPilotAvailable?: boolean };
       error?: { code?: string; message?: string; retryAfterSeconds?: number };
     } | null;
 
@@ -279,6 +291,7 @@ export async function loginWithOwnerCredentials(
         user: data.user,
         idleExpiresAt: data.session?.idleExpiresAt ?? null,
         expiresAt: data.session?.expiresAt ?? null,
+        leadPilotAvailable: Boolean(data.features?.leadPilotAvailable),
         lastCheckedAt: Date.now(),
       });
       broadcastAuthSync("login");

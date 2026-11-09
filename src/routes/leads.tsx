@@ -4,7 +4,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import type * as React from "react";
 import { toast } from "sonner";
-import { Plus, Search, Trash2, Pin, Users, LayoutGrid, List, Phone, MessageCircle, CalendarPlus, ArrowUpRight, Layers, Archive, Ban, Clock, Columns2, PhoneCall } from "lucide-react";
+import { Plus, Search, Trash2, Pin, Users, LayoutGrid, List, Phone, MessageCircle, CalendarPlus, ArrowUpRight, Layers, Archive, Ban, Clock, Columns2, PhoneCall, Database } from "lucide-react";
 import { BulkLeadDialog } from "@/components/crm/BulkLeadDialog";
 import { QUICK_STATUSES, QUICK_LABEL, staleDays, type QuickStatus } from "@/lib/crm/leadtools";
 import { startCall, openCallLog } from "@/components/crm/PostCallDialog";
@@ -35,6 +35,10 @@ import { viewCtxOf, viewerId } from "@/lib/crm/store";
 import { tagForLeads, runView, viewAllowed, viewEditable, viewIssues, type SavedView, type ViewCondition } from "@/lib/crm/customize";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Bookmark, BookmarkPlus, Star, Tag, AlertTriangle, Pencil } from "lucide-react";
+import { useAuthStore } from "@/lib/auth/authClient";
+import { setLeadPilotSessionOptIn } from "@/lib/api/pilotGate";
+import { useLeadPilotState } from "@/lib/api/pilotHook";
+import { PilotLeadsPage } from "@/components/pilot/PilotLeadsPage";
 
 export const Route = createFileRoute("/leads")({
   validateSearch: parseLeadsSearch,
@@ -48,12 +52,21 @@ export const Route = createFileRoute("/leads")({
       { property: "og:description", content: "A prospect workspace: searchable directory with an instant lead inspector." },
     ],
   }),
-  component: Leads,
+  component: LeadsEntry,
 });
+
+function LeadsEntry() {
+  const search = Route.useSearch();
+  const { pilotActive } = useLeadPilotState(search.pilot);
+  if (pilotActive) {
+    return <PilotLeadsPage search={search} />;
+  }
+  return <LocalLeads />;
+}
 
 type Sort = "recent" | "score" | "value" | "name";
 
-function Leads() {
+function LocalLeads() {
   const { leads, updateLead, deleteLead, wasteLead, restoreLead, setQuickStatus, bin, defaultLeadSort, assignments, employees, followUps } = useCRM();
   const crm = useCRM();
   const viewer = useViewer(); const me = viewerId(viewer);
@@ -173,6 +186,7 @@ function Leads() {
   };
   const canStage = can("pipeline.edit") || can("leads.edit");
   const preview = useSession((x) => x.preview);
+  const leadPilotAvailable = useAuthStore((x) => x.status === "authenticated" && x.leadPilotAvailable);
   const changeStatus = (id: string, s: LeadStatus) => (!canStage ? void toast.error(STAGE_DENIED) : s === "lost" ? setLost(id) : updateLead(id, { status: s }));
   const lostLead = leads.find((l) => l.id === lost);
 
@@ -209,7 +223,7 @@ function Leads() {
   );
 
   return (
-    <Shell title="Prospects" subtitle={`${rows.length} of ${leads.length} leads in view · select one to inspect it without leaving the list`} actions={<div className="flex flex-wrap gap-2">{canDel && <Button variant="outline" asChild className="rounded-full"><Link to="/leads/bin"><Archive className="size-4" />Waste & deleted{bin.length ? <span className="num ml-1 text-xs text-muted-foreground">{bin.length}</span> : null}</Link></Button>}{can("import.run") && <Button variant="outline" onClick={() => setBulk(true)} className="rounded-full"><Layers className="size-4" />Bulk add</Button>}{can("leads.create") && <Button onClick={() => setOpen(true)} className="rounded-full"><Plus className="size-4" />Add lead</Button>}</div>}>
+    <Shell title="Prospects" subtitle={`${rows.length} of ${leads.length} leads in view · select one to inspect it without leaving the list`} actions={<div className="flex flex-wrap gap-2">{leadPilotAvailable && <Button type="button" variant="outline" className="rounded-full" onClick={() => { setLeadPilotSessionOptIn(true); void navigate({ to: "/leads", search: { pilot: 1 } }); }}><Database className="size-4" />Dev Lead Pilot</Button>}{canDel && <Button variant="outline" asChild className="rounded-full"><Link to="/leads/bin"><Archive className="size-4" />Waste & deleted{bin.length ? <span className="num ml-1 text-xs text-muted-foreground">{bin.length}</span> : null}</Link></Button>}{can("import.run") && <Button variant="outline" onClick={() => setBulk(true)} className="rounded-full"><Layers className="size-4" />Bulk add</Button>}{can("leads.create") && <Button onClick={() => setOpen(true)} className="rounded-full"><Plus className="size-4" />Add lead</Button>}</div>}>
       {(cFrom || cTo || cSrc) && <div role="status" className="mb-3 flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs"><span>From Analytics: created {cFrom ? formatDate(cFrom, { day: "numeric", month: "short", year: "numeric" }) : "…"} – {cTo ? formatDate(cTo, { day: "numeric", month: "short", year: "numeric" }) : "…"}{cSrc ? ` · source ${cSrc}` : ""} (India time)</span><Button size="sm" variant="ghost" className="h-7 rounded-full" onClick={() => void navigate({ to: "/leads", search: viewId ? { view: viewId } : {} })}>Clear date filter</Button></div>}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-t border-foreground pt-4">
         <div className="flex max-w-full gap-4 overflow-x-auto scrollbar-thin">{(["all", ...LEAD_STATUSES] as const).map(s => <button key={s} type="button" aria-pressed={status === s} onClick={() => setStatus(s)} data-stage={s} className={cn("flex shrink-0 items-baseline gap-1.5 border-b-2 pb-1.5 text-sm transition-colors", status === s ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{s === "all" ? "Everyone" : STATUS_LABEL[s]}<span className="num text-[11px] opacity-70">{stageCounts[s] ?? 0}</span></button>)}</div>

@@ -1,4 +1,6 @@
+import { getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { crmIdempotencyKeys } from "./db/schema.server";
 import {
   followUpBucketServer,
   istDayBoundsUtc,
@@ -241,6 +243,23 @@ describe("B2A Request Idempotency Helpers", () => {
     expect(resolveEffectiveIdempotencyKey({ headerKey: "same-key", bodyKey: "same-key" })).toBe(
       "same-key",
     );
+
+    const sampleLeadId = "lead_00000000-0000-4000-8000-000000000001";
+    const sampleFuId = "fu_00000000-0000-4000-8000-000000000001";
+    const maxScopeLen =
+      (getTableColumns(crmIdempotencyKeys).scope as { length?: number }).length ?? 0;
+    expect(maxScopeLen).toBeGreaterThanOrEqual(128);
+    for (const s of [
+      `lead:update:${sampleLeadId}`,
+      `lead:archive:${sampleLeadId}`,
+      `lead:restore:${sampleLeadId}`,
+      `activity:create:${sampleLeadId}`,
+      `followup:update:${sampleFuId}`,
+      `followup:complete:${sampleFuId}`,
+      `followup:cancel:${sampleFuId}`,
+    ]) {
+      expect(s.length).toBeLessThanOrEqual(maxScopeLen);
+    }
   });
 });
 

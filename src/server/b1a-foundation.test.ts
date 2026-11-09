@@ -3,6 +3,7 @@ import { getTableColumns, getTableName } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   getDatabaseConnectionConfig,
+  isLeadPilotAvailable,
   parseServerEnv,
   summarizeSafeRuntimeEnv,
 } from "./config/env.server";
@@ -107,6 +108,22 @@ describe("B1A Server Foundation — environment & secret hygiene", () => {
     expect(serialized).not.toContain("/home/secret/path");
     expect(summary.dbConfigured).toBe(true);
     expect(summary.dbHostLoopbackSafe).toBe(true);
+  });
+
+  it("enforces server-only DEV_LEAD_PILOT gate and disables pilot unconditionally in production", () => {
+    expect(isLeadPilotAvailable(parseServerEnv({}))).toBe(false);
+    expect(
+      isLeadPilotAvailable(parseServerEnv({ NODE_ENV: "development", DEV_LEAD_PILOT: "false" })),
+    ).toBe(false);
+    expect(
+      isLeadPilotAvailable(parseServerEnv({ NODE_ENV: "development", DEV_LEAD_PILOT: "true" })),
+    ).toBe(true);
+    expect(isLeadPilotAvailable(parseServerEnv({ NODE_ENV: "test", DEV_LEAD_PILOT: "true" }))).toBe(
+      true,
+    );
+    expect(
+      isLeadPilotAvailable(parseServerEnv({ NODE_ENV: "production", DEV_LEAD_PILOT: "true" })),
+    ).toBe(false);
   });
 });
 

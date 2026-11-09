@@ -8,8 +8,11 @@ import { relative, formatINR } from "@/lib/crm/format";
 import { STATUS_LABEL, type BinEntry } from "@/lib/crm/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { parsePilotSearch, useLeadPilotState } from "@/lib/api/pilotHook";
+import { PilotLeadsBinPage } from "@/components/pilot/PilotLeadsBinPage";
 
 export const Route = createFileRoute("/leads_/bin")({
+  validateSearch: parsePilotSearch,
   head: () => ({
     meta: [
       { property: "og:type", content: "website" },
@@ -20,10 +23,19 @@ export const Route = createFileRoute("/leads_/bin")({
       { property: "og:description", content: "Review wasted and deleted leads and restore them." },
     ],
   }),
-  component: Bin,
+  component: BinEntry,
 });
 
-function Bin() {
+function BinEntry() {
+  const search = Route.useSearch();
+  const { pilotActive } = useLeadPilotState(search.pilot);
+  if (pilotActive) {
+    return <PilotLeadsBinPage />;
+  }
+  return <LocalBin />;
+}
+
+function LocalBin() {
   const { bin, restoreLead, purgeBin, emptyBin } = useCRM();
   const [tab, setTab] = useState<BinEntry["kind"]>("waste");
   const rows = bin.filter((b) => b.kind === tab);

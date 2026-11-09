@@ -1,5 +1,5 @@
 import "@tanstack/react-start/server-only";
-import { loadServerEnv } from "../config/env.server";
+import { isLeadPilotAvailable, loadServerEnv } from "../config/env.server";
 import { getHealthStatus } from "../health/health.server";
 import {
   loginOwnerAccount,
@@ -228,6 +228,9 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
             idleExpiresAt: resolved.idleExpiresAt,
             expiresAt: resolved.expiresAt,
           },
+          features: {
+            leadPilotAvailable: isLeadPilotAvailable(env),
+          },
         },
         200,
       );
@@ -317,6 +320,9 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
           session: {
             idleExpiresAt: result.idleExpiresAt,
             expiresAt: result.expiresAt,
+          },
+          features: {
+            leadPilotAvailable: isLeadPilotAvailable(env),
           },
         },
         200,
@@ -552,7 +558,7 @@ export async function executeProtectedSsrRequest(
       );
     }
 
-    const authContext = toRequestAuthContext(resolved);
+    const authContext = toRequestAuthContext(resolved, env);
     return runWithRequestAuthContext(authContext, async () => {
       const res = await renderSsr();
       return withSsrSecurityHeaders(res);
@@ -567,7 +573,7 @@ export async function executeProtectedSsrRequest(
       return new Response(null, { status: 302, headers });
     }
 
-    const authContext = toRequestAuthContext(resolved);
+    const authContext = toRequestAuthContext(resolved, env);
     const clearCookie =
       token &&
       resolved.status === "unauthenticated" &&
@@ -636,7 +642,7 @@ export async function executeProtectedSsrRequest(
     return new Response(null, { status: 302, headers });
   }
 
-  const authContext = toRequestAuthContext(resolved);
+  const authContext = toRequestAuthContext(resolved, env);
   return runWithRequestAuthContext(authContext, async () => {
     const response = await renderSsr();
     return withSsrSecurityHeaders(response);

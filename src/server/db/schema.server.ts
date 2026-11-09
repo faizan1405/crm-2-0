@@ -376,7 +376,7 @@ export const crmIdempotencyKeys = mysqlTable(
     ownerUserId: crmId("owner_user_id")
       .notNull()
       .references(() => crmUsers.id, { onDelete: "cascade" }),
-    scope: varchar("scope", { length: 48 }).notNull(),
+    scope: varchar("scope", { length: 128 }).notNull(),
     idemKey: varchar("idem_key", { length: 128 }).notNull(),
     requestHash: char("request_hash", { length: 64 }).notNull(),
     resourceId: crmId("resource_id"),

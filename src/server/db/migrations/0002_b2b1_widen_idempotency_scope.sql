@@ -1,0 +1,1 @@
+ALTER TABLE `crm_idempotency_keys` MODIFY COLUMN `scope` varchar(128) NOT NULL;

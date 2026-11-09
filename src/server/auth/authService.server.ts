@@ -1,6 +1,6 @@
 import "@tanstack/react-start/server-only";
 import { and, eq, isNull } from "drizzle-orm";
-import type { ServerEnv } from "../config/env.server";
+import { isLeadPilotAvailable, type ServerEnv } from "../config/env.server";
 import { getDatabase, type CrmDatabase } from "../db/index.server";
 import { crmAuthAudit, crmSessions, crmUsers } from "../db/schema.server";
 import { addSeconds, parseUtcDateTime, toMysqlUtcDateTime } from "../db/utc.server";
@@ -128,13 +128,19 @@ export function evaluateStoredSessionValidity(
   return { valid: true, absExpiry, idleExpiry };
 }
 
-export function toRequestAuthContext(res: SessionResolution): RequestAuthContextState {
+export function toRequestAuthContext(
+  res: SessionResolution,
+  env?: Pick<ServerEnv, "NODE_ENV" | "DEV_LEAD_PILOT">,
+): RequestAuthContextState {
+  const leadPilotAvailable =
+    res.status === "authenticated" && env ? isLeadPilotAvailable(env) : false;
   if (res.status === "authenticated") {
     return {
       authenticated: true,
       user: res.user,
       idleExpiresAt: res.idleExpiresAt,
       expiresAt: res.expiresAt,
+      leadPilotAvailable,
     };
   }
   if (res.status === "unconfigured") {
@@ -143,6 +149,7 @@ export function toRequestAuthContext(res: SessionResolution): RequestAuthContext
       user: null,
       idleExpiresAt: null,
       expiresAt: null,
+      leadPilotAvailable: false,
       reason: "unconfigured",
     };
   }
@@ -152,6 +159,7 @@ export function toRequestAuthContext(res: SessionResolution): RequestAuthContext
       user: null,
       idleExpiresAt: null,
       expiresAt: null,
+      leadPilotAvailable: false,
       reason: "db_error",
     };
   }
@@ -160,6 +168,7 @@ export function toRequestAuthContext(res: SessionResolution): RequestAuthContext
     user: null,
     idleExpiresAt: null,
     expiresAt: null,
+    leadPilotAvailable: false,
     reason: res.reason,
   };
 }
