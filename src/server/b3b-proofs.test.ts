@@ -677,4 +677,68 @@ describe("B3B Idempotency & Financial Consistency Guards", () => {
     expect(proofServiceContent).not.toContain("localStorage");
     expect(proofServiceContent).not.toContain("indexedDB");
   });
+
+  it("verifies reconcileOrphanProofFiles correctly identifies and purges unreferenced disk files", async () => {
+    const { reconcileOrphanProofFiles } = await import("./crm/proofService.server");
+    const testDir = fs.mkdtempSync(path.join(os.tmpdir(), "crm-proof-reconcile-test-"));
+    try {
+      const storage = new LocalFsProofStorage(testDir);
+      // Stage & persist one file
+      const staged1 = await storage.stageUpload({
+        ownerUserId: "usr_test1",
+        originalFileName: "recorded.png",
+        streamOrBuffer: VALID_PNG_HEADER,
+      });
+      const p1 = await storage.persistStagedProof({
+        tempKey: staged1.tempKey,
+        ownerUserId: "usr_test1",
+        proofId: "proof1",
+        ext: staged1.descriptor.fileExtension,
+        expectedSha256: staged1.sha256,
+      });
+
+      // Stage & persist an orphan file (simulating crash before DB commit)
+      const staged2 = await storage.stageUpload({
+        ownerUserId: "usr_test1",
+        originalFileName: "orphan.pdf",
+        streamOrBuffer: VALID_PDF_HEADER,
+      });
+      const p2 = await storage.persistStagedProof({
+        tempKey: staged2.tempKey,
+        ownerUserId: "usr_test1",
+        proofId: "proof2",
+        ext: staged2.descriptor.fileExtension,
+        expectedSha256: staged2.sha256,
+      });
+
+      // Mock DB that only knows about p1.storageKey
+      const mockDb = {
+        select: () => ({
+          from: async () => [{ storageKey: p1.storageKey }],
+        }),
+      } as unknown as import("./db/index.server").CrmDatabase;
+
+      // 1. Dry run reconcile
+      const preview = await reconcileOrphanProofFiles(mockDb, {
+        storageBackend: storage,
+        deleteOrphans: false,
+      });
+      expect(preview.activeDbCount).toBe(1);
+      expect(preview.unreferencedFiles).toEqual([p2.storageKey]);
+      expect(preview.deletedOrphans).toEqual([]);
+      expect(await storage.exists(p2.storageKey)).toBe(true);
+
+      // 2. Reconcile with delete
+      const pruned = await reconcileOrphanProofFiles(mockDb, {
+        storageBackend: storage,
+        deleteOrphans: true,
+      });
+      expect(pruned.unreferencedFiles).toEqual([p2.storageKey]);
+      expect(pruned.deletedOrphans).toEqual([p2.storageKey]);
+      expect(await storage.exists(p2.storageKey)).toBe(false);
+      expect(await storage.exists(p1.storageKey)).toBe(true);
+    } finally {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+  });
 });

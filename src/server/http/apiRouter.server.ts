@@ -460,11 +460,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       404,
     );
   } catch (error) {
-    console.error("[apiRouter] Unhandled API error", {
-      pathname,
-      method: request.method,
-      name: error instanceof Error ? error.name : "Error",
-    });
+    console.error("[apiRouter] Unhandled API error", error);
     return jsonResponse(
       {
         ok: false,

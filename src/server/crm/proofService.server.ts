@@ -407,7 +407,8 @@ export async function replacePaymentProofRecord(
       });
       newlyPersistedKey = persisted.storageKey;
 
-      // Step 6: Update old proof to 'replaced' status (release active_payment_lock)
+      // Step 6: Release active_payment_lock and mark old proof as replaced
+      // Note: replacedByProofId is set after inserting newProofRow to satisfy foreign-key constraint.
       const updatedOldProof: PaymentProofRow = {
         ...oldProof,
         lifecycleStatus: "replaced",
@@ -423,7 +424,6 @@ export async function replacePaymentProofRecord(
         .set({
           lifecycleStatus: "replaced",
           activePaymentLock: null,
-          replacedByProofId: newProofId,
           replacementReason: input.reason ?? "Replaced with updated attachment.",
           version: sql`${crmPaymentProofs.version} + 1`,
           updatedAt: nowUtc,
@@ -465,6 +465,14 @@ export async function replacePaymentProofRecord(
       };
 
       await tx.insert(crmPaymentProofs).values(newProofRow);
+
+      // Link old proof to newly inserted proof to satisfy FK constraint
+      await tx
+        .update(crmPaymentProofs)
+        .set({
+          replacedByProofId: newProofId,
+        })
+        .where(eq(crmPaymentProofs.id, oldProof.id));
 
       // Step 8: Record financial audit event
       const financeEventId = generateServerId("fevt");
@@ -898,5 +906,43 @@ export async function readPaymentProofContent(
     stream: fileContent.stream,
     proof: toPaymentProofDto(proofRow),
     byteSize: fileContent.byteSize,
+  };
+}
+
+export async function reconcileOrphanProofFiles(
+  db: CrmDatabase,
+  options?: {
+    storageBackend?: ProofStorageBackend | undefined;
+    deleteOrphans?: boolean | undefined;
+  },
+): Promise<{
+  activeDbCount: number;
+  unreferencedFiles: string[];
+  deletedOrphans: string[];
+  missingKeys: string[];
+}> {
+  const storage = options?.storageBackend ?? getProofStorageBackend();
+  const rows = await db
+    .select({ storageKey: crmPaymentProofs.storageKey })
+    .from(crmPaymentProofs);
+
+  const activeKeys = new Set(rows.map((r) => r.storageKey));
+  const { unreferencedFiles, missingKeys } = await storage.reconcileStorage(activeKeys);
+
+  const deletedOrphans: string[] = [];
+  if (options?.deleteOrphans) {
+    for (const file of unreferencedFiles) {
+      const deleted = await storage.deleteProof(file);
+      if (deleted) {
+        deletedOrphans.push(file);
+      }
+    }
+  }
+
+  return {
+    activeDbCount: activeKeys.size,
+    unreferencedFiles,
+    deletedOrphans,
+    missingKeys,
   };
 }

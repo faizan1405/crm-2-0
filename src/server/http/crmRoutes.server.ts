@@ -453,7 +453,7 @@ async function parseProofUploadRequest(
       };
     }
 
-    const fileNameVal = data["fileName"];
+    const fileNameVal = data["fileName"] ?? data["originalFileName"];
     const fileName =
       typeof fileNameVal === "string" && fileNameVal.trim() ? fileNameVal.trim() : "payment-proof";
     const reasonVal = data["reason"];
