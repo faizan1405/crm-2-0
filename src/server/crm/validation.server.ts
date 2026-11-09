@@ -1,6 +1,11 @@
 import "@tanstack/react-start/server-only";
 import { z } from "zod";
-import { isValidInrAmount } from "../db/money.server";
+import {
+  decimalStringToPaise,
+  isValidInrAmount,
+  parseStrictInrInputToPaise,
+  sumPaise,
+} from "../db/money.server";
 import { isValidCalendarDay, parseBusinessDateTimeToUtc } from "./dates.server";
 
 export const LEAD_STATUSES = ["new", "contacted", "qualified", "proposal", "won", "lost"] as const;
@@ -600,3 +605,353 @@ export const listLeadWhatsAppQuerySchema = z.object({
 });
 
 export type ListLeadWhatsAppQuery = z.infer<typeof listLeadWhatsAppQuerySchema>;
+
+// ---------------------------------------------------------------------------
+// Checkpoint B3A — Deals, Milestones, Payments & Financial Ledger Schemas
+// ---------------------------------------------------------------------------
+
+export const CLIENT_TYPES = ["crm", "other"] as const;
+export type ClientType = (typeof CLIENT_TYPES)[number];
+
+export const DEAL_STATUSES = ["active", "completed", "on_hold", "cancelled"] as const;
+export type DealStatus = (typeof DEAL_STATUSES)[number];
+
+export const NON_CANCELLED_DEAL_STATUSES = ["active", "completed", "on_hold"] as const;
+export type NonCancelledDealStatus = (typeof NON_CANCELLED_DEAL_STATUSES)[number];
+
+export const PAYMENT_STATUSES = ["paid", "partial", "unpaid", "overdue", "cancelled"] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+
+export const PAYMENT_METHODS = ["UPI", "Bank Transfer", "Cash", "Card", "Cheque"] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+export const PAYMENT_TYPES = ["advance", "milestone", "final", "other"] as const;
+export type PaymentType = (typeof PAYMENT_TYPES)[number];
+
+export const PAYMENT_RECORD_STATUSES = ["posted", "voided"] as const;
+export type PaymentRecordStatus = (typeof PAYMENT_RECORD_STATUSES)[number];
+
+export const FINANCE_EVENT_TYPES = [
+  "deal.created",
+  "deal.updated",
+  "deal.status_changed",
+  "deal.cancelled",
+  "deal.won_date_verified",
+  "payment.recorded",
+  "payment.voided",
+] as const;
+export type FinanceEventType = (typeof FINANCE_EVENT_TYPES)[number];
+
+function buildStrictMoneySchema(options: { allowZero: boolean }) {
+  return z.unknown().transform((val, ctx): string => {
+    const parsed = parseStrictInrInputToPaise(val, { allowZero: options.allowZero });
+    if (!parsed.ok) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: parsed.message,
+      });
+      return z.NEVER;
+    }
+    return parsed.decimal;
+  });
+}
+
+const positiveMoneyDecimalSchema = buildStrictMoneySchema({ allowZero: false });
+const nonNegativeMoneyDecimalSchema = buildStrictMoneySchema({ allowZero: true });
+
+export const dealMilestoneInputSchema = z
+  .object({
+    id: optionalTrimmedString(64),
+    label: z
+      .string()
+      .trim()
+      .min(1, "Milestone label is required")
+      .max(160, "Milestone label must be 160 characters or fewer"),
+    amount: positiveMoneyDecimalSchema,
+    dueDate: z
+      .string()
+      .trim()
+      .refine(isValidCalendarDay, "Milestone dueDate must be a valid YYYY-MM-DD calendar date"),
+  })
+  .strict();
+
+export type DealMilestoneInput = z.infer<typeof dealMilestoneInputSchema>;
+
+export const createDealBodySchema = z
+  .object({
+    clientType: z.enum(CLIENT_TYPES, {
+      errorMap: () => ({ message: "clientType must be 'crm' or 'other'." }),
+    }),
+    leadId: optionalTrimmedString(64),
+    clientName: optionalTrimmedString(160),
+    company: optionalTrimmedString(160),
+    phone: optionalTrimmedString(32).refine(
+      (v) => v === undefined || isValidLeadPhone(v),
+      "Enter a valid 10-digit mobile number",
+    ),
+    name: z
+      .string()
+      .trim()
+      .min(1, "Deal name is required")
+      .max(160, "Deal name must be 160 characters or fewer"),
+    quotedAmount: nonNegativeMoneyDecimalSchema.optional(),
+    finalAmount: positiveMoneyDecimalSchema,
+    status: z.enum(NON_CANCELLED_DEAL_STATUSES).default("active"),
+    dueDate: optionalTrimmedString(10).refine(
+      (v) => v === undefined || isValidCalendarDay(v),
+      "dueDate must be a valid YYYY-MM-DD calendar date",
+    ),
+    milestones: z.array(dealMilestoneInputSchema).max(50).default([]),
+    notes: optionalTrimmedString(20_000),
+    allowDuplicate: z.boolean().default(false),
+    opId: optionalTrimmedString(128),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict()
+  .superRefine((val, ctx) => {
+    if (val.clientType === "crm" && !val.leadId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["leadId"],
+        message: "leadId is required when clientType is 'crm'.",
+      });
+    }
+    if (val.clientType === "other" && val.leadId !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["leadId"],
+        message: "leadId must not be set when clientType is 'other'.",
+      });
+    }
+    if (val.clientType === "other" && !val.clientName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["clientName"],
+        message: "clientName is required when clientType is 'other'.",
+      });
+    }
+    if (val.milestones.length > 0) {
+      const milestoneSum = sumPaise(val.milestones.map((m) => decimalStringToPaise(m.amount)));
+      const finalPaise = decimalStringToPaise(val.finalAmount);
+      if (milestoneSum > finalPaise) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["milestones"],
+          message: "Total milestone amounts cannot exceed the agreed deal finalAmount.",
+        });
+      }
+    }
+  });
+
+export type CreateDealInput = z.infer<typeof createDealBodySchema>;
+
+export const updateDealBodySchema = z
+  .object({
+    version: z.number().int().min(1, "Expected integer record version >= 1."),
+    name: z
+      .string()
+      .trim()
+      .min(1, "Deal name is required")
+      .max(160, "Deal name must be 160 characters or fewer")
+      .optional(),
+    clientName: optionalTrimmedString(160),
+    company: nullableTrimmedString(160),
+    phone: nullableTrimmedString(32).refine(
+      (v) => v === undefined || v === null || isValidLeadPhone(v),
+      "Enter a valid 10-digit mobile number",
+    ),
+    quotedAmount: nonNegativeMoneyDecimalSchema.optional(),
+    finalAmount: positiveMoneyDecimalSchema.optional(),
+    status: z.enum(DEAL_STATUSES).optional(),
+    cancelReason: optionalTrimmedString(500),
+    dueDate: nullableTrimmedString(10).refine(
+      (v) => v === undefined || v === null || isValidCalendarDay(v),
+      "dueDate must be a valid YYYY-MM-DD calendar date",
+    ),
+    milestones: z.array(dealMilestoneInputSchema).max(50).optional(),
+    notes: nullableTrimmedString(20_000),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict()
+  .superRefine((val, ctx) => {
+    const mutableKeys = [
+      "name",
+      "clientName",
+      "company",
+      "phone",
+      "quotedAmount",
+      "finalAmount",
+      "status",
+      "dueDate",
+      "milestones",
+      "notes",
+    ] as const;
+    if (!mutableKeys.some((k) => val[k] !== undefined)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Provide at least one deal field to update.",
+      });
+    }
+  });
+
+export type UpdateDealInput = z.infer<typeof updateDealBodySchema>;
+
+export const changeDealStatusBodySchema = z
+  .object({
+    version: z.number().int().min(1, "Expected integer record version >= 1."),
+    status: z.enum(DEAL_STATUSES, {
+      errorMap: () => ({ message: "Select a valid deal status." }),
+    }),
+    reason: optionalTrimmedString(500),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+
+export type ChangeDealStatusInput = z.infer<typeof changeDealStatusBodySchema>;
+
+export const cancelDealBodySchema = z
+  .object({
+    version: z.number().int().min(1, "Expected integer record version >= 1."),
+    reason: optionalTrimmedString(500),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+
+export type CancelDealInput = z.infer<typeof cancelDealBodySchema>;
+
+export const verifyDealWonDateBodySchema = z
+  .object({
+    version: z.number().int().min(1, "Expected integer record version >= 1."),
+    wonDate: z
+      .string()
+      .trim()
+      .refine(
+        (v) => isValidCalendarDay(v) && v >= "2000-01-01",
+        "wonDate must be a valid YYYY-MM-DD calendar date from 2000-01-01 onward.",
+      ),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+
+export type VerifyDealWonDateInput = z.infer<typeof verifyDealWonDateBodySchema>;
+
+export const listDealsQuerySchema = z.object({
+  q: optionalTrimmedString(120),
+  status: z.enum(["all", ...DEAL_STATUSES]).default("all"),
+  paymentStatus: z.enum(["all", "due", ...PAYMENT_STATUSES]).default("all"),
+  clientType: z.enum(["all", ...CLIENT_TYPES]).default("all"),
+  leadId: optionalTrimmedString(64),
+  wonFrom: optionalTrimmedString(10).refine(
+    (v) => v === undefined || isValidCalendarDay(v),
+    "wonFrom must be a valid YYYY-MM-DD calendar date",
+  ),
+  wonTo: optionalTrimmedString(10).refine(
+    (v) => v === undefined || isValidCalendarDay(v),
+    "wonTo must be a valid YYYY-MM-DD calendar date",
+  ),
+  sort: z.enum(["recent", "due", "amount", "outstanding"]).default("recent"),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+export type ListDealsQuery = z.infer<typeof listDealsQuerySchema>;
+
+const paymentBaseFields = {
+  amount: positiveMoneyDecimalSchema,
+  date: optionalTrimmedString(10).refine(
+    (v) => v === undefined || isValidCalendarDay(v),
+    "date must be a valid YYYY-MM-DD calendar date",
+  ),
+  method: z.enum(PAYMENT_METHODS, {
+    errorMap: () => ({ message: "Select a valid payment method." }),
+  }),
+  type: z
+    .enum(PAYMENT_TYPES, {
+      errorMap: () => ({ message: "Select a valid payment type." }),
+    })
+    .default("milestone"),
+  reference: optionalTrimmedString(160),
+  notes: optionalTrimmedString(5000),
+  expectedDealVersion: z.number().int().min(1, "Expected integer record version >= 1.").optional(),
+  opId: optionalTrimmedString(128),
+  idempotencyKey: optionalTrimmedString(128),
+};
+
+export const createPaymentBodySchema = z.object(paymentBaseFields).strict();
+export type CreatePaymentInput = z.infer<typeof createPaymentBodySchema>;
+
+export const createPaymentWithDealBodySchema = z
+  .object({
+    dealId: z.string().trim().min(1, "dealId is required").max(64),
+    ...paymentBaseFields,
+  })
+  .strict();
+export type CreatePaymentWithDealInput = z.infer<typeof createPaymentWithDealBodySchema>;
+
+export const voidPaymentBodySchema = z
+  .object({
+    reason: z
+      .string({ required_error: "An explicit void reason is required." })
+      .trim()
+      .min(1, "An explicit void reason is required.")
+      .max(500, "Void reason must be 500 characters or fewer."),
+    expectedVersion: z.number().int().min(1, "Expected integer record version >= 1.").optional(),
+    opId: optionalTrimmedString(128),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type VoidPaymentInput = z.infer<typeof voidPaymentBodySchema>;
+
+export const listDealPaymentsQuerySchema = z.object({
+  includeVoided: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
+  method: z.enum(["all", ...PAYMENT_METHODS]).default("all"),
+  type: z.enum(["all", ...PAYMENT_TYPES]).default("all"),
+  dateFrom: optionalTrimmedString(10).refine(
+    (v) => v === undefined || isValidCalendarDay(v),
+    "dateFrom must be a valid YYYY-MM-DD calendar date",
+  ),
+  dateTo: optionalTrimmedString(10).refine(
+    (v) => v === undefined || isValidCalendarDay(v),
+    "dateTo must be a valid YYYY-MM-DD calendar date",
+  ),
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type ListDealPaymentsQuery = z.infer<typeof listDealPaymentsQuerySchema>;
+
+export const listPaymentsQuerySchema = listDealPaymentsQuerySchema.extend({
+  dealId: optionalTrimmedString(64),
+});
+export type ListPaymentsQuery = z.infer<typeof listPaymentsQuerySchema>;
+
+export const listDealAuditQuerySchema = z.object({
+  eventType: z.enum(["all", ...FINANCE_EVENT_TYPES]).default("all"),
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type ListDealAuditQuery = z.infer<typeof listDealAuditQuerySchema>;
+
+export const financeSummaryQuerySchema = z
+  .object({
+    from: optionalTrimmedString(10).refine(
+      (v) => v === undefined || isValidCalendarDay(v),
+      "from must be a valid YYYY-MM-DD calendar date",
+    ),
+    to: optionalTrimmedString(10).refine(
+      (v) => v === undefined || isValidCalendarDay(v),
+      "to must be a valid YYYY-MM-DD calendar date",
+    ),
+  })
+  .superRefine((val, ctx) => {
+    if (val.from && val.to && val.from > val.to) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["from"],
+        message: "'from' date cannot be after 'to' date.",
+      });
+    }
+  });
+export type FinanceSummaryQuery = z.infer<typeof financeSummaryQuerySchema>;

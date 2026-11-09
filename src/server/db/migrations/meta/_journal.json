@@ -36,6 +36,13 @@
       "when": 1794233055397,
       "tag": "0004_b2b4_whatsapp_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1794237066454,
+      "tag": "0005_b3a_finance_ledger",
+      "breakpoints": true
     }
   ]
 }

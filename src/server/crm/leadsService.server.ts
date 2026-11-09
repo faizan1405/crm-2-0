@@ -15,7 +15,13 @@ import {
   type SQL,
 } from "drizzle-orm";
 import type { CrmDatabase } from "../db/index.server";
-import { crmFollowUps, crmLeadActivities, crmLeads, crmLeadTags } from "../db/schema.server";
+import {
+  crmDeals,
+  crmFollowUps,
+  crmLeadActivities,
+  crmLeads,
+  crmLeadTags,
+} from "../db/schema.server";
 import { paiseToDecimalString, rupeesToPaise } from "../db/money.server";
 import { toMysqlUtcDateTime } from "../db/utc.server";
 import { generateServerId } from "../auth/security.server";
@@ -672,6 +678,26 @@ export async function updateLeadRecord(
 
       // Internal hook strictly used in live MariaDB transaction rollback tests; never exposed over HTTP.
       options?.hooks?.afterPrimaryWrite?.();
+
+      // Synchronize linked CRM Deals' clientName/company when Lead identity fields change (store.ts:738).
+      if (patchPayload.name !== current.name || patchPayload.company !== current.company) {
+        await tx
+          .update(crmDeals)
+          .set({
+            clientName: patchPayload.name,
+            company: patchPayload.company,
+            updatedByUserId: actorUserId,
+            version: sql`${crmDeals.version} + 1`,
+            updatedAt: nowStr,
+          })
+          .where(
+            and(
+              eq(crmDeals.ownerUserId, ownerUserId),
+              eq(crmDeals.leadId, leadId),
+              eq(crmDeals.clientType, "crm"),
+            ),
+          );
+      }
 
       const activityRows: LeadActivityRow[] = [];
 

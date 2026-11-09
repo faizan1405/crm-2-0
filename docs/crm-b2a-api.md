@@ -62,6 +62,16 @@ All endpoints require an authenticated active Owner cookie session (`401`/`403`/
 - `GET /api/v1/leads/:id/whatsapp-messages` — Per-lead confirmed WhatsApp message history.
 - `GET /api/v1/whatsapp-messages/:id` — Single `WhatsAppLogDto` (`404` on foreign or missing ID).
 
+### Deals, Payments, Voids & Financial Ledger (Added in B3A, Migration `0005`)
+
+See [`docs/crm-b3a-finance-backend.md`](./crm-b3a-finance-backend.md) for the full compatibility matrix, `ON DELETE RESTRICT` foreign-key policy, exact-money arithmetic rules, and 25 MariaDB verification scenarios:
+
+- `GET /api/v1/deals` / `POST /api/v1/deals` / `GET /api/v1/deals/:id` / `PATCH /api/v1/deals/:id`
+- `POST /api/v1/deals/:id/status` / `POST /api/v1/deals/:id/cancel` / `POST /api/v1/deals/:id/verify-won-date`
+- `GET /api/v1/deals/:id/summary` / `GET /api/v1/deals/:id/audit-history` / `GET /api/v1/leads/:id/deals`
+- `GET /api/v1/deals/:id/payments` / `POST /api/v1/deals/:id/payments` / `GET /api/v1/payments` / `GET /api/v1/payments/:id` / `POST /api/v1/payments/:id/void`
+- `GET /api/v1/finance/summary`
+
 ## 3. Idempotency & Optimistic Concurrency
 
 - All mutating `POST` / `PATCH` / `DELETE` routes accept the `Idempotency-Key` HTTP header (and body `idempotencyKey` / `opId` where supported).

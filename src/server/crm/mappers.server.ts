@@ -2,22 +2,33 @@ import "@tanstack/react-start/server-only";
 import type { InferSelectModel } from "drizzle-orm";
 import type {
   crmCallLogs,
+  crmDealMilestones,
+  crmDeals,
+  crmFinanceEvents,
   crmFollowUps,
   crmLeadActivities,
   crmLeads,
+  crmPayments,
   crmWhatsAppLogs,
 } from "../db/schema.server";
-import { decimalStringToRupees } from "../db/money.server";
+import { decimalStringToPaise, decimalStringToRupees } from "../db/money.server";
 import { parseUtcDateTime } from "../db/utc.server";
 import { mysqlUtcToIso, toIstParts } from "./dates.server";
+import type { DealFinancialSummaryDto } from "./financeCalc.server";
 import type {
   ActivityType,
   CallOutcome,
+  ClientType,
+  DealStatus,
+  FinanceEventType,
   FollowUpType,
   LeadLifecycleStatus,
   LeadPriority,
   LeadSource,
   LeadStatus,
+  PaymentMethod,
+  PaymentRecordStatus,
+  PaymentType,
   QuickStatus,
   WaConfirmationStatus,
   WaPurpose,
@@ -342,5 +353,248 @@ export function toWhatsAppLogDto(row: WhatsAppLogRow): WhatsAppLogDto {
     confirmedIstTime: row.confirmedIstTime,
     createdAt: mysqlUtcToIso(row.createdAt) ?? row.createdAt,
     updatedAt: mysqlUtcToIso(row.updatedAt) ?? row.updatedAt,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Checkpoint B3A — Financial Ledger DTOs & Mappers
+// ---------------------------------------------------------------------------
+
+export type DealRow = InferSelectModel<typeof crmDeals>;
+export type DealMilestoneRow = InferSelectModel<typeof crmDealMilestones>;
+export type PaymentRow = InferSelectModel<typeof crmPayments>;
+export type FinanceEventRow = InferSelectModel<typeof crmFinanceEvents>;
+
+export interface DealMilestoneDto {
+  id: string;
+  legacyId: string | null;
+  label: string;
+  amount: number;
+  amountDecimal: string;
+  amountPaise: number;
+  dueDate: string;
+  sortOrder: number;
+}
+
+export interface DealDto {
+  id: string;
+  legacyId: string | null;
+  leadId?: string;
+  clientType: ClientType;
+  clientName: string;
+  company?: string;
+  phone?: string;
+  name: string;
+  quotedAmount: number;
+  quotedAmountDecimal: string;
+  quotedAmountPaise: number;
+  finalAmount: number;
+  finalAmountDecimal: string;
+  finalAmountPaise: number;
+  status: DealStatus;
+  dueDate?: string;
+  milestones: DealMilestoneDto[];
+  notes?: string;
+  wonAt?: string;
+  wonIstDate?: string;
+  wonDateVerifiedAt?: string;
+  wonDateVerifiedByUserId?: string;
+  cancelledAt?: string;
+  cancelledIstDate?: string;
+  cancelledByUserId?: string;
+  cancelReason?: string;
+  opId?: string;
+  createdByUserId: string;
+  updatedByUserId: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  financialSummary: DealFinancialSummaryDto;
+}
+
+export interface PaymentDto {
+  id: string;
+  legacyId: string | null;
+  dealId: string;
+  amount: number;
+  amountDecimal: string;
+  amountPaise: number;
+  date: string;
+  method: PaymentMethod;
+  type: PaymentType;
+  reference?: string;
+  notes?: string;
+  status: PaymentRecordStatus;
+  voided: boolean;
+  voidedAt?: string;
+  voidedIstDate?: string;
+  voidedByUserId?: string;
+  voidReason?: string;
+  opId?: string;
+  recordedByUserId: string;
+  updatedByUserId: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FinanceEventDto {
+  id: string;
+  dealId: string;
+  paymentId?: string;
+  leadId?: string;
+  actorUserId: string;
+  eventType: FinanceEventType;
+  summary: string;
+  reason?: string;
+  amount?: number;
+  amountDecimal?: string;
+  amountPaise?: number;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  leadActivityId?: string;
+  opId?: string;
+  at: string;
+  occurredIstDate: string;
+  createdAt: string;
+}
+
+export function toDealMilestoneDto(row: DealMilestoneRow): DealMilestoneDto {
+  const amountPaise = decimalStringToPaise(row.amount);
+  return {
+    id: row.id,
+    legacyId: row.legacyId ?? null,
+    label: row.label,
+    amount: decimalStringToRupees(row.amount),
+    amountDecimal: row.amount,
+    amountPaise,
+    dueDate: row.dueDate,
+    sortOrder: row.sortOrder,
+  };
+}
+
+export function toDealDto(
+  row: DealRow,
+  milestones: readonly DealMilestoneRow[],
+  financialSummary: DealFinancialSummaryDto,
+): DealDto {
+  const wonAt = mysqlUtcToIso(row.wonAt);
+  const wonDateVerifiedAt = mysqlUtcToIso(row.wonDateVerifiedAt);
+  const cancelledAt = mysqlUtcToIso(row.cancelledAt);
+  const sortedMilestones = [...milestones]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map(toDealMilestoneDto);
+
+  return {
+    id: row.id,
+    legacyId: row.legacyId ?? null,
+    ...(row.leadId ? { leadId: row.leadId } : {}),
+    clientType: row.clientType as ClientType,
+    clientName: row.clientName,
+    ...(row.company ? { company: row.company } : {}),
+    ...(row.phone ? { phone: row.phone } : {}),
+    name: row.name,
+    quotedAmount: financialSummary.quotedAmount,
+    quotedAmountDecimal: row.quotedAmount,
+    quotedAmountPaise: financialSummary.quotedAmountPaise,
+    finalAmount: financialSummary.finalAmount,
+    finalAmountDecimal: row.finalAmount,
+    finalAmountPaise: financialSummary.finalAmountPaise,
+    status: row.status as DealStatus,
+    ...(row.dueDate ? { dueDate: row.dueDate } : {}),
+    milestones: sortedMilestones,
+    ...(row.notes ? { notes: row.notes } : {}),
+    ...(wonAt ? { wonAt } : {}),
+    ...(row.wonIstDate ? { wonIstDate: row.wonIstDate } : {}),
+    ...(wonDateVerifiedAt ? { wonDateVerifiedAt } : {}),
+    ...(row.wonDateVerifiedByUserId
+      ? { wonDateVerifiedByUserId: row.wonDateVerifiedByUserId }
+      : {}),
+    ...(cancelledAt ? { cancelledAt } : {}),
+    ...(row.cancelledIstDate ? { cancelledIstDate: row.cancelledIstDate } : {}),
+    ...(row.cancelledByUserId ? { cancelledByUserId: row.cancelledByUserId } : {}),
+    ...(row.cancelReason ? { cancelReason: row.cancelReason } : {}),
+    ...(row.opId ? { opId: row.opId } : {}),
+    createdByUserId: row.createdByUserId,
+    updatedByUserId: row.updatedByUserId,
+    version: row.version,
+    createdAt: mysqlUtcToIso(row.createdAt) ?? row.createdAt,
+    updatedAt: mysqlUtcToIso(row.updatedAt) ?? row.updatedAt,
+    financialSummary,
+  };
+}
+
+export function toPaymentDto(row: PaymentRow): PaymentDto {
+  const voidedAt = mysqlUtcToIso(row.voidedAt);
+  const amountPaise = decimalStringToPaise(row.amount);
+  return {
+    id: row.id,
+    legacyId: row.legacyId ?? null,
+    dealId: row.dealId,
+    amount: decimalStringToRupees(row.amount),
+    amountDecimal: row.amount,
+    amountPaise,
+    date: row.paymentIstDate,
+    method: row.method as PaymentMethod,
+    type: row.paymentType as PaymentType,
+    ...(row.reference ? { reference: row.reference } : {}),
+    ...(row.notes ? { notes: row.notes } : {}),
+    status: row.status as PaymentRecordStatus,
+    voided: Boolean(row.voided),
+    ...(voidedAt ? { voidedAt } : {}),
+    ...(row.voidedIstDate ? { voidedIstDate: row.voidedIstDate } : {}),
+    ...(row.voidedByUserId ? { voidedByUserId: row.voidedByUserId } : {}),
+    ...(row.voidReason ? { voidReason: row.voidReason } : {}),
+    ...(row.opId ? { opId: row.opId } : {}),
+    recordedByUserId: row.recordedByUserId,
+    updatedByUserId: row.updatedByUserId,
+    version: row.version,
+    createdAt: mysqlUtcToIso(row.createdAt) ?? row.createdAt,
+    updatedAt: mysqlUtcToIso(row.updatedAt) ?? row.updatedAt,
+  };
+}
+
+function safeParseJsonObject(raw: string | null | undefined): Record<string, unknown> | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function toFinanceEventDto(row: FinanceEventRow): FinanceEventDto {
+  const before = safeParseJsonObject(row.beforeJson);
+  const after = safeParseJsonObject(row.afterJson);
+  const hasAmount = row.amountSnapshot !== null && row.amountSnapshot !== undefined;
+  const amountPaise = hasAmount ? decimalStringToPaise(row.amountSnapshot!) : undefined;
+
+  return {
+    id: row.id,
+    dealId: row.dealId,
+    ...(row.paymentId ? { paymentId: row.paymentId } : {}),
+    ...(row.leadId ? { leadId: row.leadId } : {}),
+    actorUserId: row.actorUserId,
+    eventType: row.eventType as FinanceEventType,
+    summary: row.summary,
+    ...(row.reason ? { reason: row.reason } : {}),
+    ...(hasAmount
+      ? {
+          amount: decimalStringToRupees(row.amountSnapshot!),
+          amountDecimal: row.amountSnapshot!,
+          amountPaise: amountPaise!,
+        }
+      : {}),
+    ...(before ? { before } : {}),
+    ...(after ? { after } : {}),
+    ...(row.leadActivityId ? { leadActivityId: row.leadActivityId } : {}),
+    ...(row.opId ? { opId: row.opId } : {}),
+    at: mysqlUtcToIso(row.occurredAt) ?? row.occurredAt,
+    occurredIstDate: row.occurredIstDate,
+    createdAt: mysqlUtcToIso(row.createdAt) ?? row.createdAt,
   };
 }

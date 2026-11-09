@@ -120,7 +120,7 @@ export const crmLeads = mysqlTable(
     legacyId: crmId("legacy_id"),
     ownerUserId: crmId("owner_user_id")
       .notNull()
-      .references(() => crmUsers.id, { onDelete: "cascade" }),
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
     name: varchar("name", { length: 120 }).notNull(),
     phone: varchar("phone", { length: 32 }).notNull(),
     phoneKey: varchar("phone_key", { length: 20 }).notNull(),
@@ -190,10 +190,10 @@ export const crmLeadActivities = mysqlTable(
     legacyId: crmId("legacy_id"),
     ownerUserId: crmId("owner_user_id")
       .notNull()
-      .references(() => crmUsers.id, { onDelete: "cascade" }),
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
     leadId: crmId("lead_id")
       .notNull()
-      .references(() => crmLeads.id, { onDelete: "cascade" }),
+      .references(() => crmLeads.id, { onDelete: "restrict" }),
     actorUserId: crmId("actor_user_id")
       .notNull()
       .references(() => crmUsers.id),
@@ -229,10 +229,10 @@ export const crmFollowUps = mysqlTable(
     legacyId: crmId("legacy_id"),
     ownerUserId: crmId("owner_user_id")
       .notNull()
-      .references(() => crmUsers.id, { onDelete: "cascade" }),
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
     leadId: crmId("lead_id")
       .notNull()
-      .references(() => crmLeads.id, { onDelete: "cascade" }),
+      .references(() => crmLeads.id, { onDelete: "restrict" }),
     activeLeadLock: crmId("active_lead_lock"),
     type: varchar("type", { length: 24 }).notNull(),
     dueAt: utcDateTime("due_at").notNull(),
@@ -274,10 +274,10 @@ export const crmCallLogs = mysqlTable(
     legacyId: crmId("legacy_id"),
     ownerUserId: crmId("owner_user_id")
       .notNull()
-      .references(() => crmUsers.id, { onDelete: "cascade" }),
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
     leadId: crmId("lead_id")
       .notNull()
-      .references(() => crmLeads.id, { onDelete: "cascade" }),
+      .references(() => crmLeads.id, { onDelete: "restrict" }),
     actorUserId: crmId("actor_user_id")
       .notNull()
       .references(() => crmUsers.id),
@@ -325,10 +325,10 @@ export const crmWhatsAppLogs = mysqlTable(
     legacyId: crmId("legacy_id"),
     ownerUserId: crmId("owner_user_id")
       .notNull()
-      .references(() => crmUsers.id, { onDelete: "cascade" }),
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
     leadId: crmId("lead_id")
       .notNull()
-      .references(() => crmLeads.id, { onDelete: "cascade" }),
+      .references(() => crmLeads.id, { onDelete: "restrict" }),
     actorUserId: crmId("actor_user_id")
       .notNull()
       .references(() => crmUsers.id),
@@ -374,7 +374,7 @@ export const crmTagDefs = mysqlTable(
     legacyId: crmId("legacy_id"),
     ownerUserId: crmId("owner_user_id")
       .notNull()
-      .references(() => crmUsers.id, { onDelete: "cascade" }),
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
     name: varchar("name", { length: 48 }).notNull(),
     description: varchar("description", { length: 255 }),
     color: varchar("color", { length: 16 }).notNull(),
@@ -395,10 +395,10 @@ export const crmLeadTags = mysqlTable(
     id: crmId("id").primaryKey(),
     ownerUserId: crmId("owner_user_id")
       .notNull()
-      .references(() => crmUsers.id, { onDelete: "cascade" }),
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
     leadId: crmId("lead_id")
       .notNull()
-      .references(() => crmLeads.id, { onDelete: "cascade" }),
+      .references(() => crmLeads.id, { onDelete: "restrict" }),
     tagId: crmId("tag_id")
       .notNull()
       .references(() => crmTagDefs.id, { onDelete: "cascade" }),
@@ -420,7 +420,7 @@ export const crmCustomFields = mysqlTable(
     legacyId: crmId("legacy_id"),
     ownerUserId: crmId("owner_user_id")
       .notNull()
-      .references(() => crmUsers.id, { onDelete: "cascade" }),
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
     entity: varchar("entity", { length: 16 }).notNull().default("lead"),
     label: varchar("label", { length: 80 }).notNull(),
     fieldType: varchar("field_type", { length: 24 }).notNull(),
@@ -450,10 +450,10 @@ export const crmLeadFieldValues = mysqlTable(
     id: crmId("id").primaryKey(),
     ownerUserId: crmId("owner_user_id")
       .notNull()
-      .references(() => crmUsers.id, { onDelete: "cascade" }),
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
     leadId: crmId("lead_id")
       .notNull()
-      .references(() => crmLeads.id, { onDelete: "cascade" }),
+      .references(() => crmLeads.id, { onDelete: "restrict" }),
     fieldId: crmId("field_id")
       .notNull()
       .references(() => crmCustomFields.id, { onDelete: "cascade" }),
@@ -476,7 +476,7 @@ export const crmIdempotencyKeys = mysqlTable(
     id: crmId("id").primaryKey(),
     ownerUserId: crmId("owner_user_id")
       .notNull()
-      .references(() => crmUsers.id, { onDelete: "cascade" }),
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
     scope: varchar("scope", { length: 128 }).notNull(),
     idemKey: varchar("idem_key", { length: 128 }).notNull(),
     requestHash: char("request_hash", { length: 64 }).notNull(),
@@ -496,6 +496,188 @@ export const crmIdempotencyKeys = mysqlTable(
   ],
 );
 
+/**
+ * B3A: Booked Deals ledger (`crm` Lead-linked clients or independent `other` clients).
+ * Monetary amounts (`quoted_amount`, `final_amount`) use exact `DECIMAL(15, 2)` strings;
+ * authoritative collected/outstanding/overdue balances are computed server-side in integer paise.
+ * Foreign keys use `ON DELETE RESTRICT` so financial history can never cascade-disappear.
+ */
+export const crmDeals = mysqlTable(
+  "crm_deals",
+  {
+    id: crmId("id").primaryKey(),
+    legacyId: crmId("legacy_id"),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    leadId: crmId("lead_id").references(() => crmLeads.id, { onDelete: "restrict" }),
+    clientType: varchar("client_type", { length: 16 }).notNull(),
+    clientName: varchar("client_name", { length: 160 }).notNull(),
+    company: varchar("company", { length: 160 }),
+    phone: varchar("phone", { length: 32 }),
+    name: varchar("name", { length: 160 }).notNull(),
+    quotedAmount: inrDecimal("quoted_amount").notNull(),
+    finalAmount: inrDecimal("final_amount").notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("active"),
+    dueDate: istDateChar("due_date"),
+    wonAt: utcDateTime("won_at"),
+    wonIstDate: istDateChar("won_ist_date"),
+    wonDateVerifiedAt: utcDateTime("won_date_verified_at"),
+    wonDateVerifiedByUserId: crmId("won_date_verified_by_user_id").references(() => crmUsers.id, {
+      onDelete: "restrict",
+    }),
+    cancelledAt: utcDateTime("cancelled_at"),
+    cancelledIstDate: istDateChar("cancelled_ist_date"),
+    cancelledByUserId: crmId("cancelled_by_user_id").references(() => crmUsers.id, {
+      onDelete: "restrict",
+    }),
+    cancelReason: varchar("cancel_reason", { length: 500 }),
+    notes: text("notes"),
+    opId: varchar("op_id", { length: 128 }),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }),
+    createdByUserId: crmId("created_by_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    updatedByUserId: crmId("updated_by_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    version: versionCol("version"),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    uniqueIndex("uq_crm_deals_owner_legacy").on(table.ownerUserId, table.legacyId),
+    uniqueIndex("uq_crm_deals_owner_op").on(table.ownerUserId, table.opId),
+    uniqueIndex("uq_crm_deals_owner_idem").on(table.ownerUserId, table.idempotencyKey),
+    index("idx_crm_deals_owner_status_due").on(table.ownerUserId, table.status, table.dueDate),
+    index("idx_crm_deals_owner_lead").on(table.ownerUserId, table.leadId),
+    index("idx_crm_deals_owner_won_ist").on(table.ownerUserId, table.wonIstDate),
+    index("idx_crm_deals_owner_created").on(table.ownerUserId, table.createdAt),
+  ],
+);
+
+/**
+ * B3A: Structured Deal payment-schedule milestones (`src/lib/crm/types.ts` `Milestone`).
+ */
+export const crmDealMilestones = mysqlTable(
+  "crm_deal_milestones",
+  {
+    id: crmId("id").primaryKey(),
+    legacyId: crmId("legacy_id"),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    dealId: crmId("deal_id")
+      .notNull()
+      .references(() => crmDeals.id, { onDelete: "restrict" }),
+    label: varchar("label", { length: 160 }).notNull(),
+    amount: inrDecimal("amount").notNull(),
+    dueDate: istDateChar("due_date").notNull(),
+    sortOrder: int("sort_order").notNull().default(0),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    uniqueIndex("uq_crm_deal_milestones_owner_legacy").on(table.ownerUserId, table.legacyId),
+    index("idx_crm_deal_milestones_deal_order").on(table.dealId, table.sortOrder),
+    index("idx_crm_deal_milestones_owner_due").on(table.ownerUserId, table.dueDate),
+  ],
+);
+
+/**
+ * B3A: Immutable-amount Payment ledger (`status = 'posted' | 'voided'`).
+ * Voided payments remain in `crm_payments` with their original `amount` intact, explicit
+ * `void_reason`, `voided_at`, and `voided_by_user_id`, while being excluded from collected totals.
+ * Stable `id` + `legacy_id` support 1-to-1 private payment-proof storage in Checkpoint B3B.
+ */
+export const crmPayments = mysqlTable(
+  "crm_payments",
+  {
+    id: crmId("id").primaryKey(),
+    legacyId: crmId("legacy_id"),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    dealId: crmId("deal_id")
+      .notNull()
+      .references(() => crmDeals.id, { onDelete: "restrict" }),
+    amount: inrDecimal("amount").notNull(),
+    paymentIstDate: istDateChar("payment_ist_date").notNull(),
+    method: varchar("method", { length: 32 }).notNull(),
+    paymentType: varchar("payment_type", { length: 24 }).notNull(),
+    reference: varchar("reference", { length: 160 }),
+    notes: text("notes"),
+    status: varchar("status", { length: 16 }).notNull().default("posted"),
+    voided: boolean("voided").notNull().default(false),
+    voidedAt: utcDateTime("voided_at"),
+    voidedIstDate: istDateChar("voided_ist_date"),
+    voidedByUserId: crmId("voided_by_user_id").references(() => crmUsers.id, {
+      onDelete: "restrict",
+    }),
+    voidReason: varchar("void_reason", { length: 500 }),
+    opId: varchar("op_id", { length: 128 }),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }),
+    recordedByUserId: crmId("recorded_by_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    updatedByUserId: crmId("updated_by_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    version: versionCol("version"),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    uniqueIndex("uq_crm_payments_owner_legacy").on(table.ownerUserId, table.legacyId),
+    uniqueIndex("uq_crm_payments_owner_op").on(table.ownerUserId, table.opId),
+    uniqueIndex("uq_crm_payments_owner_deal_idem").on(
+      table.ownerUserId,
+      table.dealId,
+      table.idempotencyKey,
+    ),
+    index("idx_crm_payments_deal_voided_date").on(table.dealId, table.voided, table.paymentIstDate),
+    index("idx_crm_payments_owner_ist_date").on(table.ownerUserId, table.paymentIstDate),
+    index("idx_crm_payments_owner_created").on(table.ownerUserId, table.createdAt),
+  ],
+);
+
+/**
+ * B3A: Append-only Financial Audit Ledger (`crm_finance_events`).
+ * Captures every Deal creation/update/status-change/cancellation/won-date-verification and
+ * Payment recording/voiding with server-derived `actor_user_id` and before/after snapshots.
+ */
+export const crmFinanceEvents = mysqlTable(
+  "crm_finance_events",
+  {
+    id: crmId("id").primaryKey(),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    dealId: crmId("deal_id")
+      .notNull()
+      .references(() => crmDeals.id, { onDelete: "restrict" }),
+    paymentId: crmId("payment_id").references(() => crmPayments.id, { onDelete: "restrict" }),
+    leadId: crmId("lead_id").references(() => crmLeads.id, { onDelete: "restrict" }),
+    actorUserId: crmId("actor_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    eventType: varchar("event_type", { length: 48 }).notNull(),
+    summary: varchar("summary", { length: 500 }).notNull(),
+    reason: varchar("reason", { length: 500 }),
+    amountSnapshot: inrDecimal("amount_snapshot"),
+    beforeJson: text("before_json"),
+    afterJson: text("after_json"),
+    leadActivityId: crmId("lead_activity_id"),
+    opId: varchar("op_id", { length: 128 }),
+    occurredAt: utcDateTime("occurred_at").notNull(),
+    occurredIstDate: istDateChar("occurred_ist_date").notNull(),
+    createdAt: utcDateTime("created_at").notNull(),
+  },
+  (table) => [
+    index("idx_crm_finance_events_deal_occurred").on(table.dealId, table.occurredAt),
+    index("idx_crm_finance_events_payment_occurred").on(table.paymentId, table.occurredAt),
+    index("idx_crm_finance_events_owner_occurred").on(table.ownerUserId, table.occurredAt),
+    index("idx_crm_finance_events_owner_ist_date").on(table.ownerUserId, table.occurredIstDate),
+  ],
+);
+
 export const b1aFoundationSchema = {
   crmSchemaMeta,
 } as const;
@@ -506,6 +688,13 @@ export const authSchema = {
   crmSessions,
   crmAuthAudit,
   crmAuthRateLimits,
+} as const;
+
+export const crmFinanceSchema = {
+  crmDeals,
+  crmDealMilestones,
+  crmPayments,
+  crmFinanceEvents,
 } as const;
 
 export const crmCoreSchema = {
@@ -519,6 +708,7 @@ export const crmCoreSchema = {
   crmCustomFields,
   crmLeadFieldValues,
   crmIdempotencyKeys,
+  ...crmFinanceSchema,
 } as const;
 
 export const appSchema = {

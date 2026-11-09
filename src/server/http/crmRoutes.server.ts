@@ -17,6 +17,18 @@ import {
   listCallLogs,
   listCallLogsForLead,
 } from "../crm/callsService.server";
+import {
+  cancelDealRecord,
+  changeDealStatusRecord,
+  createDealRecord,
+  getDealRecord,
+  getDealSummaryRecord,
+  getOwnerFinanceSummary,
+  listDealAuditHistory,
+  listDealsRecords,
+  updateDealRecord,
+  verifyDealWonDateRecord,
+} from "../crm/dealsService.server";
 import { CrmServiceError } from "../crm/errors.server";
 import {
   cancelFollowUpRecord,
@@ -37,24 +49,44 @@ import {
   updateLeadRecord,
 } from "../crm/leadsService.server";
 import {
+  createPaymentRecord,
+  getPaymentRecord,
+  listAllPayments,
+  listPaymentsForDeal,
+  voidPaymentRecord,
+} from "../crm/paymentsService.server";
+import {
   archiveLeadBodySchema,
+  cancelDealBodySchema,
   cancelFollowUpBodySchema,
+  changeDealStatusBodySchema,
   completeFollowUpBodySchema,
   createActivityBodySchema,
   createCallLogBodySchema,
+  createDealBodySchema,
   createFollowUpBodySchema,
   createLeadBodySchema,
+  createPaymentBodySchema,
+  createPaymentWithDealBodySchema,
   createWhatsAppLogBodySchema,
+  financeSummaryQuerySchema,
   listActivitiesQuerySchema,
   listCallsQuerySchema,
+  listDealAuditQuerySchema,
+  listDealPaymentsQuerySchema,
+  listDealsQuerySchema,
   listFollowUpsQuerySchema,
   listLeadCallsQuerySchema,
   listLeadWhatsAppQuerySchema,
   listLeadsQuerySchema,
+  listPaymentsQuerySchema,
   listWhatsAppQuerySchema,
   restoreLeadBodySchema,
+  updateDealBodySchema,
   updateFollowUpBodySchema,
   updateLeadBodySchema,
+  verifyDealWonDateBodySchema,
+  voidPaymentBodySchema,
 } from "../crm/validation.server";
 import {
   createWhatsAppLogRecord,
@@ -353,8 +385,9 @@ function hasRequestBodyHint(request: Request): boolean {
 }
 
 /**
- * Handles all Core CRM `/api/v1/leads*`, `/api/v1/follow-ups*`, `/api/v1/calls*`, and
- * `/api/v1/whatsapp-messages*` endpoints. Returns `null` if the pathname does not match any CRM route.
+ * Handles all Core CRM `/api/v1/leads*`, `/api/v1/follow-ups*`, `/api/v1/calls*`,
+ * `/api/v1/whatsapp-messages*`, `/api/v1/deals*`, `/api/v1/payments*`, and `/api/v1/finance*`
+ * endpoints. Returns `null` if the pathname does not match any CRM route.
  */
 export async function handleCrmApiRequest(
   request: Request,
@@ -365,7 +398,10 @@ export async function handleCrmApiRequest(
     !pathname.startsWith("/api/v1/leads") &&
     !pathname.startsWith("/api/v1/follow-ups") &&
     !pathname.startsWith("/api/v1/calls") &&
-    !pathname.startsWith("/api/v1/whatsapp-messages")
+    !pathname.startsWith("/api/v1/whatsapp-messages") &&
+    !pathname.startsWith("/api/v1/deals") &&
+    !pathname.startsWith("/api/v1/payments") &&
+    !pathname.startsWith("/api/v1/finance")
   ) {
     return null;
   }
@@ -665,6 +701,23 @@ export async function handleCrmApiRequest(
           const result = await listWhatsAppLogsForLead(auth.db, auth.userId, leadId, query);
           return jsonResponse({ ok: true, ...result }, 200);
         }
+
+        // GET /api/v1/leads/:id/deals
+        if (subresource === "deals") {
+          if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          // Verify Lead exists & belongs to Owner before listing its Deals.
+          await getLeadRecord(auth.db, auth.userId, leadId);
+          const query = listDealsQuerySchema.parse({
+            ...searchParamsObject(parsedUrl),
+            leadId,
+          });
+          const result = await listDealsRecords(auth.db, auth.userId, query);
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
       }
 
       return null;
@@ -953,6 +1006,380 @@ export async function handleCrmApiRequest(
         }
 
         return methodNotAllowed(["GET"]);
+      }
+
+      return null;
+    }
+
+    if (resource === "deals") {
+      // GET|POST /api/v1/deals
+      if (segments.length === 3) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const query = listDealsQuerySchema.parse(searchParamsObject(parsedUrl));
+          const result = await listDealsRecords(auth.db, auth.userId, query);
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
+
+        if (request.method === "POST") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = createDealBodySchema.parse(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+            opId: input.opId,
+          });
+
+          const res = await createDealRecord(auth.db, auth.userId, auth.userId, input, {
+            idempotencyKey: idemKey,
+          });
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        return methodNotAllowed(["GET", "POST"]);
+      }
+
+      const idSeg = decodeIdSegment(segments[3] ?? "");
+      if (!idSeg.ok) return idSeg.response;
+      const dealId = idSeg.value;
+
+      // GET|PATCH /api/v1/deals/:id
+      if (segments.length === 4) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const result = await getDealRecord(auth.db, auth.userId, dealId);
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
+
+        if (request.method === "PATCH") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = updateDealBodySchema.parse(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+
+          const res = await updateDealRecord(auth.db, auth.userId, auth.userId, dealId, input, {
+            idempotencyKey: idemKey,
+          });
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        return methodNotAllowed(["GET", "PATCH"]);
+      }
+
+      if (segments.length === 5) {
+        const subresource = segments[4];
+
+        // POST /api/v1/deals/:id/status
+        if (subresource === "status") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = changeDealStatusBodySchema.parse(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+
+          const res = await changeDealStatusRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            dealId,
+            input,
+            { idempotencyKey: idemKey },
+          );
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        // POST /api/v1/deals/:id/cancel
+        if (subresource === "cancel") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = cancelDealBodySchema.parse(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+
+          const res = await cancelDealRecord(auth.db, auth.userId, auth.userId, dealId, input, {
+            idempotencyKey: idemKey,
+          });
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        // POST /api/v1/deals/:id/verify-won-date
+        if (subresource === "verify-won-date") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = verifyDealWonDateBodySchema.parse(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+
+          const res = await verifyDealWonDateRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            dealId,
+            input,
+            { idempotencyKey: idemKey },
+          );
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        // GET /api/v1/deals/:id/summary
+        if (subresource === "summary") {
+          if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const summary = await getDealSummaryRecord(auth.db, auth.userId, dealId);
+          return jsonResponse({ ok: true, summary }, 200);
+        }
+
+        // GET /api/v1/deals/:id/audit-history
+        if (subresource === "audit-history") {
+          if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const query = listDealAuditQuerySchema.parse(searchParamsObject(parsedUrl));
+          const result = await listDealAuditHistory(auth.db, auth.userId, dealId, query);
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
+
+        // GET|POST /api/v1/deals/:id/payments
+        if (subresource === "payments") {
+          if (request.method === "GET") {
+            const auth = await requireAuthenticatedOwnerDb(request, env);
+            if (!auth.ok) return auth.response;
+
+            const query = listDealPaymentsQuerySchema.parse(searchParamsObject(parsedUrl));
+            const result = await listPaymentsForDeal(auth.db, auth.userId, dealId, query);
+            return jsonResponse({ ok: true, ...result }, 200);
+          }
+
+          if (request.method === "POST") {
+            const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+            if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+            const auth = await requireAuthenticatedOwnerDb(request, env);
+            if (!auth.ok) return auth.response;
+
+            const parsedBody = await parseJsonObject(request);
+            if (!parsedBody.ok) return parsedBody.response;
+
+            const input = createPaymentBodySchema.parse(parsedBody.data);
+            const idemKey = resolveEffectiveIdempotencyKey({
+              headerKey: request.headers.get("idempotency-key"),
+              bodyKey: input.idempotencyKey,
+              opId: input.opId,
+            });
+
+            const res = await createPaymentRecord(
+              auth.db,
+              auth.userId,
+              auth.userId,
+              dealId,
+              input,
+              {
+                idempotencyKey: idemKey,
+              },
+            );
+            return jsonResponse(
+              res.body,
+              res.status,
+              res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+            );
+          }
+
+          return methodNotAllowed(["GET", "POST"]);
+        }
+      }
+
+      return null;
+    }
+
+    if (resource === "payments") {
+      // GET|POST /api/v1/payments
+      if (segments.length === 3) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const query = listPaymentsQuerySchema.parse(searchParamsObject(parsedUrl));
+          const result = await listAllPayments(auth.db, auth.userId, query);
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
+
+        if (request.method === "POST") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const parsed = createPaymentWithDealBodySchema.parse(parsedBody.data);
+          const { dealId, ...paymentInput } = parsed;
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: paymentInput.idempotencyKey,
+            opId: paymentInput.opId,
+          });
+
+          const res = await createPaymentRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            dealId,
+            paymentInput,
+            { idempotencyKey: idemKey },
+          );
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        return methodNotAllowed(["GET", "POST"]);
+      }
+
+      const idSeg = decodeIdSegment(segments[3] ?? "");
+      if (!idSeg.ok) return idSeg.response;
+      const paymentId = idSeg.value;
+
+      // GET /api/v1/payments/:id
+      if (segments.length === 4) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const payment = await getPaymentRecord(auth.db, auth.userId, paymentId);
+          return jsonResponse({ ok: true, payment }, 200);
+        }
+
+        return methodNotAllowed(["GET"]);
+      }
+
+      // POST /api/v1/payments/:id/void
+      if (segments.length === 5 && segments[4] === "void") {
+        if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+        const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+        if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+        const auth = await requireAuthenticatedOwnerDb(request, env);
+        if (!auth.ok) return auth.response;
+
+        const parsedBody = await parseJsonObject(request);
+        if (!parsedBody.ok) return parsedBody.response;
+
+        const input = voidPaymentBodySchema.parse(parsedBody.data);
+        const idemKey = resolveEffectiveIdempotencyKey({
+          headerKey: request.headers.get("idempotency-key"),
+          bodyKey: input.idempotencyKey,
+          opId: input.opId,
+        });
+
+        const res = await voidPaymentRecord(auth.db, auth.userId, auth.userId, paymentId, input, {
+          idempotencyKey: idemKey,
+        });
+        return jsonResponse(
+          res.body,
+          res.status,
+          res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+        );
+      }
+
+      return null;
+    }
+
+    if (resource === "finance") {
+      // GET /api/v1/finance/summary
+      if (segments.length === 4 && segments[3] === "summary") {
+        if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+        const auth = await requireAuthenticatedOwnerDb(request, env);
+        if (!auth.ok) return auth.response;
+
+        const query = financeSummaryQuerySchema.parse(searchParamsObject(parsedUrl));
+        const summary = await getOwnerFinanceSummary(auth.db, auth.userId, query);
+        return jsonResponse({ ok: true, summary }, 200);
       }
 
       return null;
