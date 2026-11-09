@@ -16,6 +16,7 @@ import { useCRM } from "@/lib/crm/store";
 import { useSession, useAccess, routeAllowed, type PreviewSession } from "@/lib/crm/session";
 import { exitPreview } from "@/lib/crm/preview";
 import { NotificationCenter } from "./NotificationCenter";
+import { FocusTimerButton, FocusTimerWidget } from "./FocusTimer";
 import { cn } from "@/lib/utils";
 import { initials, displayPrefs, formatDate, dayKey, formatDateTime } from "@/lib/crm/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -174,6 +175,7 @@ export function Shell({ title, subtitle, actions, children }: { title: string; s
             <button type="button" onClick={() => setSearch(true)} aria-label="Search workspace" className="os-command ml-auto min-w-0 sm:w-64 lg:w-80"><Search className="size-4 shrink-0" /><span className="hidden flex-1 truncate text-left sm:inline">Search…</span><span className="os-kbd hidden sm:inline">⌘K</span></button>
             {can("clients.calls") && <button type="button" onClick={() => setCallPick(true)} className="os-calllog" aria-label="Instant call log"><PhoneCall className="size-4" /><span className="hidden lg:inline">Call log</span></button>}
             <DropdownMenu><DropdownMenuTrigger asChild><button type="button" aria-label="Quick add" className="topbar-icon"><Plus className="size-[18px]" /></button></DropdownMenuTrigger><DropdownMenuContent align="end">{can("leads.create") && <DropdownMenuItem onSelect={() => setAdd(true)}><Users />Add lead</DropdownMenuItem>}{can("followups.create") && <DropdownMenuItem onSelect={() => setSchedule(true)}><CalendarClock />Schedule follow-up</DropdownMenuItem>}{routeAllowed(preview, "/deals") && <DropdownMenuItem asChild><Link to="/deals"><Wallet />Deals & Payments</Link></DropdownMenuItem>}{routeAllowed(preview, "/notes") && <DropdownMenuItem asChild><Link to="/notes"><StickyNote />New note</Link></DropdownMenuItem>}</DropdownMenuContent></DropdownMenu>
+            <FocusTimerButton />
             {preview ? <button type="button" title="Notifications" aria-label="Notifications" onClick={() => setAlerts(true)} className="topbar-icon relative"><Bell className="size-[18px]" />{attention.length > 0 && <span className="absolute top-2 right-2 size-1.5 rounded-full bg-destructive" />}</button> : <NotificationCenter />}
             <button type="button" title="Toggle theme" aria-label="Toggle theme" onClick={() => preferences({theme: dark ? "light" : "dark"})} className="topbar-icon !hidden sm:!grid">{dark ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}</button>
           </div>
@@ -198,7 +200,7 @@ export function Shell({ title, subtitle, actions, children }: { title: string; s
       </div></DialogContent></Dialog>
       <Dialog open={callPick} onOpenChange={setCallPick}><DialogContent className="sm:max-w-lg"><DialogHeader><DialogTitle>Instant call log</DialogTitle><DialogDescription>Pick who you just spoke with — the log opens without dialling.</DialogDescription></DialogHeader><Input autoFocus aria-label="Find lead to log" placeholder="Name, company or phone…" value={callQ} onChange={e => setCallQ(e.target.value)} /><div className="grid max-h-[50vh] gap-1 overflow-y-auto">{callable.slice(0,8).map(l => <button key={l.id} type="button" className="search-result text-left" onClick={() => { setCallPick(false); setCallQ(""); openCallLog(l.id, "Command bar"); }}><Identity name={l.name} company={l.company} /><span className="num text-xs text-muted-foreground">{l.phone}</span></button>)}{!callable.length && <p className="py-6 text-center text-sm text-muted-foreground">No open leads match.</p>}</div></DialogContent></Dialog>
       <Sheet open={alerts} onOpenChange={setAlerts}><SheetContent className="w-full sm:max-w-md"><SheetHeader><SheetTitle>Notifications</SheetTitle></SheetHeader><p className="mt-2 text-xs text-muted-foreground">From local demo records · no live delivery</p><div className="mt-6 grid gap-3">{alerts && attention.map(f => <Link key={f.id} to="/leads/$id" params={{id:f.leadId}} onClick={() => setAlerts(false)} className="rounded-2xl border p-4"><span className="text-sm font-semibold">{leadName?.get(f.leadId) ?? "Lead"}</span><span className="mt-1 block text-xs text-muted-foreground">{f.note ?? "Follow-up due"} · {formatDateTime(f.dueAt)}</span></Link>)}{!attention.length && <Empty icon={<Bell />} title="All caught up" />}</div></SheetContent></Sheet>
-      <AddLeadDialog open={add} onOpenChange={setAdd} /><FollowUpDialog open={schedule} onOpenChange={setSchedule} /><PostCallDialog /><WhatsAppComposer />
+      <AddLeadDialog open={add} onOpenChange={setAdd} /><FollowUpDialog open={schedule} onOpenChange={setSchedule} /><PostCallDialog /><WhatsAppComposer /><FocusTimerWidget />
     </div>
   );
 }
