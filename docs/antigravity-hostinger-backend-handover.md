@@ -3,7 +3,9 @@ Specification only. **No backend has been written or deployed.** Do not start wi
 
 > **H0 status (6 Nov 2026 UTC):** verified against current code. Everything in §A describes frontend code that exists today. Everything in §B–§H is a **proposed** contract — no auth, CRM APIs, DB tables, or OpenRouter calls exist yet.
 >
-> **B1A update (branch `feat/b1a-backend-foundation`):** Added Nitro `node-server` runtime target, `src/server/**` foundation, `.env.example`, Drizzle + `mysql2` config, and secret-free `GET /api/v1/health` only; corrected Vite version and Data Vault ZIP payment-proof findings below.
+> **B1A update (commit `e611ee7` on `feat/b1a-backend-foundation`):** Added Nitro `node-server` runtime target, `src/server/**` foundation, `.env.example`, Drizzle + `mysql2` config, and secret-free `GET /api/v1/health`; corrected Vite version and Data Vault ZIP payment-proof findings below.
+>
+> **B1B update (branch `feat/b1b-owner-auth`):** Implemented Owner-only server authentication (`scrypt` + HttpOnly cookies + MySQL tables `crm_users`, `crm_sessions`, `crm_auth_audit`, `crm_auth_rate_limits`), Drizzle SQL migrations, isolated Owner bootstrap CLI (`scripts/bootstrap-owner.mjs`), fail-closed SSR/`_serverFn`/`/api/v1/auth/*` protection, and wired `/login`, `Shell`, and `Settings -> Security`. CRM business records remain in browser `localStorage` (`scale-flow-crm-2-demo`) and IndexedDB (`scale-flow-payment-proofs`) untouched until B2–B4.
 
 ## A. Existing frontend architecture
 - **Framework:** TanStack Start v1 (React 19, TanStack Router file routes), Vite 8 (installed `8.1.5`), Tailwind CSS v4, TypeScript strict, vitest (706 frontend tests as of H0, plus B1A foundation/vault tests).

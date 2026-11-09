@@ -6,9 +6,9 @@ import {
   loadServerEnv,
   type DatabaseConnectionConfig,
 } from "../config/env.server";
-import { b1aFoundationSchema } from "./schema.server";
+import { authSchema } from "./schema.server";
 
-export type CrmDatabase = MySql2Database<typeof b1aFoundationSchema>;
+export type CrmDatabase = MySql2Database<typeof authSchema>;
 
 export interface DatabaseStatusReport {
   configured: boolean;
@@ -91,9 +91,14 @@ export function getDatabase(): CrmDatabase | null {
 
   const pool = mysql.createPool(buildMysqlPoolOptions(cfg));
   cachedPool = pool;
-  cachedDb = drizzle(pool, { schema: b1aFoundationSchema, mode: "default" });
+  cachedDb = drizzle(pool, { schema: authSchema, mode: "default" });
   cachedConfigKey = key;
   return cachedDb;
+}
+
+export function getDatabasePool(): Pool | null {
+  getDatabase();
+  return cachedPool;
 }
 
 /** Closes any active pool cleanly (useful for tests or graceful process shutdown). */

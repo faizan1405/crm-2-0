@@ -46,7 +46,29 @@ export const serverEnvSchema = z.object({
     z.string().min(1).default(".data/private-proofs"),
   ),
 
-  // B1A keeps AI strictly in deterministic Demo mode; OpenRouter activates in B5.
+  // B1B Owner authentication & session lifecycle configuration
+  SESSION_COOKIE_NAME: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{3,40}$/)
+      .default("sf_session"),
+  ),
+  SESSION_IDLE_TTL_SECONDS: optionalIntInRange(1, 2_592_000, 43_200),
+  SESSION_ABSOLUTE_TTL_SECONDS: optionalIntInRange(1, 31_536_000, 604_800),
+  AUTH_RATE_LIMIT_MAX_ATTEMPTS: optionalIntInRange(1, 50, 5),
+  AUTH_RATE_LIMIT_WINDOW_SECONDS: optionalIntInRange(1, 86_400, 900),
+  AUTH_LOCKOUT_SECONDS: optionalIntInRange(1, 86_400, 900),
+  AUTH_TRUST_PROXY: z.preprocess((value) => {
+    const cleaned = emptyToUndefined(value);
+    if (cleaned === true || cleaned === "1" || cleaned === "true") return true;
+    if (cleaned === false || cleaned === "0" || cleaned === "false" || cleaned === undefined) {
+      return false;
+    }
+    return cleaned;
+  }, z.boolean().default(false)),
+
+  // B1A/B1B keeps AI strictly in deterministic Demo mode; OpenRouter activates in B5.
   AI_PROVIDER: z.preprocess(emptyToUndefined, z.enum(["demo"]).default("demo")),
 });
 
@@ -76,6 +98,8 @@ export interface SafeRuntimeEnvSummary {
   dbPoolLimit: number;
   dbSslMode: ServerEnv["DB_SSL_MODE"];
   proofStorageDriver: ServerEnv["PROOF_STORAGE_DRIVER"];
+  sessionIdleTtlSeconds: number;
+  sessionAbsoluteTtlSeconds: number;
   aiProvider: ServerEnv["AI_PROVIDER"];
 }
 
@@ -98,6 +122,13 @@ function readEnvSnapshot(
     DB_SSL_MODE: raw["DB_SSL_MODE"],
     PROOF_STORAGE_DRIVER: raw["PROOF_STORAGE_DRIVER"],
     PROOF_STORAGE_DIR: raw["PROOF_STORAGE_DIR"],
+    SESSION_COOKIE_NAME: raw["SESSION_COOKIE_NAME"],
+    SESSION_IDLE_TTL_SECONDS: raw["SESSION_IDLE_TTL_SECONDS"],
+    SESSION_ABSOLUTE_TTL_SECONDS: raw["SESSION_ABSOLUTE_TTL_SECONDS"],
+    AUTH_RATE_LIMIT_MAX_ATTEMPTS: raw["AUTH_RATE_LIMIT_MAX_ATTEMPTS"],
+    AUTH_RATE_LIMIT_WINDOW_SECONDS: raw["AUTH_RATE_LIMIT_WINDOW_SECONDS"],
+    AUTH_LOCKOUT_SECONDS: raw["AUTH_LOCKOUT_SECONDS"],
+    AUTH_TRUST_PROXY: raw["AUTH_TRUST_PROXY"],
     AI_PROVIDER: raw["AI_PROVIDER"],
   };
 }
@@ -183,6 +214,8 @@ export function summarizeSafeRuntimeEnv(env: ServerEnv): SafeRuntimeEnvSummary {
     dbPoolLimit: db.poolLimit,
     dbSslMode: db.sslMode,
     proofStorageDriver: env.PROOF_STORAGE_DRIVER,
+    sessionIdleTtlSeconds: env.SESSION_IDLE_TTL_SECONDS,
+    sessionAbsoluteTtlSeconds: env.SESSION_ABSOLUTE_TTL_SECONDS,
     aiProvider: env.AI_PROVIDER,
   };
 }

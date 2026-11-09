@@ -1,1 +1,13 @@
-{"version":"7","dialect":"mysql","entries":[]}
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1794221859221,
+      "tag": "0000_b1b_owner_auth",
+      "breakpoints": true
+    }
+  ]
+}

@@ -4,15 +4,25 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { Toaster } from "@/components/ui/sonner";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import {
+  clearClientAuthState,
+  hydrateAuthFromSsr,
+  readInitialAuthState,
+  refreshAuthSession,
+  sanitizeRedirectTarget,
+  subscribeAuthSync,
+  useAuthStore,
+} from "../lib/auth/authClient";
 
 function NotFoundComponent() {
   return (
@@ -75,6 +85,8 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  staleTime: Infinity,
+  loader: async () => await readInitialAuthState(),
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -117,8 +129,112 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function buildLoginRedirectUrl(reason?: string): string {
+  if (typeof window === "undefined") return "/login";
+  const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const safe = sanitizeRedirectTarget(current);
+  const params = new URLSearchParams();
+  if (safe !== "/") params.set("redirect", safe);
+  if (reason) params.set("reason", reason);
+  const qs = params.toString();
+  return qs ? `/login?${qs}` : "/login";
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const initialAuth = Route.useLoaderData();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const idleExpiresAt = useAuthStore((s) => s.idleExpiresAt);
+
+  useState(() => {
+    if (initialAuth?.checked) {
+      hydrateAuthFromSsr(initialAuth);
+    }
+    return true;
+  });
+
+  useEffect(() => {
+    const verifyProtectedSession = async (forceRefresh = false) => {
+      if (pathname === "/login") return;
+      const snap = useAuthStore.getState();
+      const stale =
+        forceRefresh ||
+        snap.status !== "authenticated" ||
+        (snap.idleExpiresAt !== null && Date.now() >= Date.parse(snap.idleExpiresAt)) ||
+        (snap.lastCheckedAt !== null && Date.now() - snap.lastCheckedAt > 30_000);
+
+      if (!stale) return;
+      const res = await refreshAuthSession();
+      if (!res.ok) {
+        window.location.replace(buildLoginRedirectUrl("db_unavailable"));
+        return;
+      }
+      if (!res.authenticated) {
+        const reason =
+          res.reason === "idle_expired" || res.reason === "absolute_expired"
+            ? "expired"
+            : undefined;
+        window.location.replace(buildLoginRedirectUrl(reason));
+      }
+    };
+
+    void verifyProtectedSession(false);
+
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (pathname !== "/login" && event.persisted) {
+        clearClientAuthState();
+        void verifyProtectedSession(true);
+      }
+    };
+    const onPopState = () => {
+      if (pathname !== "/login") {
+        void verifyProtectedSession(true);
+      }
+    };
+    const onFocusOrVisible = () => {
+      if (pathname !== "/login" && document.visibilityState === "visible") {
+        void verifyProtectedSession(false);
+      }
+    };
+
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("popstate", onPopState);
+    window.addEventListener("focus", onFocusOrVisible);
+    document.addEventListener("visibilitychange", onFocusOrVisible);
+
+    const unsubscribeSync = subscribeAuthSync((event) => {
+      if (event === "logout" || event === "logout_all") {
+        clearClientAuthState();
+        if (pathname !== "/login") {
+          window.location.replace("/login");
+        }
+      } else if (event === "login" && pathname === "/login") {
+        window.location.replace("/");
+      }
+    });
+
+    let expiryTimer: number | undefined;
+    if (pathname !== "/login" && idleExpiresAt) {
+      const deadlineMs = Date.parse(idleExpiresAt);
+      if (!Number.isNaN(deadlineMs)) {
+        const delayMs = Math.min(Math.max(deadlineMs - Date.now() + 250, 500), 2_147_483_000);
+        expiryTimer = window.setTimeout(() => {
+          void verifyProtectedSession(true);
+        }, delayMs);
+      }
+    }
+
+    return () => {
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("popstate", onPopState);
+      window.removeEventListener("focus", onFocusOrVisible);
+      document.removeEventListener("visibilitychange", onFocusOrVisible);
+      unsubscribeSync();
+      if (expiryTimer !== undefined) {
+        window.clearTimeout(expiryTimer);
+      }
+    };
+  }, [pathname, idleExpiresAt]);
 
   return (
     <QueryClientProvider client={queryClient}>

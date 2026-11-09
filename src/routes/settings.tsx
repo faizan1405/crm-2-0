@@ -4,7 +4,8 @@ import { toast } from "sonner";
 import { User, Palette, Clock, SlidersHorizontal, Bell, Shield, Database, Sun, Moon, Monitor, Download } from "lucide-react";
 import { Shell, selectCls } from "@/components/crm/Shell";
 import { useCRM, type Prefs } from "@/lib/crm/store";
-import { TIMEZONE, initials } from "@/lib/crm/format";
+import { TIMEZONE, formatDateTime, initials } from "@/lib/crm/format";
+import { logoutOwner, useAuthStore } from "@/lib/auth/authClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,6 +50,10 @@ function Settings() {
   const [owner, setOwner] = useState(s.owner);
   const [business, setBusiness] = useState(s.business);
   const [email, setEmail] = useState(s.email);
+  const authUser = useAuthStore((x) => x.user);
+  const idleExpiresAt = useAuthStore((x) => x.idleExpiresAt);
+  const expiresAt = useAuthStore((x) => x.expiresAt);
+  const [sessionBusy, setSessionBusy] = useState<"logout" | "logout-all" | null>(null);
   const p = (patch: Partial<Prefs>) => { s.preferences(patch); toast.success("Preference saved"); };
   const Choice = <T extends string>({ value, options, onChange }: { value: T; options: readonly (readonly [T, string, React.ReactNode?])[]; onChange: (v: T) => void }) => (
     <div className="flex flex-wrap gap-2">{options.map(([v, l, icon]) => <Button variant="outline" key={v} onClick={() => onChange(v)} className={cn("flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors", value === v ? "border-primary bg-primary-soft text-primary" : "hover:border-foreground/20")}>{icon}{l}</Button>)}</div>
@@ -93,10 +98,50 @@ function Settings() {
             ))}
           </>}
           {sec === "security" && <>
-            <p className="mb-2 text-sm text-muted-foreground">This demo has no sign-in yet, so nothing here changes a real account. <Pending /></p>
-            <Row label="Password"><div className="grid gap-2 sm:max-w-sm"><Input type="password" placeholder="Current password" disabled /><Input type="password" placeholder="New password" disabled /><Button disabled>Update password</Button></div></Row>
-            <Row label="Two-step verification"><Switch disabled /></Row>
-            <Row label="Sessions"><Button variant="outline" onClick={() => toast.info("Sign-out will work once accounts are connected")}>Log out</Button></Row>
+            <div className="mb-3 rounded-lg border bg-muted/40 p-3 text-sm">
+              <div className="font-medium text-foreground">
+                Authenticated Owner session: {authUser?.email ?? "Active Owner"}
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {idleExpiresAt ? `Idle timeout: ${formatDateTime(idleExpiresAt)}` : "HttpOnly server session active"}
+                {expiresAt ? ` · Max expiry: ${formatDateTime(expiresAt)}` : ""}
+              </div>
+            </div>
+            <Row
+              label="Password"
+              hint="Self-service password change arrives in a follow-up update. Emergency rotation runs via server CLI (--reset-password)."
+            >
+              <div className="grid gap-2 sm:max-w-sm">
+                <Input type="password" placeholder="Current password" disabled />
+                <Input type="password" placeholder="New password" disabled />
+                <Button disabled>Update password</Button>
+              </div>
+            </Row>
+            <Row label="Two-step verification" hint="Planned follow-up"><Switch disabled /></Row>
+            <Row label="Sessions" hint="Sign out this browser or revoke every active Owner session on the server">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  disabled={sessionBusy !== null}
+                  onClick={() => {
+                    setSessionBusy("logout");
+                    void logoutOwner({ allSessions: false });
+                  }}
+                >
+                  {sessionBusy === "logout" ? "Signing out…" : "Log out"}
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={sessionBusy !== null}
+                  onClick={() => {
+                    setSessionBusy("logout-all");
+                    void logoutOwner({ allSessions: true });
+                  }}
+                >
+                  {sessionBusy === "logout-all" ? "Revoking sessions…" : "Log out all sessions"}
+                </Button>
+              </div>
+            </Row>
           </>}
           {sec === "data" && <>
             {!pv && <StorageDiagnostic />}
