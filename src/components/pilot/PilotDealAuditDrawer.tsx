@@ -19,7 +19,10 @@ interface PilotDealAuditDrawerProps {
 
 export function PilotDealAuditDrawer({ deal, onClose }: PilotDealAuditDrawerProps) {
   const { data: auditData, isLoading } = useDealAuditQuery(deal.id);
-  const events: FinanceEventDto[] = auditData?.events ?? [];
+  const events: FinanceEventDto[] =
+    auditData?.events && auditData.events.length > 0
+      ? auditData.events
+      : auditData?.items ?? [];
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>

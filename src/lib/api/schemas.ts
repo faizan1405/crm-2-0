@@ -757,7 +757,7 @@ export type FinanceEventDto = z.infer<typeof financeEventDtoSchema>;
 
 export const ownerFinanceSummaryDtoSchema = z.object({
   todayIstDate: z.string(),
-  period: z.enum(["all_time", "this_month", "last_month", "custom"]),
+  period: z.enum(["all_time", "this_month", "last_month", "custom"]).or(z.string()),
   fromIstDate: z.string().nullable(),
   toIstDate: z.string().nullable(),
   totalBooked: z.number(),
@@ -792,7 +792,7 @@ export const ownerFinanceSummaryDtoSchema = z.object({
   activePaymentCount: z.number().int(),
   voidedPaymentCount: z.number().int(),
   collectionRate: z.number().nullable(),
-});
+}).passthrough();
 export type OwnerFinanceSummaryDto = z.infer<typeof ownerFinanceSummaryDtoSchema>;
 
 // API Response Envelopes
@@ -848,8 +848,9 @@ export const dealSummaryResponseSchema = z.object({
 
 export const dealAuditListResponseSchema = z.object({
   ok: z.literal(true),
-  dealId: z.string(),
-  events: z.array(financeEventDtoSchema),
+  dealId: z.string().optional(),
+  events: z.array(financeEventDtoSchema).optional().default([]),
+  items: z.array(financeEventDtoSchema).optional().default([]),
   total: z.number().int().min(0),
   limit: z.number().int().min(1),
   offset: z.number().int().min(0),
@@ -915,13 +916,17 @@ export type ProofAttachResponse = z.infer<typeof proofAttachResponseSchema>;
 export const proofReplaceResponseSchema = z.object({
   ok: z.literal(true),
   proof: paymentProofDtoSchema,
-  replacedProof: paymentProofDtoSchema,
+  previousProof: paymentProofDtoSchema.optional(),
+  replacedProof: paymentProofDtoSchema.optional(),
+  auditEvent: financeEventDtoSchema.optional(),
 });
 export type ProofReplaceResponse = z.infer<typeof proofReplaceResponseSchema>;
 
 export const proofRemoveResponseSchema = z.object({
   ok: z.literal(true),
-  removedProof: paymentProofDtoSchema,
+  proof: paymentProofDtoSchema.optional(),
+  removedProof: paymentProofDtoSchema.optional(),
+  auditEvent: financeEventDtoSchema.optional(),
 });
 export type ProofRemoveResponse = z.infer<typeof proofRemoveResponseSchema>;
 

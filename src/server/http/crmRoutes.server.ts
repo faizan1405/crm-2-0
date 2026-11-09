@@ -1518,8 +1518,8 @@ export async function handleCrmApiRequest(
           return jsonResponse({ ok: true, summary }, 200);
         }
 
-        // GET /api/v1/deals/:id/audit-history
-        if (subresource === "audit-history") {
+        // GET /api/v1/deals/:id/audit or /api/v1/deals/:id/audit-history
+        if (subresource === "audit" || subresource === "audit-history") {
           if (request.method !== "GET") return methodNotAllowed(["GET"]);
 
           const auth = await requireAuthenticatedOwnerDb(request, env);
@@ -1527,7 +1527,15 @@ export async function handleCrmApiRequest(
 
           const query = listDealAuditQuerySchema.parse(searchParamsObject(parsedUrl));
           const result = await listDealAuditHistory(auth.db, auth.userId, dealId, query);
-          return jsonResponse({ ok: true, ...result }, 200);
+          return jsonResponse({
+            ok: true,
+            dealId,
+            events: result.items,
+            items: result.items,
+            total: result.total,
+            limit: result.limit,
+            offset: result.offset,
+          }, 200);
         }
 
         // GET|POST /api/v1/deals/:id/payments
@@ -1916,7 +1924,50 @@ export async function handleCrmApiRequest(
 
         const query = financeSummaryQuerySchema.parse(searchParamsObject(parsedUrl));
         const summary = await getOwnerFinanceSummary(auth.db, auth.userId, query);
-        return jsonResponse({ ok: true, summary }, 200);
+
+        const totalBookedPaise = summary.totals.totalValuePaise + summary.exclusions.cancelledBookedValuePaise;
+        const cashCollectedPaise = summary.totals.collectedPaise + summary.exclusions.cancelledDealPaymentsExcludedPaise;
+
+        const payload = {
+          ...summary,
+          todayIstDate: summary.todayIstDate,
+          period: (query as Record<string, unknown>)["period"] as string ?? "all_time",
+          fromIstDate: query.from ?? null,
+          toIstDate: query.to ?? null,
+          totalBooked: totalBookedPaise / 100,
+          totalBookedDecimal: (totalBookedPaise / 100).toFixed(2),
+          totalBookedPaise,
+          activeBooked: summary.totals.totalValue,
+          activeBookedDecimal: summary.totals.totalValueDecimal,
+          activeBookedPaise: summary.totals.totalValuePaise,
+          cancelledBooked: summary.exclusions.cancelledBookedValue,
+          cancelledBookedDecimal: summary.exclusions.cancelledBookedValueDecimal,
+          cancelledBookedPaise: summary.exclusions.cancelledBookedValuePaise,
+          cashCollected: cashCollectedPaise / 100,
+          cashCollectedDecimal: (cashCollectedPaise / 100).toFixed(2),
+          cashCollectedPaise,
+          activeCashCollected: summary.totals.collected,
+          activeCashCollectedDecimal: summary.totals.collectedDecimal,
+          activeCashCollectedPaise: summary.totals.collectedPaise,
+          cancelledCashCollected: summary.exclusions.cancelledDealPaymentsExcluded,
+          cancelledCashCollectedDecimal: summary.exclusions.cancelledDealPaymentsExcludedDecimal,
+          cancelledCashCollectedPaise: summary.exclusions.cancelledDealPaymentsExcludedPaise,
+          outstanding: summary.totals.outstanding,
+          outstandingDecimal: summary.totals.outstandingDecimal,
+          outstandingPaise: summary.totals.outstandingPaise,
+          overdue: summary.totals.overdue,
+          overdueDecimal: summary.totals.overdueDecimal,
+          overduePaise: summary.totals.overduePaise,
+          voidedAmount: summary.exclusions.voidedAmount,
+          voidedDecimal: summary.exclusions.voidedAmountDecimal,
+          voidedPaise: summary.exclusions.voidedAmountPaise,
+          activeDealCount: (summary.counts.byDealStatus.active ?? 0) + (summary.counts.byDealStatus.completed ?? 0) + (summary.counts.byDealStatus.on_hold ?? 0),
+          cancelledDealCount: summary.exclusions.cancelledDealCount,
+          activePaymentCount: (summary.counts.byPaymentStatus.paid ?? 0) + (summary.counts.byPaymentStatus.partial ?? 0),
+          voidedPaymentCount: summary.exclusions.voidedPaymentCount,
+          collectionRate: summary.totals.collectionRate,
+        };
+        return jsonResponse({ ok: true, summary: payload }, 200);
       }
 
       return null;

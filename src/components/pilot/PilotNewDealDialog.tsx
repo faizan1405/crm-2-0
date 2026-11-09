@@ -232,8 +232,8 @@ export function PilotNewDealDialog({ open, onOpenChange }: PilotNewDealDialogPro
               onChange={(e) => setStatus(e.target.value as DealStatusApi)}
             >
               <option value="active">Active</option>
-              <option value="won">Won</option>
-              <option value="lost">Lost</option>
+              <option value="completed">Completed</option>
+              <option value="on_hold">On Hold</option>
             </select>
           </div>
         </div>

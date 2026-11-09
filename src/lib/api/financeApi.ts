@@ -137,7 +137,8 @@ export interface CreatePaymentPayload {
 }
 
 export interface VoidPaymentPayload {
-  version: number;
+  version?: number | undefined;
+  expectedVersion?: number | undefined;
   reason: string;
   idempotencyKey?: string | undefined;
 }
@@ -372,10 +373,16 @@ export async function voidPayment(
   idempotencyKey?: string,
 ): Promise<PaymentVoidResponse> {
   const key = idempotencyKey ?? payload.idempotencyKey ?? createIdempotencyKey();
+  const expVer = payload.expectedVersion ?? payload.version;
+  const body = {
+    reason: payload.reason,
+    ...(expVer !== undefined ? { expectedVersion: expVer } : {}),
+    ...(payload.idempotencyKey ? { idempotencyKey: payload.idempotencyKey } : {}),
+  };
   return apiRequest({
     path: `/api/v1/payments/${encodeURIComponent(id)}/void`,
     method: "POST",
-    body: payload,
+    body,
     idempotencyKey: key,
     schema: paymentVoidResponseSchema,
   });
@@ -759,14 +766,17 @@ export function useRemoveProofMutation() {
     mutationFn: (params: { paymentId: string; reason?: string | undefined }) =>
       removePaymentProof(params),
     onSuccess: (res) => {
-      void queryClient.invalidateQueries({
-        queryKey: financeKeys.proof(res.removedProof.paymentId),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: financeKeys.proofHistory(res.removedProof.paymentId),
-      });
+      const p = res.removedProof ?? res.proof;
+      if (p) {
+        void queryClient.invalidateQueries({
+          queryKey: financeKeys.proof(p.paymentId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: financeKeys.proofHistory(p.paymentId),
+        });
+        void queryClient.invalidateQueries({ queryKey: financeKeys.dealAudit(p.dealId) });
+      }
       void queryClient.invalidateQueries({ queryKey: financeKeys.payments() });
-      void queryClient.invalidateQueries({ queryKey: financeKeys.dealAudit(res.removedProof.dealId) });
     },
   });
 }
