@@ -31,6 +31,8 @@ export type CrmErrorCode =
   | "empty_file"
   | "file_corrupted"
   | "storage_error"
+  | "duplicate_quotation"
+  | "quotation_not_found"
   | "idempotency_key_mismatch"
   | "crm_unavailable";
 

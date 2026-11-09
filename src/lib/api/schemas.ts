@@ -930,6 +930,255 @@ export const proofRemoveResponseSchema = z.object({
 });
 export type ProofRemoveResponse = z.infer<typeof proofRemoveResponseSchema>;
 
+// ---------------------------------------------------------------------------
+// Checkpoint B4A — Quotation Templates & Quotation DTOs & Responses
+// ---------------------------------------------------------------------------
+
+export const QUOTATION_STATUSES_API = ["draft", "sent", "accepted", "rejected"] as const;
+export type QuotationStatusApi = (typeof QUOTATION_STATUSES_API)[number];
+
+export const QUOTATION_DISCOUNT_TYPES_API = ["none", "flat", "percent"] as const;
+export type QuotationDiscountTypeApi = (typeof QUOTATION_DISCOUNT_TYPES_API)[number];
+
+export const quotationTemplateDtoSchema = z.object({
+  id: z.string(),
+  ownerUserId: z.string(),
+  name: z.string(),
+  priceType: z.enum(["fixed", "custom"]),
+  priceAmount: z.number().nullable(),
+  priceAmountDecimal: z.string().nullable(),
+  priceAmountPaise: z.number().int().nullable(),
+  priceLabel: z.string().nullable(),
+  currency: z.literal("INR"),
+  messageBody: z.string(),
+  isActive: z.boolean(),
+  sortOrder: z.number().int(),
+  version: z.number().int().min(1),
+  archivedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type QuotationTemplateDto = z.infer<typeof quotationTemplateDtoSchema>;
+
+export const quotationItemDtoSchema = z.object({
+  id: z.string(),
+  quotationId: z.string(),
+  description: z.string(),
+  quantity: z.number(),
+  quantityDecimal: z.string(),
+  unitPrice: z.number(),
+  unitPriceDecimal: z.string(),
+  totalAmount: z.number(),
+  totalAmountDecimal: z.string(),
+  sortOrder: z.number().int(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type QuotationItemDto = z.infer<typeof quotationItemDtoSchema>;
+
+export const quotationMilestoneDtoSchema = z.object({
+  id: z.string(),
+  quotationId: z.string(),
+  label: z.string(),
+  percentage: z.number(),
+  percentageDecimal: z.string(),
+  amount: z.number(),
+  amountDecimal: z.string(),
+  dueDate: z.string().nullable(),
+  sortOrder: z.number().int(),
+  createdAt: z.string(),
+});
+export type QuotationMilestoneDto = z.infer<typeof quotationMilestoneDtoSchema>;
+
+export const quotationRevisionDtoSchema = z.object({
+  id: z.string(),
+  quotationId: z.string(),
+  revisionNumber: z.number().int(),
+  snapshot: z.record(z.string(), z.unknown()),
+  changeSummary: z.string().nullable(),
+  createdByUserId: z.string(),
+  createdAt: z.string(),
+});
+export type QuotationRevisionDto = z.infer<typeof quotationRevisionDtoSchema>;
+
+export const quotationAuditEventDtoSchema = z.object({
+  id: z.string(),
+  quotationId: z.string(),
+  ownerUserId: z.string(),
+  actorUserId: z.string(),
+  eventType: z.string(),
+  summary: z.string(),
+  details: z.record(z.string(), z.unknown()).nullable(),
+  occurredIstDate: z.string(),
+  createdAt: z.string(),
+});
+export type QuotationAuditEventDto = z.infer<typeof quotationAuditEventDtoSchema>;
+
+export const quotationDtoSchema = z.object({
+  id: z.string(),
+  ownerUserId: z.string(),
+  leadId: z.string().nullable(),
+  dealId: z.string().nullable(),
+  templateId: z.string().nullable(),
+  legacyId: z.string().nullable(),
+  quotationNumber: z.string(),
+  title: z.string(),
+  clientName: z.string(),
+  clientCompany: z.string().nullable(),
+  currency: z.literal("INR"),
+  subtotal: z.number(),
+  subtotalDecimal: z.string(),
+  discountType: z.enum(QUOTATION_DISCOUNT_TYPES_API),
+  discountValue: z.number(),
+  discountValueDecimal: z.string(),
+  discountAmount: z.number(),
+  discountAmountDecimal: z.string(),
+  taxableAmount: z.number(),
+  taxableAmountDecimal: z.string(),
+  gstEnabled: z.boolean(),
+  gstRate: z.number(),
+  gstRateDecimal: z.string(),
+  gstAmount: z.number(),
+  gstAmountDecimal: z.string(),
+  totalAmount: z.number(),
+  totalAmountDecimal: z.string(),
+  status: z.enum(QUOTATION_STATUSES_API),
+  issueIstDate: z.string(),
+  validUntilIstDate: z.string().nullable(),
+  paymentTerms: z.string().nullable(),
+  notes: z.string().nullable(),
+  messageBody: z.string().nullable(),
+  userConfirmedSent: z.boolean(),
+  sentAt: z.string().nullable(),
+  acceptedAt: z.string().nullable(),
+  rejectedAt: z.string().nullable(),
+  version: z.number().int().min(1),
+  archivedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  items: z.array(quotationItemDtoSchema),
+  milestones: z.array(quotationMilestoneDtoSchema),
+});
+export type QuotationDto = z.infer<typeof quotationDtoSchema>;
+
+export const quotationTemplatesListResponseSchema = z.object({
+  ok: z.literal(true),
+  items: z.array(quotationTemplateDtoSchema),
+  total: z.number().int().min(0),
+});
+export type QuotationTemplatesListResponse = z.infer<typeof quotationTemplatesListResponseSchema>;
+
+export const quotationTemplateGetResponseSchema = z.object({
+  ok: z.literal(true),
+  template: quotationTemplateDtoSchema,
+});
+export type QuotationTemplateGetResponse = z.infer<typeof quotationTemplateGetResponseSchema>;
+
+export const quotationTemplateCreateResponseSchema = z.object({
+  ok: z.literal(true),
+  template: quotationTemplateDtoSchema,
+});
+export type QuotationTemplateCreateResponse = z.infer<typeof quotationTemplateCreateResponseSchema>;
+
+export const quotationTemplateUpdateResponseSchema = z.object({
+  ok: z.literal(true),
+  template: quotationTemplateDtoSchema,
+});
+export type QuotationTemplateUpdateResponse = z.infer<typeof quotationTemplateUpdateResponseSchema>;
+
+export const quotationTemplateDeleteResponseSchema = z.object({
+  ok: z.literal(true),
+  template: quotationTemplateDtoSchema,
+});
+export type QuotationTemplateDeleteResponse = z.infer<typeof quotationTemplateDeleteResponseSchema>;
+
+export const quotationTemplateDuplicateResponseSchema = z.object({
+  ok: z.literal(true),
+  template: quotationTemplateDtoSchema,
+});
+export type QuotationTemplateDuplicateResponse = z.infer<typeof quotationTemplateDuplicateResponseSchema>;
+
+export const quotationTemplateReorderResponseSchema = z.object({
+  ok: z.literal(true),
+  reorderedCount: z.number().int().min(0),
+});
+export type QuotationTemplateReorderResponse = z.infer<typeof quotationTemplateReorderResponseSchema>;
+
+export const quotationsListResponseSchema = z.object({
+  ok: z.literal(true),
+  items: z.array(quotationDtoSchema),
+  total: z.number().int().min(0),
+  limit: z.number().int().min(1),
+  offset: z.number().int().min(0),
+});
+export type QuotationsListResponse = z.infer<typeof quotationsListResponseSchema>;
+
+export const quotationGetResponseSchema = z.object({
+  ok: z.literal(true),
+  quotation: quotationDtoSchema,
+});
+export type QuotationGetResponse = z.infer<typeof quotationGetResponseSchema>;
+
+export const quotationCreateResponseSchema = z.object({
+  ok: z.literal(true),
+  quotation: quotationDtoSchema,
+});
+export type QuotationCreateResponse = z.infer<typeof quotationCreateResponseSchema>;
+
+export const quotationUpdateResponseSchema = z.object({
+  ok: z.literal(true),
+  quotation: quotationDtoSchema,
+});
+export type QuotationUpdateResponse = z.infer<typeof quotationUpdateResponseSchema>;
+
+export const quotationStatusResponseSchema = z.object({
+  ok: z.literal(true),
+  quotation: quotationDtoSchema,
+});
+export type QuotationStatusResponse = z.infer<typeof quotationStatusResponseSchema>;
+
+export const quotationArchiveResponseSchema = z.object({
+  ok: z.literal(true),
+  quotation: quotationDtoSchema,
+});
+export type QuotationArchiveResponse = z.infer<typeof quotationArchiveResponseSchema>;
+
+export const quotationRestoreResponseSchema = z.object({
+  ok: z.literal(true),
+  quotation: quotationDtoSchema,
+});
+export type QuotationRestoreResponse = z.infer<typeof quotationRestoreResponseSchema>;
+
+export const quotationRevisionsResponseSchema = z.object({
+  ok: z.literal(true),
+  quotationId: z.string(),
+  items: z.array(quotationRevisionDtoSchema),
+  total: z.number().int().min(0),
+  limit: z.number().int().min(1),
+  offset: z.number().int().min(0),
+});
+export type QuotationRevisionsResponse = z.infer<typeof quotationRevisionsResponseSchema>;
+
+export const quotationAuditResponseSchema = z.object({
+  ok: z.literal(true),
+  quotationId: z.string(),
+  items: z.array(quotationAuditEventDtoSchema),
+  total: z.number().int().min(0),
+  limit: z.number().int().min(1),
+  offset: z.number().int().min(0),
+});
+export type QuotationAuditResponse = z.infer<typeof quotationAuditResponseSchema>;
+
+export const leadQuotationsListResponseSchema = z.object({
+  ok: z.literal(true),
+  leadId: z.string(),
+  items: z.array(quotationDtoSchema),
+  total: z.number().int().min(0),
+  limit: z.number().int().min(1),
+  offset: z.number().int().min(0),
+});
+export type LeadQuotationsListResponse = z.infer<typeof leadQuotationsListResponseSchema>;
+
 export const followupConflictSchema = z.object({
   activeFollowUp: followUpDtoSchema.optional(),
   expectedActiveFollowUpId: z.string().optional(),

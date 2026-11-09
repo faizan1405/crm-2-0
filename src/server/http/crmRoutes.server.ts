@@ -65,10 +65,30 @@ import {
   replacePaymentProofRecord,
 } from "../crm/proofService.server";
 import {
+  archiveQuotationRecord,
+  changeQuotationStatusRecord,
+  createQuotationRecord,
+  createQuotationTemplateRecord,
+  deleteQuotationTemplateRecord,
+  duplicateQuotationTemplateRecord,
+  getQuotationRecord,
+  getQuotationTemplateRecord,
+  listQuotationAuditEventsRecord,
+  listQuotationRevisionsRecord,
+  listQuotationsRecords,
+  listQuotationTemplatesRecords,
+  reorderQuotationTemplatesRecord,
+  restoreQuotationRecord,
+  updateQuotationRecord,
+  updateQuotationTemplateRecord,
+} from "../crm/quotationsService.server";
+import {
   archiveLeadBodySchema,
+  archiveQuotationBodySchema,
   cancelDealBodySchema,
   cancelFollowUpBodySchema,
   changeDealStatusBodySchema,
+  changeQuotationStatusBodySchema,
   completeFollowUpBodySchema,
   createActivityBodySchema,
   createCallLogBodySchema,
@@ -77,6 +97,8 @@ import {
   createLeadBodySchema,
   createPaymentBodySchema,
   createPaymentWithDealBodySchema,
+  createQuotationBodySchema,
+  createQuotationTemplateBodySchema,
   createWhatsAppLogBodySchema,
   financeSummaryQuerySchema,
   listActivitiesQuerySchema,
@@ -90,13 +112,21 @@ import {
   listLeadsQuerySchema,
   listPaymentsQuerySchema,
   listProofHistoryQuerySchema,
+  listQuotationAuditQuerySchema,
+  listQuotationRevisionsQuerySchema,
+  listQuotationsQuerySchema,
+  listQuotationTemplatesQuerySchema,
   listWhatsAppQuerySchema,
   removeProofBodySchema,
+  reorderQuotationTemplatesBodySchema,
   replaceProofBodySchema,
   restoreLeadBodySchema,
+  restoreQuotationBodySchema,
   updateDealBodySchema,
   updateFollowUpBodySchema,
   updateLeadBodySchema,
+  updateQuotationBodySchema,
+  updateQuotationTemplateBodySchema,
   verifyDealWonDateBodySchema,
   voidPaymentBodySchema,
 } from "../crm/validation.server";
@@ -697,7 +727,8 @@ function hasRequestBodyHint(request: Request): boolean {
 
 /**
  * Handles all Core CRM `/api/v1/leads*`, `/api/v1/follow-ups*`, `/api/v1/calls*`,
- * `/api/v1/whatsapp-messages*`, `/api/v1/deals*`, `/api/v1/payments*`, and `/api/v1/finance*`
+ * `/api/v1/whatsapp-messages*`, `/api/v1/deals*`, `/api/v1/payments*`, `/api/v1/finance*`,
+ * `/api/v1/quotation-templates*`, and `/api/v1/quotations*`
  * endpoints. Returns `null` if the pathname does not match any CRM route.
  */
 export async function handleCrmApiRequest(
@@ -712,7 +743,9 @@ export async function handleCrmApiRequest(
     !pathname.startsWith("/api/v1/whatsapp-messages") &&
     !pathname.startsWith("/api/v1/deals") &&
     !pathname.startsWith("/api/v1/payments") &&
-    !pathname.startsWith("/api/v1/finance")
+    !pathname.startsWith("/api/v1/finance") &&
+    !pathname.startsWith("/api/v1/quotation-templates") &&
+    !pathname.startsWith("/api/v1/quotations")
   ) {
     return null;
   }
@@ -1028,6 +1061,19 @@ export async function handleCrmApiRequest(
           });
           const result = await listDealsRecords(auth.db, auth.userId, query);
           return jsonResponse({ ok: true, ...result }, 200);
+        }
+
+        // GET /api/v1/leads/:id/quotations
+        if (subresource === "quotations") {
+          if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          // Verify Lead exists & belongs to Owner before listing its Quotations.
+          await getLeadRecord(auth.db, auth.userId, leadId);
+          const result = await listQuotationsRecords(auth.db, auth.userId, { leadId });
+          return jsonResponse({ ok: true, leadId, items: result.items, total: result.total }, 200);
         }
       }
 
@@ -1968,6 +2014,385 @@ export async function handleCrmApiRequest(
           collectionRate: summary.totals.collectionRate,
         };
         return jsonResponse({ ok: true, summary: payload }, 200);
+      }
+
+      return null;
+    }
+
+    if (resource === "quotation-templates") {
+      // GET|POST /api/v1/quotation-templates
+      if (segments.length === 3) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const query = listQuotationTemplatesQuerySchema.parse(searchParamsObject(parsedUrl));
+          const items = await listQuotationTemplatesRecords(auth.db, auth.userId, query);
+          return jsonResponse({ ok: true, items, total: items.length }, 200);
+        }
+
+        if (request.method === "POST") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = createQuotationTemplateBodySchema.parse(parsedBody.data);
+          const template = await createQuotationTemplateRecord(auth.db, auth.userId, input);
+          return jsonResponse({ ok: true, template }, 201);
+        }
+
+        return methodNotAllowed(["GET", "POST"]);
+      }
+
+      if (segments.length === 4) {
+        const seg = segments[3]!;
+
+        // POST /api/v1/quotation-templates/reorder
+        if (seg === "reorder") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = reorderQuotationTemplatesBodySchema.parse(parsedBody.data);
+          const result = await reorderQuotationTemplatesRecord(auth.db, auth.userId, input.templateIds);
+          return jsonResponse({ ok: true, reorderedCount: result.reorderedCount }, 200);
+        }
+
+        const templateId = seg;
+
+        // GET /api/v1/quotation-templates/:id
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const template = await getQuotationTemplateRecord(auth.db, auth.userId, templateId);
+          if (!template) {
+            return jsonResponse(
+              { ok: false, error: { code: "not_found", message: "Quotation template not found." } },
+              404,
+            );
+          }
+          return jsonResponse({ ok: true, template }, 200);
+        }
+
+        // PATCH /api/v1/quotation-templates/:id
+        if (request.method === "PATCH") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = updateQuotationTemplateBodySchema.parse(parsedBody.data);
+          const template = await updateQuotationTemplateRecord(auth.db, auth.userId, templateId, input);
+          return jsonResponse({ ok: true, template }, 200);
+        }
+
+        // DELETE /api/v1/quotation-templates/:id
+        if (request.method === "DELETE") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const template = await deleteQuotationTemplateRecord(auth.db, auth.userId, templateId);
+          return jsonResponse({ ok: true, template }, 200);
+        }
+
+        return methodNotAllowed(["GET", "PATCH", "DELETE"]);
+      }
+
+      if (segments.length === 5) {
+        const templateId = segments[3]!;
+        const sub = segments[4]!;
+
+        // POST /api/v1/quotation-templates/:id/duplicate
+        if (sub === "duplicate") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const template = await duplicateQuotationTemplateRecord(auth.db, auth.userId, templateId);
+          return jsonResponse({ ok: true, template }, 201);
+        }
+      }
+
+      return null;
+    }
+
+    if (resource === "quotations") {
+      // GET|POST /api/v1/quotations
+      if (segments.length === 3) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const query = listQuotationsQuerySchema.parse(searchParamsObject(parsedUrl));
+          const result = await listQuotationsRecords(auth.db, auth.userId, query);
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
+
+        if (request.method === "POST") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = createQuotationBodySchema.parse(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+
+          const res = await createQuotationRecord(auth.db, auth.userId, auth.userId, input, {
+            idempotencyKey: idemKey,
+          });
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        return methodNotAllowed(["GET", "POST"]);
+      }
+
+      if (segments.length === 4) {
+        const quotationId = segments[3]!;
+
+        // GET /api/v1/quotations/:id
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const quotation = await getQuotationRecord(auth.db, auth.userId, quotationId);
+          if (!quotation) {
+            return jsonResponse(
+              { ok: false, error: { code: "not_found", message: "Quotation not found." } },
+              404,
+            );
+          }
+          return jsonResponse({ ok: true, quotation }, 200);
+        }
+
+        // PATCH /api/v1/quotations/:id
+        if (request.method === "PATCH") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = updateQuotationBodySchema.parse(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+
+          const res = await updateQuotationRecord(auth.db, auth.userId, auth.userId, quotationId, input, {
+            idempotencyKey: idemKey,
+          });
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        // DELETE /api/v1/quotations/:id (archive)
+        if (request.method === "DELETE") {
+          const hasBody = hasRequestBodyHint(request);
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: hasBody });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          let reason: string | undefined;
+          let bodyIdemKey: string | undefined;
+          if (hasBody) {
+            const parsedBody = await parseJsonObject(request, { allowEmpty: true });
+            if (!parsedBody.ok) return parsedBody.response;
+            if (Object.keys(parsedBody.data).length > 0) {
+              const input = archiveQuotationBodySchema.parse(parsedBody.data);
+              reason = input.reason;
+              bodyIdemKey = input.idempotencyKey;
+            }
+          }
+
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: bodyIdemKey,
+          });
+
+          const res = await archiveQuotationRecord(auth.db, auth.userId, auth.userId, quotationId, reason, {
+            idempotencyKey: idemKey,
+          });
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        return methodNotAllowed(["GET", "PATCH", "DELETE"]);
+      }
+
+      if (segments.length === 5) {
+        const quotationId = segments[3]!;
+        const sub = segments[4]!;
+
+        // POST /api/v1/quotations/:id/status
+        if (sub === "status") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = changeQuotationStatusBodySchema.parse(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+
+          const res = await changeQuotationStatusRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            quotationId,
+            { status: input.status, reason: input.reason, expectedVersion: input.expectedVersion },
+            { idempotencyKey: idemKey },
+          );
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        // POST /api/v1/quotations/:id/archive
+        if (sub === "archive") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request, { allowEmpty: true });
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = archiveQuotationBodySchema.parse(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+
+          const res = await archiveQuotationRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            quotationId,
+            input.reason,
+            { idempotencyKey: idemKey },
+          );
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        // POST /api/v1/quotations/:id/restore
+        if (sub === "restore") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request, { allowEmpty: true });
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = restoreQuotationBodySchema.parse(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+
+          const res = await restoreQuotationRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            quotationId,
+            { idempotencyKey: idemKey },
+          );
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        // GET /api/v1/quotations/:id/revisions
+        if (sub === "revisions") {
+          if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const query = listQuotationRevisionsQuerySchema.parse(searchParamsObject(parsedUrl));
+          const result = await listQuotationRevisionsRecord(auth.db, auth.userId, quotationId, query);
+          return jsonResponse({ ok: true, quotationId, ...result }, 200);
+        }
+
+        // GET /api/v1/quotations/:id/audit
+        if (sub === "audit") {
+          if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const query = listQuotationAuditQuerySchema.parse(searchParamsObject(parsedUrl));
+          const result = await listQuotationAuditEventsRecord(auth.db, auth.userId, quotationId, query);
+          return jsonResponse({ ok: true, quotationId, ...result }, 200);
+        }
       }
 
       return null;

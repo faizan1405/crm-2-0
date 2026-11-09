@@ -736,6 +736,184 @@ export const crmPaymentProofs = mysqlTable(
   ],
 );
 
+/**
+ * B4A: Sales Studio Quotation Templates (reusable packages / offers).
+ */
+export const crmQuotationTemplates = mysqlTable(
+  "crm_quotation_templates",
+  {
+    id: crmId("id").primaryKey(),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    priceType: varchar("price_type", { length: 32 }).notNull().default("fixed"),
+    priceAmount: inrDecimal("price_amount"),
+    priceLabel: varchar("price_label", { length: 128 }),
+    currency: varchar("currency", { length: 8 }).notNull().default("INR"),
+    messageBody: text("message_body").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    sortOrder: int("sort_order").notNull().default(0),
+    version: versionCol("version"),
+    archivedAt: utcDateTime("archived_at"),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    index("idx_crm_qt_owner_active").on(table.ownerUserId, table.isActive),
+    index("idx_crm_qt_owner_order").on(table.ownerUserId, table.sortOrder),
+    index("idx_crm_qt_owner_created").on(table.ownerUserId, table.createdAt),
+  ],
+);
+
+/**
+ * B4A: Client Quotations ledger (supports both formal line-item proposals and confirmed WhatsApp quotation shares).
+ * Financial amounts use DECIMAL(15, 2) strings with exact integer paise calculations.
+ */
+export const crmQuotations = mysqlTable(
+  "crm_quotations",
+  {
+    id: crmId("id").primaryKey(),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    leadId: crmId("lead_id").references(() => crmLeads.id, { onDelete: "set null" }),
+    dealId: crmId("deal_id").references(() => crmDeals.id, { onDelete: "set null" }),
+    templateId: crmId("template_id").references(() => crmQuotationTemplates.id, {
+      onDelete: "set null",
+    }),
+    legacyId: varchar("legacy_id", { length: 64 }),
+    quotationNumber: varchar("quotation_number", { length: 64 }).notNull(),
+    title: varchar("title", { length: 255 }).notNull(),
+    clientName: varchar("client_name", { length: 160 }).notNull(),
+    clientCompany: varchar("client_company", { length: 160 }),
+    currency: varchar("currency", { length: 8 }).notNull().default("INR"),
+    subtotal: inrDecimal("subtotal").notNull().default("0.00"),
+    discountType: varchar("discount_type", { length: 16 }).notNull().default("none"),
+    discountValue: inrDecimal("discount_value").notNull().default("0.00"),
+    discountAmount: inrDecimal("discount_amount").notNull().default("0.00"),
+    taxableAmount: inrDecimal("taxable_amount").notNull().default("0.00"),
+    gstEnabled: boolean("gst_enabled").notNull().default(false),
+    gstRate: inrDecimal("gst_rate").notNull().default("0.00"),
+    gstAmount: inrDecimal("gst_amount").notNull().default("0.00"),
+    totalAmount: inrDecimal("total_amount").notNull().default("0.00"),
+    status: varchar("status", { length: 32 }).notNull().default("draft"),
+    issueIstDate: istDateChar("issue_ist_date").notNull(),
+    validUntilIstDate: istDateChar("valid_until_ist_date"),
+    paymentTerms: text("payment_terms"),
+    notes: text("notes"),
+    messageBody: text("message_body"),
+    userConfirmedSent: boolean("user_confirmed_sent").notNull().default(false),
+    sentAt: utcDateTime("sent_at"),
+    acceptedAt: utcDateTime("accepted_at"),
+    rejectedAt: utcDateTime("rejected_at"),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }),
+    version: versionCol("version"),
+    archivedAt: utcDateTime("archived_at"),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    uniqueIndex("uq_crm_quotations_owner_number").on(table.ownerUserId, table.quotationNumber),
+    uniqueIndex("uq_crm_quotations_owner_legacy").on(table.ownerUserId, table.legacyId),
+    uniqueIndex("uq_crm_quotations_owner_idem").on(table.ownerUserId, table.idempotencyKey),
+    index("idx_crm_quotations_owner_lead").on(table.ownerUserId, table.leadId),
+    index("idx_crm_quotations_owner_deal").on(table.ownerUserId, table.dealId),
+    index("idx_crm_quotations_owner_status").on(table.ownerUserId, table.status),
+    index("idx_crm_quotations_owner_created").on(table.ownerUserId, table.createdAt),
+  ],
+);
+
+/**
+ * B4A: Quotation line items for structured proposals / deliverables.
+ */
+export const crmQuotationItems = mysqlTable(
+  "crm_quotation_items",
+  {
+    id: crmId("id").primaryKey(),
+    quotationId: crmId("quotation_id")
+      .notNull()
+      .references(() => crmQuotations.id, { onDelete: "cascade" }),
+    description: varchar("description", { length: 500 }).notNull(),
+    quantity: inrDecimal("quantity").notNull().default("1.00"),
+    unitPrice: inrDecimal("unit_price").notNull().default("0.00"),
+    totalAmount: inrDecimal("total_amount").notNull().default("0.00"),
+    sortOrder: int("sort_order").notNull().default(0),
+    ...auditTimestamps(),
+  },
+  (table) => [index("idx_crm_qi_quotation_order").on(table.quotationId, table.sortOrder)],
+);
+
+/**
+ * B4A: Quotation payment schedule milestones.
+ */
+export const crmQuotationMilestones = mysqlTable(
+  "crm_quotation_milestones",
+  {
+    id: crmId("id").primaryKey(),
+    quotationId: crmId("quotation_id")
+      .notNull()
+      .references(() => crmQuotations.id, { onDelete: "cascade" }),
+    label: varchar("label", { length: 160 }).notNull(),
+    percentage: inrDecimal("percentage").notNull().default("0.00"),
+    amount: inrDecimal("amount").notNull().default("0.00"),
+    dueDate: istDateChar("due_date"),
+    sortOrder: int("sort_order").notNull().default(0),
+    ...auditTimestamps(),
+  },
+  (table) => [index("idx_crm_qm_quotation_order").on(table.quotationId, table.sortOrder)],
+);
+
+/**
+ * B4A: Immutable historical revisions for quotations.
+ */
+export const crmQuotationRevisions = mysqlTable(
+  "crm_quotation_revisions",
+  {
+    id: crmId("id").primaryKey(),
+    quotationId: crmId("quotation_id")
+      .notNull()
+      .references(() => crmQuotations.id, { onDelete: "cascade" }),
+    revisionNumber: int("revision_number").notNull(),
+    snapshotJson: text("snapshot_json").notNull(),
+    changeSummary: varchar("change_summary", { length: 255 }),
+    createdByUserId: crmId("created_by_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    createdAt: utcDateTime("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("uq_crm_qrev_quotation_number").on(table.quotationId, table.revisionNumber),
+    index("idx_crm_qrev_quotation_created").on(table.quotationId, table.createdAt),
+  ],
+);
+
+/**
+ * B4A: Immutable audit trail for quotation lifecycle events.
+ */
+export const crmQuotationAuditEvents = mysqlTable(
+  "crm_quotation_audit_events",
+  {
+    id: crmId("id").primaryKey(),
+    quotationId: crmId("quotation_id")
+      .notNull()
+      .references(() => crmQuotations.id, { onDelete: "cascade" }),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    actorUserId: crmId("actor_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    eventType: varchar("event_type", { length: 48 }).notNull(),
+    summary: varchar("summary", { length: 255 }).notNull(),
+    detailsJson: text("details_json"),
+    occurredIstDate: istDateChar("occurred_ist_date").notNull(),
+    createdAt: utcDateTime("created_at").notNull(),
+  },
+  (table) => [
+    index("idx_crm_qev_owner_quotation").on(table.ownerUserId, table.quotationId, table.createdAt),
+    index("idx_crm_qev_owner_created").on(table.ownerUserId, table.createdAt),
+  ],
+);
+
 export const b1aFoundationSchema = {
   crmSchemaMeta,
 } as const;
@@ -756,6 +934,15 @@ export const crmFinanceSchema = {
   crmPaymentProofs,
 } as const;
 
+export const crmQuotationSchema = {
+  crmQuotationTemplates,
+  crmQuotations,
+  crmQuotationItems,
+  crmQuotationMilestones,
+  crmQuotationRevisions,
+  crmQuotationAuditEvents,
+} as const;
+
 export const crmCoreSchema = {
   crmLeads,
   crmLeadActivities,
@@ -768,6 +955,7 @@ export const crmCoreSchema = {
   crmLeadFieldValues,
   crmIdempotencyKeys,
   ...crmFinanceSchema,
+  ...crmQuotationSchema,
 } as const;
 
 export const appSchema = {

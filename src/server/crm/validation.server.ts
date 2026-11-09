@@ -990,3 +990,235 @@ export const listProofHistoryQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 export type ListProofHistoryQuery = z.infer<typeof listProofHistoryQuerySchema>;
+
+// ---------------------------------------------------------------------------
+// Checkpoint B4A — Quotation Templates & Quotation Validation Schemas
+// ---------------------------------------------------------------------------
+
+export const QUOTATION_STATUSES = ["draft", "sent", "accepted", "rejected"] as const;
+export type QuotationStatusApi = (typeof QUOTATION_STATUSES)[number];
+
+export const QUOTATION_DISCOUNT_TYPES = ["none", "flat", "percent"] as const;
+export type QuotationDiscountTypeApi = (typeof QUOTATION_DISCOUNT_TYPES)[number];
+
+export const createQuotationTemplateBodySchema = z
+  .object({
+    name: z.string().trim().min(1, "Template name is required.").max(120, "Template name too long."),
+    priceType: z.enum(["fixed", "custom"]).default("fixed"),
+    priceAmount: z
+      .union([z.number(), z.string()])
+      .optional()
+      .refine(
+        (val) => val === undefined || parseStrictInrInputToPaise(val, { allowZero: true }).ok,
+        "Price amount must be a valid positive INR amount.",
+      ),
+    priceLabel: optionalTrimmedString(64),
+    currency: z.literal("INR").default("INR"),
+    messageBody: z
+      .string()
+      .trim()
+      .min(1, "WhatsApp quotation message body is required.")
+      .max(10_000, "Message body must be 10,000 characters or fewer."),
+    isActive: z.boolean().default(true),
+    sortOrder: z.number().int().default(0),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type CreateQuotationTemplateInputValidated = z.infer<typeof createQuotationTemplateBodySchema>;
+
+export const updateQuotationTemplateBodySchema = z
+  .object({
+    name: optionalTrimmedString(120),
+    priceType: z.enum(["fixed", "custom"]).optional(),
+    priceAmount: z
+      .union([z.number(), z.string()])
+      .optional()
+      .refine(
+        (val) => val === undefined || parseStrictInrInputToPaise(val, { allowZero: true }).ok,
+        "Price amount must be a valid positive INR amount.",
+      ),
+    priceLabel: optionalTrimmedString(64).nullable(),
+    currency: z.literal("INR").optional(),
+    messageBody: optionalTrimmedString(10_000),
+    isActive: z.boolean().optional(),
+    sortOrder: z.number().int().optional(),
+    expectedVersion: z.number().int().min(1, "expectedVersion must be >= 1").optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type UpdateQuotationTemplateInputValidated = z.infer<typeof updateQuotationTemplateBodySchema>;
+
+export const reorderQuotationTemplatesBodySchema = z
+  .object({
+    templateIds: z.array(z.string().trim().min(1)).min(1, "templateIds must contain at least one ID."),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type ReorderQuotationTemplatesInput = z.infer<typeof reorderQuotationTemplatesBodySchema>;
+
+export const listQuotationTemplatesQuerySchema = z.object({
+  includeArchived: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+  activeOnly: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+  search: optionalTrimmedString(120),
+});
+export type ListQuotationTemplatesQuery = z.infer<typeof listQuotationTemplatesQuerySchema>;
+
+export const quotationLineItemInputSchema = z
+  .object({
+    id: optionalTrimmedString(64),
+    description: z.string().trim().min(1, "Item description is required.").max(500, "Description max 500 characters."),
+    quantity: z.union([z.number(), z.string()]).default(1),
+    unitPrice: z.union([z.number(), z.string()]).refine(
+      (val) => parseStrictInrInputToPaise(val, { allowZero: true }).ok,
+      "Unit price must be a valid non-negative INR amount.",
+    ),
+    sortOrder: z.number().int().optional(),
+  })
+  .strict();
+
+export const quotationMilestoneInputSchema = z
+  .object({
+    id: optionalTrimmedString(64),
+    label: z.string().trim().min(1, "Milestone label is required.").max(160, "Milestone label max 160 characters."),
+    percentage: z.number().min(0.01, "Milestone percentage must be > 0").max(100, "Milestone percentage cannot exceed 100"),
+    dueDate: optionalTrimmedString(10).refine(
+      (v) => v === undefined || isValidCalendarDay(v),
+      "Due date must be a valid YYYY-MM-DD calendar date",
+    ),
+    sortOrder: z.number().int().optional(),
+  })
+  .strict();
+
+export const createQuotationBodySchema = z
+  .object({
+    leadId: optionalTrimmedString(64),
+    dealId: optionalTrimmedString(64),
+    templateId: optionalTrimmedString(64),
+    legacyId: optionalTrimmedString(64),
+    quotationNumber: optionalTrimmedString(64),
+    title: z.string().trim().min(1, "Quotation title is required.").max(200, "Title max 200 characters."),
+    clientName: z.string().trim().min(1, "Client name is required.").max(160, "Client name max 160 characters."),
+    clientCompany: optionalTrimmedString(160),
+    currency: z.literal("INR").default("INR"),
+    items: z.array(quotationLineItemInputSchema).optional(),
+    packagePrice: z
+      .union([z.number(), z.string()])
+      .optional()
+      .refine(
+        (val) => val === undefined || parseStrictInrInputToPaise(val, { allowZero: true }).ok,
+        "Package price must be a valid positive INR amount.",
+      ),
+    discountType: z.enum(["none", "flat", "percent"]).default("none"),
+    discountValue: z.union([z.number(), z.string()]).optional(),
+    gstEnabled: z.boolean().default(false),
+    gstRate: z.union([z.number(), z.string()]).default(18),
+    milestones: z.array(quotationMilestoneInputSchema).optional(),
+    status: z.enum(QUOTATION_STATUSES).default("draft"),
+    issueIstDate: optionalTrimmedString(10).refine(
+      (v) => v === undefined || isValidCalendarDay(v),
+      "issueIstDate must be a valid YYYY-MM-DD calendar date",
+    ),
+    validUntilIstDate: optionalTrimmedString(10).refine(
+      (v) => v === undefined || isValidCalendarDay(v),
+      "validUntilIstDate must be a valid YYYY-MM-DD calendar date",
+    ),
+    paymentTerms: optionalTrimmedString(1000),
+    notes: optionalTrimmedString(20_000),
+    messageBody: optionalTrimmedString(10_000),
+    userConfirmedSent: z.boolean().default(false),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type CreateQuotationInputValidated = z.infer<typeof createQuotationBodySchema>;
+
+export const updateQuotationBodySchema = z
+  .object({
+    title: optionalTrimmedString(200),
+    clientName: optionalTrimmedString(160),
+    clientCompany: optionalTrimmedString(160),
+    items: z.array(quotationLineItemInputSchema).optional(),
+    packagePrice: z
+      .union([z.number(), z.string()])
+      .optional()
+      .refine(
+        (val) => val === undefined || parseStrictInrInputToPaise(val, { allowZero: true }).ok,
+        "Package price must be a valid positive INR amount.",
+      ),
+    discountType: z.enum(["none", "flat", "percent"]).optional(),
+    discountValue: z.union([z.number(), z.string()]).optional(),
+    gstEnabled: z.boolean().optional(),
+    gstRate: z.union([z.number(), z.string()]).optional(),
+    milestones: z.array(quotationMilestoneInputSchema).optional(),
+    validUntilIstDate: optionalTrimmedString(10).refine(
+      (v) => v === undefined || isValidCalendarDay(v),
+      "validUntilIstDate must be a valid YYYY-MM-DD calendar date",
+    ),
+    paymentTerms: optionalTrimmedString(1000),
+    notes: optionalTrimmedString(20_000),
+    messageBody: optionalTrimmedString(10_000),
+    expectedVersion: z.number().int().min(1, "expectedVersion must be >= 1").optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type UpdateQuotationInputValidated = z.infer<typeof updateQuotationBodySchema>;
+
+export const changeQuotationStatusBodySchema = z
+  .object({
+    status: z.enum(QUOTATION_STATUSES),
+    reason: optionalTrimmedString(500),
+    expectedVersion: z.number().int().min(1, "expectedVersion must be >= 1").optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type ChangeQuotationStatusInput = z.infer<typeof changeQuotationStatusBodySchema>;
+
+export const archiveQuotationBodySchema = z
+  .object({
+    reason: optionalTrimmedString(500),
+    expectedVersion: z.number().int().min(1, "expectedVersion must be >= 1").optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type ArchiveQuotationInput = z.infer<typeof archiveQuotationBodySchema>;
+
+export const restoreQuotationBodySchema = z
+  .object({
+    reason: optionalTrimmedString(500),
+    expectedVersion: z.number().int().min(1, "expectedVersion must be >= 1").optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type RestoreQuotationInput = z.infer<typeof restoreQuotationBodySchema>;
+
+export const listQuotationsQuerySchema = z.object({
+  leadId: optionalTrimmedString(64),
+  dealId: optionalTrimmedString(64),
+  status: z.enum(["all", ...QUOTATION_STATUSES]).default("all"),
+  search: optionalTrimmedString(120),
+  includeArchived: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type ListQuotationsQuery = z.infer<typeof listQuotationsQuerySchema>;
+
+export const listQuotationRevisionsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type ListQuotationRevisionsQuery = z.infer<typeof listQuotationRevisionsQuerySchema>;
+
+export const listQuotationAuditQuerySchema = z.object({
+  eventType: optionalTrimmedString(64).default("all"),
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type ListQuotationAuditQuery = z.infer<typeof listQuotationAuditQuerySchema>;
