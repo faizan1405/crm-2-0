@@ -12,7 +12,6 @@ import {
   Mail,
   MessageCircle,
   Pencil,
-  Phone,
   PhoneCall,
   RefreshCw,
   RotateCcw,
@@ -21,6 +20,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useCreateActivityMutation, useLeadActivitiesQuery } from "@/lib/api/activitiesApi";
+import { useLeadCallsQuery } from "@/lib/api/callsApi";
 import { createIdempotencyKey } from "@/lib/api/client";
 import {
   extractDuplicateLeadConflict,
@@ -73,6 +73,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PilotArchiveDialog, PilotLostReasonDialog } from "./PilotDialogs";
+import { PilotCallDialog, PilotCallLink, usePilotCallLauncher } from "./PilotCallDialog";
 import {
   PilotCancelFollowUpDialog,
   PilotEditFollowUpDialog,
@@ -115,8 +116,10 @@ const formOf = (l: LeadDto): Record<string, string> => ({
 export function PilotLeadDetailPage({ id }: { id: string }) {
   const navigate = useNavigate();
   const leadQuery = useLeadQuery(id);
+  const callsQuery = useLeadCallsQuery(id, { limit: 25 });
   const activitiesQuery = useLeadActivitiesQuery(id, { limit: 100 });
   const leadFollowUpsQuery = useLeadFollowUpsQuery(id);
+  const { target: callTarget, dialLead, openLogOnly, close: closeCall } = usePilotCallLauncher();
   const updateMutation = useUpdateLeadMutation();
   const archiveMutation = useArchiveLeadMutation();
   const restoreMutation = useRestoreLeadMutation();
@@ -198,6 +201,8 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
   }
 
   const archived = lead.lifecycleStatus !== "active";
+  const callItems = callsQuery.data?.items ?? [];
+  const callSummary = callsQuery.data?.summary ?? { total: 0, connected: 0, attempts: 0 };
   const acts = activitiesQuery.data?.items ?? [];
   const leadFollowUps = leadFollowUpsQuery.data?.items ?? [];
   const activeFollowUp =
@@ -379,22 +384,19 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
         .join(" · ")}
       actions={
         <div className="flex flex-wrap gap-2">
+          <PilotCallLink
+            lead={lead}
+            dialSource="Lead detail"
+            onDialStarted={dialLead}
+            className="h-9 px-4 text-sm"
+          />
           <Button
             type="button"
             variant="outline"
-            disabled
-            className="h-9 px-4 opacity-60"
-            title="Dialer connects in later checkpoints"
-          >
-            <Phone className="size-4" />
-            Call
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled
-            className="h-9 px-4 opacity-60"
-            title="Call log connects in later checkpoints"
+            disabled={archived}
+            onClick={() => openLogOnly(lead, "Lead detail")}
+            className={archived ? "h-9 px-4 opacity-60" : "h-9 px-4"}
+            title={archived ? "Restore archived lead to log calls" : "Record a call outcome"}
           >
             <PhoneCall className="size-4" />
             Log call
@@ -487,6 +489,7 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
                 onClick={() => {
                   setSideAlert(null);
                   void leadQuery.refetch();
+                  void callsQuery.refetch();
                   void activitiesQuery.refetch();
                   void leadFollowUpsQuery.refetch();
                 }}
@@ -583,6 +586,90 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
               <p className="mt-3 text-xs text-muted-foreground">
                 Custom field definitions remain local until later checkpoints.
               </p>
+            )}
+          </section>
+
+          <section className="surface p-5" data-testid="pilot-lead-calls-panel">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-semibold">Calls (MariaDB)</h2>
+                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase">
+                  User-recorded
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                <span className="num">
+                  {callSummary.total} total · {callSummary.connected} connected ·{" "}
+                  {callSummary.attempts} {callSummary.attempts === 1 ? "attempt" : "attempts"}
+                </span>
+                {!archived && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 rounded-full px-3 text-xs"
+                    onClick={() => openLogOnly(lead, "Lead detail")}
+                  >
+                    <PhoneCall className="size-3" />
+                    Log call
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {callsQuery.isLoading ? (
+              <div className="h-16 animate-pulse rounded-lg bg-muted" />
+            ) : callsQuery.isError ? (
+              <div role="alert" className="grid gap-2 text-xs text-destructive">
+                <span>{formatApiErrorMessage(callsQuery.error, "Failed to load call logs.")}</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void callsQuery.refetch()}
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : callItems.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No calls logged yet. Clicking Call opens your device dialer; call logs are saved
+                only after you pick an outcome and save.
+              </p>
+            ) : (
+              <ol className="grid gap-2.5 text-sm">
+                {callItems.map((c) => (
+                  <li key={c.id} className="rounded-lg border bg-card p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-semibold">{c.outcome}</span>
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase ${
+                            c.connected
+                              ? "bg-success-soft text-success"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {c.connected ? "Connected" : "Attempt"}
+                        </span>
+                        {c.stageBefore !== c.stageAfter && (
+                          <span className="text-xs text-muted-foreground">
+                            {STATUS_LABEL[c.stageBefore]} → {STATUS_LABEL[c.stageAfter]}
+                          </span>
+                        )}
+                      </div>
+                      <span className="num text-xs text-muted-foreground">
+                        {c.dialSource} · {formatDateTime(c.at)}
+                      </span>
+                    </div>
+                    {c.notes && (
+                      <p className="mt-1.5 whitespace-pre-line break-words text-xs text-muted-foreground">
+                        {c.notes}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ol>
             )}
           </section>
 
@@ -981,6 +1068,8 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
         leadName={lead.name}
         onOpenChange={(o) => !o && setFuCancelTarget(null)}
       />
+
+      <PilotCallDialog target={callTarget} onClose={closeCall} />
     </PilotShell>
   );
 }

@@ -15,7 +15,8 @@ Migration [`src/server/db/migrations/0001_b2a_core_crm.sql`](../src/server/db/mi
 | `crm_lead_tags`         | Lead <-> tag many-to-many join                        | `uq_crm_lead_tags_lead_tag`, `idx_crm_lead_tags_owner_tag`                                                                                                                                                                                                                                                  |
 | `crm_custom_fields`     | Supporting custom field definitions (`entity='lead'`) | `uq_crm_custom_fields_owner_legacy`, `idx_crm_custom_fields_owner_entity`                                                                                                                                                                                                                                   |
 | `crm_lead_field_values` | Typed custom field values per Lead                    | `uq_crm_lead_field_values_lead_field`, `idx_crm_lead_field_values_owner_field`                                                                                                                                                                                                                              |
-| `crm_idempotency_keys`  | Retry-safe request de-duplication (24h TTL)           | `uq_crm_idempotency_owner_scope_key` (`request_hash` SHA-256 + stored status/response)                                                                                                                                                                                                                      |
+| `crm_idempotency_keys`  | Retry-safe request de-duplication (24h TTL)           | `uq_crm_idempotency_owner_scope_key` (`request_hash` SHA-256 + stored status/response, `scope` widened to `varchar(128)` in `0002`)                                                                                                                                                                     |
+| `crm_call_logs`         | User-recorded call outcomes + stage/activity audit (`0003`) | `uq_crm_call_logs_owner_legacy`, `uq_crm_call_logs_owner_op`, `uq_crm_call_logs_owner_idem`, `idx_crm_call_logs_lead_occurred`, `idx_crm_call_logs_owner_ist_date`, FK `lead_activity_id` -> `crm_lead_activities` |
 
 ## 2. Authenticated Owner REST Endpoints (`/api/v1`)
 
@@ -45,6 +46,13 @@ All endpoints require an authenticated active Owner cookie session (`401`/`403`/
 - `PATCH /api/v1/follow-ups/:id` — Reschedules `dueAt` and/or updates `note` (`version` required).
 - `POST /api/v1/follow-ups/:id/complete` — Marks `completedAt`, releases `active_lead_lock`, clears `crm_leads.next_follow_up_at` while preserving `crm_leads.last_contact_at` honestly without fabricating a call/message/meeting contact activity, and appends `"followup"` activity (`409 followup_already_closed` if already closed).
 - `POST /api/v1/follow-ups/:id/cancel` — Marks `cancelledAt` & optional `cancelReason`, releases `active_lead_lock`, clears `next_follow_up_at`, preserves `last_contact_at`, appends `"followup"` activity.
+
+### Calls (Added in B2B3, Migration `0003`)
+
+- `GET /api/v1/calls` — Paginated Owner call logs joined with lead summary (`leadId`, `outcome`, `connected`, `dateIst`, `leadLifecycle`) plus `{ total, connected, attempts }` summary.
+- `POST /api/v1/calls` — Records one explicit user-confirmed call outcome (`recordingSource: "user_recorded"`) inside an InnoDB transaction with `expectedLeadVersion` optimistic locking (`409 stale_conflict`), stage confirmation/lost-reason checks, atomic `"call"` (+ `"status"`) activity creation, and honest contact tracking (`Not picked`/`Busy` never update `last_contact_at`).
+- `GET /api/v1/leads/:id/calls` — Per-lead call history and summary.
+- `GET /api/v1/calls/:id` — Single `CallLogDto` (`404` on foreign or missing ID).
 
 ## 3. Idempotency & Optimistic Concurrency
 

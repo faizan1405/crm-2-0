@@ -59,6 +59,19 @@ export const ALL_ACTIVITY_TYPES_API = [
 
 export const FOLLOWUP_TYPES_API = ["call", "whatsapp", "meeting", "email"] as const;
 
+export const CALL_OUTCOMES_API = [
+  "Connected",
+  "Not picked",
+  "Busy",
+  "Call back later",
+  "Interested",
+  "Not interested",
+  "Qualified",
+  "Proposal Sent",
+  "Won",
+  "Lost",
+] as const;
+
 export type LeadSourceApi = (typeof LEAD_SOURCES_API)[number];
 export type LeadStatusApi = (typeof LEAD_STATUSES_API)[number];
 export type LeadPriorityApi = (typeof LEAD_PRIORITIES_API)[number];
@@ -67,6 +80,7 @@ export type LeadLifecycleApi = (typeof LEAD_LIFECYCLE_API)[number];
 export type ManualActivityTypeApi = (typeof MANUAL_ACTIVITY_TYPES_API)[number];
 export type ActivityTypeApi = (typeof ALL_ACTIVITY_TYPES_API)[number];
 export type FollowUpTypeApi = (typeof FOLLOWUP_TYPES_API)[number];
+export type CallOutcomeApi = (typeof CALL_OUTCOMES_API)[number];
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const CALENDAR_YMD_HM_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?$/;
@@ -247,6 +261,54 @@ export const followUpWithLeadDtoSchema = followUpDtoSchema.extend({
 
 export type FollowUpWithLeadDto = z.infer<typeof followUpWithLeadDtoSchema>;
 
+export const callLogDtoSchema = z.object({
+  id: z.string(),
+  legacyId: z.string().nullable(),
+  leadId: z.string(),
+  actorUserId: z.string(),
+  outcome: z.enum(CALL_OUTCOMES_API),
+  connected: z.boolean(),
+  recordingSource: z.literal("user_recorded"),
+  notes: z.string().optional(),
+  dialSource: z.string(),
+  stageBefore: z.enum(LEAD_STATUSES_API),
+  stageAfter: z.enum(LEAD_STATUSES_API),
+  quickStatusBefore: z.enum(QUICK_STATUSES_API).optional(),
+  quickStatusAfter: z.enum(QUICK_STATUSES_API).optional(),
+  leadActivityId: z.string(),
+  opId: z.string().optional(),
+  at: z.string(),
+  atIst: z.string(),
+  occurredIstDate: z.string(),
+  occurredIstTime: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type CallLogDto = z.infer<typeof callLogDtoSchema>;
+
+export const callLogWithLeadDtoSchema = callLogDtoSchema.extend({
+  lead: z.object({
+    id: z.string(),
+    name: z.string(),
+    phone: z.string(),
+    company: z.string().optional(),
+    status: z.enum(LEAD_STATUSES_API),
+    priority: z.enum(LEAD_PRIORITIES_API),
+    lifecycleStatus: z.enum(LEAD_LIFECYCLE_API),
+  }),
+});
+
+export type CallLogWithLeadDto = z.infer<typeof callLogWithLeadDtoSchema>;
+
+export const callSummarySchema = z.object({
+  total: z.number().int().min(0),
+  connected: z.number().int().min(0),
+  attempts: z.number().int().min(0),
+});
+
+export type CallLogSummary = z.infer<typeof callSummarySchema>;
+
 export const leadsListResponseSchema = z.object({
   ok: z.literal(true),
   items: z.array(leadDtoSchema),
@@ -353,6 +415,43 @@ export const followUpCancelResponseSchema = z.object({
   leadNextFollowUp: z.string().nullable(),
   activity: leadActivityDtoSchema,
 });
+
+export const callsListResponseSchema = z.object({
+  ok: z.literal(true),
+  items: z.array(callLogWithLeadDtoSchema),
+  total: z.number().int().min(0),
+  limit: z.number().int().min(1),
+  offset: z.number().int().min(0),
+  summary: callSummarySchema,
+});
+
+export type CallsListResponse = z.infer<typeof callsListResponseSchema>;
+
+export const leadCallsListResponseSchema = z.object({
+  ok: z.literal(true),
+  leadId: z.string(),
+  items: z.array(callLogDtoSchema),
+  total: z.number().int().min(0),
+  limit: z.number().int().min(1),
+  offset: z.number().int().min(0),
+  summary: callSummarySchema,
+});
+
+export type LeadCallsListResponse = z.infer<typeof leadCallsListResponseSchema>;
+
+export const callGetResponseSchema = z.object({
+  ok: z.literal(true),
+  call: callLogDtoSchema,
+});
+
+export const callCreateResponseSchema = z.object({
+  ok: z.literal(true),
+  call: callLogDtoSchema,
+  lead: leadDtoSchema,
+  activities: z.array(leadActivityDtoSchema),
+});
+
+export type CallCreateResponse = z.infer<typeof callCreateResponseSchema>;
 
 export const duplicateMatchSchema = z.object({
   id: z.string(),

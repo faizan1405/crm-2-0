@@ -271,6 +271,7 @@ describe("B2A Request Idempotency Helpers", () => {
       `followup:update:${sampleFuId}`,
       `followup:complete:${sampleFuId}`,
       `followup:cancel:${sampleFuId}`,
+      `call:create:${sampleLeadId}`,
     ]) {
       expect(s.length).toBeLessThanOrEqual(maxScopeLen);
     }
@@ -303,6 +304,14 @@ describe("B2A API Fail-Closed Auth, CSRF & Method Discipline", () => {
     { method: "PATCH", path: "/api/v1/follow-ups/fu_1", body: { version: 1, note: "Moved" } },
     { method: "POST", path: "/api/v1/follow-ups/fu_1/complete", body: { version: 1 } },
     { method: "POST", path: "/api/v1/follow-ups/fu_1/cancel", body: { version: 1 } },
+    { method: "GET", path: "/api/v1/leads/lead_1/calls" },
+    { method: "GET", path: "/api/v1/calls" },
+    {
+      method: "POST",
+      path: "/api/v1/calls",
+      body: { leadId: "lead_1", outcome: "Connected", dialSource: "CRM" },
+    },
+    { method: "GET", path: "/api/v1/calls/call_1" },
   ];
 
   it("fails closed (503/401) on every B2A endpoint without an active DB/session", async () => {
@@ -366,5 +375,13 @@ describe("B2A API Fail-Closed Auth, CSRF & Method Discipline", () => {
     );
     expect(badMethod!.status).toBe(405);
     expect(badMethod!.headers.get("allow")).toBe("POST");
+
+    const badCallMethod = await handleApiRequest(
+      new Request("http://127.0.0.1:4173/api/v1/calls/call_1", {
+        method: "DELETE",
+      }),
+    );
+    expect(badCallMethod!.status).toBe(405);
+    expect(badCallMethod!.headers.get("allow")).toBe("GET");
   });
 });

@@ -279,6 +279,17 @@ describe("B2B1 Lead Pilot UI & Storage Isolation", () => {
           activeFollowUpId: null,
         });
       }
+      if (u.includes("/calls")) {
+        return jsonRes({
+          ok: true,
+          leadId: serverLead.id,
+          items: [],
+          total: 0,
+          limit: 5,
+          offset: 0,
+          summary: { total: 0, connected: 0, attempts: 0 },
+        });
+      }
       return jsonRes({
         ok: true,
         items: [serverLead],
@@ -439,6 +450,17 @@ describe("B2B1 Lead Pilot UI & Storage Isolation", () => {
           leadId: "lead_conf_1",
           items: [],
           activeFollowUpId: null,
+        });
+      }
+      if (u.includes("/calls")) {
+        return jsonRes({
+          ok: true,
+          leadId: "lead_conf_1",
+          items: [],
+          total: 0,
+          limit: 25,
+          offset: 0,
+          summary: { total: 0, connected: 0, attempts: 0 },
         });
       }
       if (init?.method === "PATCH") {

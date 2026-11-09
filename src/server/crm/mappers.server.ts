@@ -1,11 +1,12 @@
 import "@tanstack/react-start/server-only";
 import type { InferSelectModel } from "drizzle-orm";
-import type { crmFollowUps, crmLeadActivities, crmLeads } from "../db/schema.server";
+import type { crmCallLogs, crmFollowUps, crmLeadActivities, crmLeads } from "../db/schema.server";
 import { decimalStringToRupees } from "../db/money.server";
 import { parseUtcDateTime } from "../db/utc.server";
 import { mysqlUtcToIso, toIstParts } from "./dates.server";
 import type {
   ActivityType,
+  CallOutcome,
   FollowUpType,
   LeadLifecycleStatus,
   LeadPriority,
@@ -17,6 +18,7 @@ import type {
 export type LeadRow = InferSelectModel<typeof crmLeads>;
 export type LeadActivityRow = InferSelectModel<typeof crmLeadActivities>;
 export type FollowUpRow = InferSelectModel<typeof crmFollowUps>;
+export type CallLogRow = InferSelectModel<typeof crmCallLogs>;
 
 export interface LeadDto {
   id: string;
@@ -83,6 +85,42 @@ export interface FollowUpDto {
 }
 
 export interface FollowUpWithLeadDto extends FollowUpDto {
+  lead: {
+    id: string;
+    name: string;
+    phone: string;
+    company?: string;
+    status: LeadStatus;
+    priority: LeadPriority;
+    lifecycleStatus: LeadLifecycleStatus;
+  };
+}
+
+export interface CallLogDto {
+  id: string;
+  legacyId: string | null;
+  leadId: string;
+  actorUserId: string;
+  outcome: CallOutcome;
+  connected: boolean;
+  recordingSource: "user_recorded";
+  notes?: string;
+  dialSource: string;
+  stageBefore: LeadStatus;
+  stageAfter: LeadStatus;
+  quickStatusBefore?: QuickStatus;
+  quickStatusAfter?: QuickStatus;
+  leadActivityId: string;
+  opId?: string;
+  at: string;
+  atIst: string;
+  occurredIstDate: string;
+  occurredIstTime: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CallLogWithLeadDto extends CallLogDto {
   lead: {
     id: string;
     name: string;
@@ -189,6 +227,42 @@ export function toFollowUpDto(row: FollowUpRow): FollowUpDto {
     ...(row.opId ? { opId: row.opId } : {}),
     status,
     version: row.version,
+    createdAt: mysqlUtcToIso(row.createdAt) ?? row.createdAt,
+    updatedAt: mysqlUtcToIso(row.updatedAt) ?? row.updatedAt,
+  };
+}
+
+export function toCallLogDto(row: CallLogRow): CallLogDto {
+  const atDate = parseUtcDateTime(row.occurredAt);
+  const at = Number.isNaN(atDate.getTime()) ? row.occurredAt : atDate.toISOString();
+  const ist = Number.isNaN(atDate.getTime())
+    ? {
+        istDate: row.occurredIstDate,
+        istTime: row.occurredIstTime,
+        istDateTime: `${row.occurredIstDate}T${row.occurredIstTime}:00+05:30`,
+      }
+    : toIstParts(atDate);
+
+  return {
+    id: row.id,
+    legacyId: row.legacyId ?? null,
+    leadId: row.leadId,
+    actorUserId: row.actorUserId,
+    outcome: row.outcome as CallOutcome,
+    connected: Boolean(row.connected),
+    recordingSource: "user_recorded",
+    ...(row.notes ? { notes: row.notes } : {}),
+    dialSource: row.dialSource,
+    stageBefore: row.stageBefore as LeadStatus,
+    stageAfter: row.stageAfter as LeadStatus,
+    ...(row.quickStatusBefore ? { quickStatusBefore: row.quickStatusBefore as QuickStatus } : {}),
+    ...(row.quickStatusAfter ? { quickStatusAfter: row.quickStatusAfter as QuickStatus } : {}),
+    leadActivityId: row.leadActivityId,
+    ...(row.opId ? { opId: row.opId } : {}),
+    at,
+    atIst: ist.istDateTime,
+    occurredIstDate: row.occurredIstDate,
+    occurredIstTime: row.occurredIstTime,
     createdAt: mysqlUtcToIso(row.createdAt) ?? row.createdAt,
     updatedAt: mysqlUtcToIso(row.updatedAt) ?? row.updatedAt,
   };

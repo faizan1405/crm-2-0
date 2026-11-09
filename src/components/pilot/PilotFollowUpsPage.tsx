@@ -15,7 +15,6 @@ import {
   ListTodo,
   MessageCircle,
   PanelRightOpen,
-  Phone,
   PhoneCall,
   Plus,
   RefreshCw,
@@ -25,6 +24,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLeadActivitiesQuery } from "@/lib/api/activitiesApi";
+import { useLeadCallsQuery } from "@/lib/api/callsApi";
 import { createIdempotencyKey } from "@/lib/api/client";
 import { extractStaleConflict, formatApiErrorMessage, isApiError } from "@/lib/api/errors";
 import {
@@ -36,6 +36,7 @@ import {
   useRescheduleFollowUpMutation,
 } from "@/lib/api/followupsApi";
 import { useLeadQuery } from "@/lib/api/leadsApi";
+import type { LeadDto } from "@/lib/api/schemas";
 import {
   FOLLOWUP_TYPES_API,
   type FollowUpDto,
@@ -55,6 +56,12 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  PilotCallDialog,
+  PilotCallLink,
+  type PilotCallLeadRef,
+  usePilotCallLauncher,
+} from "./PilotCallDialog";
 import {
   PilotCancelFollowUpDialog,
   PilotEditFollowUpDialog,
@@ -96,6 +103,7 @@ export function PilotFollowUpsPage() {
 
   const [busyId, setBusyId] = useState<string | null>(null);
   const inFlightRef = useRef<Set<string>>(new Set());
+  const { target: callTarget, dialLead, openLogOnly, close: closeCall } = usePilotCallLauncher();
   const [actionAlert, setActionAlert] = useState<{
     message: string;
     isStale: boolean;
@@ -480,6 +488,23 @@ export function PilotFollowUpsPage() {
 
                   {item.status === "pending" ? (
                     <div className="fu-actions">
+                      <PilotCallLink
+                        lead={lead}
+                        dialSource="Follow-ups"
+                        onDialStarted={(l, src) => dialLead(l, src)}
+                        disabled={isBusy}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="rounded-full"
+                        disabled={isBusy}
+                        onClick={() => openLogOnly(lead, "Follow-ups")}
+                      >
+                        <PhoneCall className="size-3.5" />
+                        Log call
+                      </Button>
                       <Button
                         type="button"
                         size="sm"
@@ -615,11 +640,12 @@ export function PilotFollowUpsPage() {
           <ul className="grid gap-2 text-xs text-muted-foreground">
             <li className="rounded-lg border bg-card p-3">
               <b className="text-foreground">Last contact preserved:</b> Completing a follow-up
-              marks the task done without inventing a call or customer message.
+              marks the task done without inventing a call; only connected call logs update Last
+              contact.
             </li>
             <li className="rounded-lg border bg-card p-3">
               <b className="text-foreground">Smart suggestions & reminders:</b> AI follow-up
-              prompts, call dialer, WhatsApp composer, and automations remain local until B4–B5.
+              prompts, WhatsApp composer, and automations remain local until B4–B5.
             </li>
           </ul>
           <Button type="button" variant="outline" size="sm" asChild className="w-full">
@@ -657,6 +683,14 @@ export function PilotFollowUpsPage() {
       <PilotFollowUpLeadInspector
         leadId={inspectLeadId}
         onClose={() => setInspectLeadId(null)}
+        onDial={(l) => {
+          setInspectLeadId(null);
+          dialLead(l, "Follow-ups inspector");
+        }}
+        onLogCall={(l) => {
+          setInspectLeadId(null);
+          openLogOnly(l, "Follow-ups inspector");
+        }}
         onSchedule={(l) => {
           setInspectLeadId(null);
           setScheduleLeadTarget(l);
@@ -672,6 +706,8 @@ export function PilotFollowUpsPage() {
         }}
         onComplete={(fu, lName) => void handleComplete(fu, lName)}
       />
+
+      <PilotCallDialog target={callTarget} onClose={closeCall} />
     </PilotShell>
   );
 }
@@ -679,6 +715,8 @@ export function PilotFollowUpsPage() {
 function PilotFollowUpLeadInspector({
   leadId,
   onClose,
+  onDial,
+  onLogCall,
   onSchedule,
   onEdit,
   onCancel,
@@ -686,12 +724,15 @@ function PilotFollowUpLeadInspector({
 }: {
   leadId: string | null;
   onClose: () => void;
+  onDial: (lead: LeadDto | PilotCallLeadRef, dialSource: string) => void;
+  onLogCall: (lead: LeadDto | PilotCallLeadRef) => void;
   onSchedule: (lead: { id: string; name: string; company?: string }) => void;
   onEdit: (followUp: FollowUpDto, leadName: string) => void;
   onCancel: (followUp: FollowUpDto, leadName: string) => void;
   onComplete: (followUp: FollowUpDto, leadName: string) => void;
 }) {
   const leadQuery = useLeadQuery(leadId ?? undefined);
+  const callsQuery = useLeadCallsQuery(leadId ?? "", { limit: 3 }, Boolean(leadId));
   const leadFollowUpsQuery = useLeadFollowUpsQuery(leadId ?? undefined, Boolean(leadId));
   const activitiesQuery = useLeadActivitiesQuery(leadId ?? "", { limit: 5 }, Boolean(leadId));
 
@@ -746,24 +787,14 @@ function PilotFollowUpLeadInspector({
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2 px-4">
+              <PilotCallLink lead={lead} dialSource="Follow-ups inspector" onDialStarted={onDial} />
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                disabled
-                className="rounded-full opacity-60"
-                title="Dialer connects in later checkpoints"
-              >
-                <Phone className="size-3.5" />
-                Call
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled
-                className="rounded-full opacity-60"
-                title="Call log connects in later checkpoints"
+                disabled={lead.lifecycleStatus !== "active"}
+                className="rounded-full"
+                onClick={() => onLogCall(lead)}
               >
                 <PhoneCall className="size-3.5" />
                 Log call
@@ -875,6 +906,40 @@ function PilotFollowUpLeadInspector({
                 <p className="text-sm leading-relaxed whitespace-pre-line">{lead.notes}</p>
               </section>
             )}
+
+            <section className="mx-4 mt-5">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="eyebrow">Recent calls (MariaDB)</h3>
+                <span className="num text-[11px] text-muted-foreground">
+                  {callsQuery.data?.summary.total ?? 0} total ·{" "}
+                  {callsQuery.data?.summary.connected ?? 0} connected
+                </span>
+              </div>
+              {(callsQuery.data?.items ?? []).length > 0 ? (
+                <ul className="grid gap-1.5 text-xs">
+                  {(callsQuery.data?.items ?? []).map((c) => (
+                    <li key={c.id} className="rounded-md border bg-card p-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold">
+                          {c.outcome}{" "}
+                          <span className="font-normal text-muted-foreground">
+                            ({c.connected ? "Connected" : "Attempt"})
+                          </span>
+                        </span>
+                        <span className="num text-[11px] text-muted-foreground">
+                          {formatDateTime(c.at)}
+                        </span>
+                      </div>
+                      {c.notes && (
+                        <p className="mt-1 line-clamp-2 text-muted-foreground">{c.notes}</p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted-foreground">No calls logged yet.</p>
+              )}
+            </section>
 
             <section className="mx-4 mt-5">
               <h3 className="eyebrow mb-2">Recent activity (MariaDB)</h3>

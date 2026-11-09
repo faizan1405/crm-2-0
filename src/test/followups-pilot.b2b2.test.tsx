@@ -238,6 +238,17 @@ describe("B2B2 Follow-ups Pilot UI, Conflict Handling & Storage Isolation", () =
           offset: 0,
         });
       }
+      if (url.startsWith("/api/v1/leads/lead_a/calls")) {
+        return jsonRes({
+          ok: true,
+          leadId: "lead_a",
+          items: [],
+          total: 0,
+          limit: 3,
+          offset: 0,
+          summary: { total: 0, connected: 0, attempts: 0 },
+        });
+      }
       return jsonRes({
         ok: true,
         items: [],
@@ -255,11 +266,14 @@ describe("B2B2 Follow-ups Pilot UI, Conflict Handling & Storage Isolation", () =
     expect(screen.queryByText("Local Owner Protected Client")).toBeNull();
     expect(screen.getByText("Initial pricing review")).toBeInTheDocument();
 
-    // Open lead inspector sheet -> dialer & WhatsApp remain explicitly disabled, lastContact stays "Never".
+    // Open lead inspector sheet -> dialer tel: link & Log call are enabled, WhatsApp stays disabled, lastContact stays "Never".
     fireEvent.click(screen.getByRole("button", { name: "View" }));
     expect(await screen.findByText("Never")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Call" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Log call" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: /Call Aarav Synthetic/i })).toHaveAttribute(
+      "href",
+      "tel:9820001122",
+    );
+    expect(screen.getByRole("button", { name: "Log call" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "WhatsApp" })).toBeDisabled();
 
     // Complete follow-up from inspector -> preserves lastContact as null ("Never"), moves to History.
@@ -578,6 +592,17 @@ describe("B2B2 Follow-ups Pilot UI, Conflict Handling & Storage Isolation", () =
           total: 0,
           limit: 100,
           offset: 0,
+        });
+      }
+      if (url.startsWith("/api/v1/leads/lead_arch_1/calls")) {
+        return jsonRes({
+          ok: true,
+          leadId: "lead_arch_1",
+          items: [],
+          total: 0,
+          limit: 25,
+          offset: 0,
+          summary: { total: 0, connected: 0, attempts: 0 },
         });
       }
       return jsonRes({ ok: false }, 404);

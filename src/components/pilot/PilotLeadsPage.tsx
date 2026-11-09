@@ -17,7 +17,6 @@ import {
   LayoutGrid,
   List,
   MessageCircle,
-  Phone,
   PhoneCall,
   Pin,
   Plus,
@@ -29,6 +28,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useCreateActivityMutation, useLeadActivitiesQuery } from "@/lib/api/activitiesApi";
+import { useLeadCallsQuery } from "@/lib/api/callsApi";
 import { createIdempotencyKey } from "@/lib/api/client";
 import { extractStaleConflict, formatApiErrorMessage, isApiError } from "@/lib/api/errors";
 import { useCompleteFollowUpMutation, useLeadFollowUpsQuery } from "@/lib/api/followupsApi";
@@ -59,12 +59,19 @@ import {
 } from "@/lib/crm/format";
 import type { LeadsSearch } from "@/lib/crm/leadsSearch";
 import { FOLLOWUP_LABEL, LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL } from "@/lib/crm/types";
+import { telHref } from "@/lib/crm/validation";
 import { Empty, Identity, PriorityBadge, selectCls } from "@/components/crm/ShellPrimitives";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { PilotAddLeadDialog } from "./PilotAddLeadDialog";
+import {
+  PilotCallDialog,
+  PilotCallLink,
+  type PilotCallLeadRef,
+  usePilotCallLauncher,
+} from "./PilotCallDialog";
 import { PilotArchiveDialog, PilotLostReasonDialog } from "./PilotDialogs";
 import {
   PilotCancelFollowUpDialog,
@@ -101,6 +108,7 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [followUpTarget, setFollowUpTarget] = useState<LeadDto | null>(null);
+  const { target: callTarget, dialLead, openLogOnly, close: closeCall } = usePilotCallLauncher();
 
   const [lostTarget, setLostTarget] = useState<LeadDto | null>(null);
   const [lostError, setLostError] = useState<string | null>(null);
@@ -635,6 +643,8 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
               }
               onStage={(s) => handleStageSelect(selectedLead, s)}
               quickSel={quickSel(selectedLead)}
+              onDial={dialLead}
+              onLogCall={(l) => openLogOnly(l, "Leads workspace")}
               onRemove={(kind) => {
                 setArchiveError(null);
                 setArchiveTarget({ lead: selectedLead, kind });
@@ -718,7 +728,19 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
                   </div>
                 </dl>
                 <div>{quickSel(l)}</div>
-                <div className="mt-auto flex items-center gap-1">
+                <div className="mt-auto flex flex-wrap items-center gap-1">
+                  <PilotCallLink lead={l} dialSource="Leads cards" onDialStarted={dialLead} />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="size-8 rounded-full"
+                    aria-label={`Log call for ${l.name}`}
+                    title="Log call"
+                    onClick={() => openLogOnly(l, "Leads cards")}
+                  >
+                    <PhoneCall className="size-4" />
+                  </Button>
                   <Button
                     type="button"
                     size="icon"
@@ -834,7 +856,22 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
                       <Identity name={l.name} company={l.company} />
                     </Link>
                   </td>
-                  <td className="num px-3 text-muted-foreground">{l.phone}</td>
+                  <td className="num px-3 text-muted-foreground">
+                    {telHref(l.phone) ? (
+                      <a
+                        href={telHref(l.phone) ?? undefined}
+                        className="hover:text-foreground hover:underline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          dialLead(l, "Leads");
+                        }}
+                      >
+                        {l.phone}
+                      </a>
+                    ) : (
+                      l.phone
+                    )}
+                  </td>
                   <td className="px-3">{l.source}</td>
                   <td className="px-3">
                     <PriorityBadge p={l.priority} />
@@ -968,6 +1005,8 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
         leadName={followUpTarget?.name}
         leadCompany={followUpTarget?.company}
       />
+
+      <PilotCallDialog target={callTarget} onClose={closeCall} />
     </PilotShell>
   );
 }
@@ -979,6 +1018,8 @@ function PilotLeadInspector({
   onPriority,
   onStage,
   quickSel,
+  onDial,
+  onLogCall,
   onRemove,
 }: {
   lead: LeadDto;
@@ -987,8 +1028,11 @@ function PilotLeadInspector({
   onPriority: (p: LeadPriorityApi) => void;
   onStage: (s: LeadStatusApi) => void;
   quickSel: React.ReactNode;
+  onDial: (lead: LeadDto | PilotCallLeadRef, dialSource: string) => void;
+  onLogCall: (lead: LeadDto) => void;
   onRemove: (kind: "waste" | "deleted") => void;
 }) {
+  const callsQuery = useLeadCallsQuery(lead.id, { limit: 5 });
   const activitiesQuery = useLeadActivitiesQuery(lead.id, { limit: 7 });
   const leadFollowUpsQuery = useLeadFollowUpsQuery(lead.id);
   const createActivityMutation = useCreateActivityMutation();
@@ -1083,24 +1127,13 @@ function PilotLeadInspector({
       </div>
 
       <div className="mt-6 flex flex-wrap items-center gap-2">
+        <PilotCallLink lead={lead} dialSource="Leads workspace" onDialStarted={onDial} />
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="rounded-full opacity-60"
-          disabled
-          title="Call dialer & logging connect in later checkpoints"
-        >
-          <Phone className="size-3.5" />
-          Call
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="rounded-full opacity-60"
-          disabled
-          title="Call logging connects in later checkpoints"
+          className="rounded-full"
+          onClick={() => onLogCall(lead)}
         >
           <PhoneCall className="size-3.5" />
           Log call
@@ -1299,6 +1332,58 @@ function PilotLeadInspector({
                   Schedule
                 </Button>
               </div>
+            )}
+          </div>
+
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="eyebrow">Calls (MariaDB)</span>
+              <span className="num text-[11px] text-muted-foreground">
+                {callsQuery.data?.summary.total ?? 0} total ·{" "}
+                {callsQuery.data?.summary.connected ?? 0} connected
+              </span>
+            </div>
+            {callsQuery.isLoading ? (
+              <div className="h-14 animate-pulse rounded-lg bg-muted" />
+            ) : callsQuery.isError ? (
+              <p role="alert" className="text-xs text-destructive">
+                {formatApiErrorMessage(callsQuery.error, "Could not load calls.")}
+              </p>
+            ) : (callsQuery.data?.items ?? []).length === 0 ? (
+              <div className="flex items-center justify-between gap-2 rounded-lg border p-3 text-xs">
+                <span className="text-muted-foreground">No calls logged yet (user-recorded).</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 rounded-full px-2.5 text-xs"
+                  onClick={() => onLogCall(lead)}
+                >
+                  <PhoneCall className="size-3" />
+                  Log call
+                </Button>
+              </div>
+            ) : (
+              <ul className="grid gap-1.5 text-xs">
+                {(callsQuery.data?.items ?? []).map((c) => (
+                  <li key={c.id} className="rounded-lg border bg-card p-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold">
+                        {c.outcome}{" "}
+                        <span className="font-normal text-muted-foreground">
+                          ({c.connected ? "Connected" : "Attempt"})
+                        </span>
+                      </span>
+                      <span className="num text-[11px] text-muted-foreground">
+                        {relative(c.at)}
+                      </span>
+                    </div>
+                    {c.notes && (
+                      <p className="mt-1 line-clamp-2 text-muted-foreground">{c.notes}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
 

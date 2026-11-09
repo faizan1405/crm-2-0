@@ -264,6 +264,56 @@ export const crmFollowUps = mysqlTable(
 );
 
 /**
+ * B2B3: Explicit user-recorded Lead call logs persisted atomically alongside `crm_lead_activities`
+ * and honest `crm_leads` stage / `quick_status` / `last_contact_at` synchronization.
+ */
+export const crmCallLogs = mysqlTable(
+  "crm_call_logs",
+  {
+    id: crmId("id").primaryKey(),
+    legacyId: crmId("legacy_id"),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "cascade" }),
+    leadId: crmId("lead_id")
+      .notNull()
+      .references(() => crmLeads.id, { onDelete: "cascade" }),
+    actorUserId: crmId("actor_user_id")
+      .notNull()
+      .references(() => crmUsers.id),
+    outcome: varchar("outcome", { length: 48 }).notNull(),
+    connected: boolean("connected").notNull(),
+    recordingSource: varchar("recording_source", { length: 24 }).notNull().default("user_recorded"),
+    notes: text("notes"),
+    dialSource: varchar("dial_source", { length: 64 }).notNull(),
+    stageBefore: varchar("stage_before", { length: 24 }).notNull(),
+    stageAfter: varchar("stage_after", { length: 24 }).notNull(),
+    quickStatusBefore: varchar("quick_status_before", { length: 32 }),
+    quickStatusAfter: varchar("quick_status_after", { length: 32 }),
+    leadActivityId: crmId("lead_activity_id").notNull(),
+    opId: varchar("op_id", { length: 128 }),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }),
+    occurredAt: utcDateTime("occurred_at").notNull(),
+    occurredIstDate: istDateChar("occurred_ist_date").notNull(),
+    occurredIstTime: char("occurred_ist_time", { length: 5 }).notNull(),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    uniqueIndex("uq_crm_call_logs_owner_legacy").on(table.ownerUserId, table.legacyId),
+    uniqueIndex("uq_crm_call_logs_owner_op").on(table.ownerUserId, table.opId),
+    uniqueIndex("uq_crm_call_logs_owner_idem").on(
+      table.ownerUserId,
+      table.leadId,
+      table.idempotencyKey,
+    ),
+    index("idx_crm_call_logs_lead_occurred").on(table.leadId, table.occurredAt),
+    index("idx_crm_call_logs_owner_occurred").on(table.ownerUserId, table.occurredAt),
+    index("idx_crm_call_logs_owner_ist_date").on(table.ownerUserId, table.occurredIstDate),
+    index("idx_crm_call_logs_activity").on(table.leadActivityId),
+  ],
+);
+
+/**
  * B2A: Supporting tag definitions & Lead tag mappings (mirrors src/lib/crm/customize.ts TagDef).
  */
 export const crmTagDefs = mysqlTable(
@@ -411,6 +461,7 @@ export const crmCoreSchema = {
   crmLeads,
   crmLeadActivities,
   crmFollowUps,
+  crmCallLogs,
   crmTagDefs,
   crmLeadTags,
   crmCustomFields,

@@ -1,7 +1,7 @@
 # CRM V2 — Checkpoint B2B1 Data-Contract Audit & Lead Pilot Architecture
 
-> **Status:** Checkpoint B2B1 (`feat/b2b1-lead-api-pilot`), extended in Checkpoint B2B2 (`feat/b2b2-followups-pilot`)  
-> **Scope:** Field-level and workflow-level compatibility audit between CRM V2 frontend models (`src/lib/crm/*`, `src/routes/leads*`, `src/routes/follow-ups.tsx`, `src/components/crm/*`) and B2A backend REST contracts (`src/server/crm/*`, `src/server/http/crmRoutes.server.ts`), plus the isolated dev-only Lead & Follow-ups Pilot architecture.  
+> **Status:** Checkpoint B2B1 (`feat/b2b1-lead-api-pilot`), extended in B2B2 (`feat/b2b2-followups-pilot`) and B2B3 (`feat/b2b3-call-logging`)
+> **Scope:** Field-level and workflow-level compatibility audit between CRM V2 frontend models (`src/lib/crm/*`, `src/routes/leads*`, `src/routes/follow-ups.tsx`, `src/components/crm/*`) and B2A/B2B3 backend REST contracts (`src/server/crm/*`, `src/server/http/crmRoutes.server.ts`), plus the isolated dev-only Leads, Calls & Follow-ups Pilot architecture.
 > **Non-Goals:** Zero migration of `Deals`, `Payments`, `Projects`, `Inbox`, `Automation Studio`, `Team Management`, `My Performance`, `Analytics`, or `AI Sales Copilot` live OpenRouter in B2B1/B2B2. Browser-local `localStorage` (`scale-flow-crm-2-demo`) and IndexedDB (`scale-flow-payment-proofs`) remain 100% untouched.
 
 ---
@@ -95,8 +95,8 @@ Although `/follow-ups` UI routes are **not migrated in B2B1**, `src/lib/api/foll
 4. **Data Vault (`src/routes/data-vault.tsx`):**
    - Exports/imports JSON snapshots of `scale-flow-crm-2-demo` + IndexedDB proof blobs (`scale-flow-payment-proofs`).
    - Completely isolated from Pilot mode; Owner's browser-local records remain intact and inspectable on `/data-vault`.
-5. **AI Sales Copilot (`src/routes/ai-copilot.tsx`) & Calls / WhatsApp:**
-   - Local routes read `useCRM()`; B5 implements server AI & `/api/v1/calls`, B4/later handles messaging. Therefore, Pilot Lead detail hides or visibly disables **Ask AI**, **Prepare Call with AI**, **Call / Log call**, **WhatsApp**, **Follow-up**, **Assign**, **Tags**, **Custom fields**, **Saved Views**, and **Bulk Add** with clear `B2B1 Pilot` status notes so users never accidentally write to local storage.
+5. **AI Sales Copilot (`src/routes/ai-copilot.tsx`) & WhatsApp / Custom Fields / Views:**
+   - Call dialing (`tel:`) and explicit `user_recorded` call logging (`POST /api/v1/calls`) are wired into the B2B3 Pilot via `PilotCallDialog` and `callsApi.ts` (see [`docs/crm-b2b3-call-logging.md`](./crm-b2b3-call-logging.md)). AI Copilot live OpenRouter, WhatsApp templates, **Assign**, **Tags**, **Custom fields**, **Saved Views**, and **Bulk Add** remain local/visibly disabled in Pilot until later checkpoints so users never accidentally write to local storage.
 
 ---
 

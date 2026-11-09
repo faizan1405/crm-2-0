@@ -48,6 +48,74 @@ export const QUICK_LABEL: Record<QuickStatus, string> = {
 export const FOLLOWUP_TYPES = ["call", "whatsapp", "meeting", "email"] as const;
 export type FollowUpType = (typeof FOLLOWUP_TYPES)[number];
 
+export const CALL_OUTCOMES = [
+  "Connected",
+  "Not picked",
+  "Busy",
+  "Call back later",
+  "Interested",
+  "Not interested",
+  "Qualified",
+  "Proposal Sent",
+  "Won",
+  "Lost",
+] as const;
+export type CallOutcome = (typeof CALL_OUTCOMES)[number];
+
+/**
+ * Mirrors src/lib/crm/calllog.ts `isConnectedOutcome`.
+ * "Not picked" and "Busy" are dial attempts only and NEVER count as successful contact.
+ */
+export function isConnectedCallOutcome(outcome: CallOutcome): boolean {
+  return outcome !== "Not picked" && outcome !== "Busy";
+}
+
+/**
+ * Mirrors src/lib/crm/calllog.ts `outcomeStage`.
+ */
+export function resolveOutcomeStage(outcome: CallOutcome, current: LeadStatus): LeadStatus {
+  const map: Partial<Record<CallOutcome, LeadStatus>> = {
+    Qualified: "qualified",
+    "Proposal Sent": "proposal",
+    Won: "won",
+    Lost: "lost",
+    "Not interested": "lost",
+  };
+  if (map[outcome]) return map[outcome]!;
+  if ((outcome === "Connected" || outcome === "Interested") && current === "new") {
+    return "contacted";
+  }
+  return current;
+}
+
+/** Moving to Won or Lost from a call needs explicit confirmation. */
+export function needsCallStageConfirmation(target: LeadStatus, current: LeadStatus): boolean {
+  return target !== current && (target === "won" || target === "lost");
+}
+
+/**
+ * Mirrors src/lib/crm/calllog.ts `quickAfterCall`.
+ * A connected outcome clears stale unreachable markers (`not_picked` / `busy`).
+ */
+export function resolveQuickStatusAfterCall(
+  outcome: CallOutcome,
+  current: QuickStatus | null,
+): { set: boolean; value: QuickStatus | null } {
+  const map: Partial<Record<CallOutcome, QuickStatus>> = {
+    "Not picked": "not_picked",
+    Busy: "busy",
+    "Call back later": "callback",
+    Interested: "interested",
+    "Not interested": "not_interested",
+  };
+  const mapped = map[outcome];
+  if (mapped) return { set: true, value: mapped };
+  if (isConnectedCallOutcome(outcome) && (current === "not_picked" || current === "busy")) {
+    return { set: true, value: null };
+  }
+  return { set: false, value: current };
+}
+
 export const ALL_ACTIVITY_TYPES = [
   "created",
   "merged",
@@ -390,3 +458,48 @@ export const cancelFollowUpBodySchema = z.object({
 });
 
 export type CancelFollowUpInput = z.infer<typeof cancelFollowUpBodySchema>;
+
+export const createCallLogBodySchema = z.object({
+  leadId: z.string().trim().min(1, "Lead is required").max(64),
+  outcome: z.enum(CALL_OUTCOMES, {
+    errorMap: () => ({ message: "Pick a valid call outcome" }),
+  }),
+  notes: optionalTrimmedString(5000),
+  stage: z.enum(LEAD_STATUSES).optional(),
+  confirmed: z.boolean().default(false),
+  lostReason: optionalTrimmedString(500),
+  dialSource: z.preprocess(
+    (v) =>
+      typeof v === "string" && v.trim() === "" ? undefined : typeof v === "string" ? v.trim() : v,
+    z.string().min(1).max(64).default("CRM"),
+  ),
+  expectedLeadVersion: z.number().int().min(1, "Expected integer record version >= 1.").optional(),
+  opId: optionalTrimmedString(128),
+  idempotencyKey: optionalTrimmedString(128),
+});
+
+export type CreateCallLogInput = z.infer<typeof createCallLogBodySchema>;
+
+export const listCallsQuerySchema = z.object({
+  leadId: optionalTrimmedString(64),
+  outcome: z.enum(["all", ...CALL_OUTCOMES]).default("all"),
+  connected: z.enum(["all", "true", "false"]).default("all"),
+  dateIst: optionalTrimmedString(10).refine(
+    (v) => v === undefined || isValidCalendarDay(v),
+    "dateIst must be a valid YYYY-MM-DD calendar date",
+  ),
+  leadLifecycle: z.enum(["active", "all", "waste", "deleted"]).default("active"),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+export type ListCallsQuery = z.infer<typeof listCallsQuerySchema>;
+
+export const listLeadCallsQuerySchema = z.object({
+  outcome: z.enum(["all", ...CALL_OUTCOMES]).default("all"),
+  connected: z.enum(["all", "true", "false"]).default("all"),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+export type ListLeadCallsQuery = z.infer<typeof listLeadCallsQuerySchema>;

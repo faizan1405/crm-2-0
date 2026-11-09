@@ -11,6 +11,12 @@ import {
 } from "../auth/security.server";
 import type { ServerEnv } from "../config/env.server";
 import { createLeadActivity, listLeadActivities } from "../crm/activitiesService.server";
+import {
+  createCallLogRecord,
+  getCallLogRecord,
+  listCallLogs,
+  listCallLogsForLead,
+} from "../crm/callsService.server";
 import { CrmServiceError } from "../crm/errors.server";
 import {
   cancelFollowUpRecord,
@@ -35,10 +41,13 @@ import {
   cancelFollowUpBodySchema,
   completeFollowUpBodySchema,
   createActivityBodySchema,
+  createCallLogBodySchema,
   createFollowUpBodySchema,
   createLeadBodySchema,
   listActivitiesQuerySchema,
+  listCallsQuerySchema,
   listFollowUpsQuerySchema,
+  listLeadCallsQuerySchema,
   listLeadsQuerySchema,
   restoreLeadBodySchema,
   updateFollowUpBodySchema,
@@ -335,15 +344,19 @@ function hasRequestBodyHint(request: Request): boolean {
 }
 
 /**
- * Handles all Checkpoint B2A Core CRM `/api/v1/leads*` and `/api/v1/follow-ups*` endpoints.
- * Returns `null` if the pathname does not match any B2A CRM route.
+ * Handles all Core CRM `/api/v1/leads*`, `/api/v1/follow-ups*`, and `/api/v1/calls*` endpoints.
+ * Returns `null` if the pathname does not match any CRM route.
  */
 export async function handleCrmApiRequest(
   request: Request,
   pathname: string,
   env: ServerEnv,
 ): Promise<Response | null> {
-  if (!pathname.startsWith("/api/v1/leads") && !pathname.startsWith("/api/v1/follow-ups")) {
+  if (
+    !pathname.startsWith("/api/v1/leads") &&
+    !pathname.startsWith("/api/v1/follow-ups") &&
+    !pathname.startsWith("/api/v1/calls")
+  ) {
     return null;
   }
 
@@ -618,6 +631,18 @@ export async function handleCrmApiRequest(
           const result = await listFollowUpsForLead(auth.db, auth.userId, leadId);
           return jsonResponse({ ok: true, ...result }, 200);
         }
+
+        // GET /api/v1/leads/:id/calls
+        if (subresource === "calls") {
+          if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const query = listLeadCallsQuerySchema.parse(searchParamsObject(parsedUrl));
+          const result = await listCallLogsForLead(auth.db, auth.userId, leadId, query);
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
       }
 
       return null;
@@ -782,6 +807,68 @@ export async function handleCrmApiRequest(
             res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
           );
         }
+      }
+
+      return null;
+    }
+
+    if (resource === "calls") {
+      // GET|POST /api/v1/calls
+      if (segments.length === 3) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const query = listCallsQuerySchema.parse(searchParamsObject(parsedUrl));
+          const result = await listCallLogs(auth.db, auth.userId, query);
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
+
+        if (request.method === "POST") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = createCallLogBodySchema.parse(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+            opId: input.opId,
+          });
+
+          const res = await createCallLogRecord(auth.db, auth.userId, auth.userId, input, {
+            idempotencyKey: idemKey,
+          });
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        return methodNotAllowed(["GET", "POST"]);
+      }
+
+      // GET /api/v1/calls/:id
+      if (segments.length === 4) {
+        const idSeg = decodeIdSegment(segments[3] ?? "");
+        if (!idSeg.ok) return idSeg.response;
+        const callId = idSeg.value;
+
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const call = await getCallLogRecord(auth.db, auth.userId, callId);
+          return jsonResponse({ ok: true, call }, 200);
+        }
+
+        return methodNotAllowed(["GET"]);
       }
 
       return null;
