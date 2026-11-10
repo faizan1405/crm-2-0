@@ -1190,6 +1190,159 @@ export const crmProjectAuditEvents = mysqlTable(
   ],
 );
 
+/**
+ * B6A: Owner-scoped persistent business configuration and operational preferences.
+ * Strictly separates business configuration from device-local UI prefs and auth credentials.
+ */
+export const crmOwnerSettings = mysqlTable(
+  "crm_owner_settings",
+  {
+    id: crmId("id").primaryKey(),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    ownerDisplayName: varchar("owner_display_name", { length: 120 }),
+    businessName: varchar("business_name", { length: 160 }),
+    profileEmail: varchar("profile_email", { length: 191 }),
+    businessPhone: varchar("business_phone", { length: 32 }),
+    businessWebsite: varchar("business_website", { length: 255 }),
+    businessAddress: text("business_address"),
+    gstin: varchar("gstin", { length: 32 }),
+    paymentInstructions: text("payment_instructions"),
+    businessTimezone: varchar("business_timezone", { length: 64 })
+      .notNull()
+      .default("Asia/Kolkata"),
+    currencyCode: varchar("currency_code", { length: 8 }).notNull().default("INR"),
+    defaultLeadSort: varchar("default_lead_sort", { length: 24 }).notNull().default("recent"),
+    notifyFollowUps: boolean("notify_follow_ups").notNull().default(true),
+    notifyPayments: boolean("notify_payments").notNull().default(true),
+    notifyDigest: boolean("notify_digest").notNull().default(false),
+    notifyGoalAchieved: boolean("notify_goal_achieved").notNull().default(true),
+    notifyTeamGoal: boolean("notify_team_goal").notNull().default(true),
+    notifyMilestone: boolean("notify_milestone").notNull().default(false),
+    notifyOverdue: boolean("notify_overdue").notNull().default(true),
+    overdueThreshold: int("overdue_threshold").notNull().default(10),
+    updatedByUserId: crmId("updated_by_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    version: versionCol("version"),
+    ...auditTimestamps(),
+  },
+  (table) => [uniqueIndex("uq_crm_os_owner").on(table.ownerUserId)],
+);
+
+/**
+ * B6A: Append-only audit trail for material business configuration changes.
+ */
+export const crmSettingsAuditEvents = mysqlTable(
+  "crm_settings_audit_events",
+  {
+    id: crmId("id").primaryKey(),
+    settingsId: crmId("settings_id")
+      .notNull()
+      .references(() => crmOwnerSettings.id, { onDelete: "restrict" }),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    actorUserId: crmId("actor_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    section: varchar("section", { length: 32 }).notNull(),
+    eventType: varchar("event_type", { length: 48 }).notNull(),
+    summary: varchar("summary", { length: 255 }).notNull(),
+    changedFieldsJson: text("changed_fields_json").notNull(),
+    beforeJson: text("before_json"),
+    afterJson: text("after_json").notNull(),
+    versionBefore: int("version_before").notNull(),
+    versionAfter: int("version_after").notNull(),
+    occurredIstDate: istDateChar("occurred_ist_date").notNull(),
+    createdAt: utcDateTime("created_at").notNull(),
+  },
+  (table) => [
+    index("idx_crm_sae_owner_created").on(table.ownerUserId, table.createdAt),
+    index("idx_crm_sae_settings_created").on(table.settingsId, table.createdAt),
+  ],
+);
+
+/**
+ * B6A: Owner-scoped Sales Goals with explicit metric, scope, period, effective IST date,
+ * exact count/INR target (nullable when explicitly unset), optimistic locking, and soft archive.
+ */
+export const crmSalesGoals = mysqlTable(
+  "crm_sales_goals",
+  {
+    id: crmId("id").primaryKey(),
+    legacyId: crmId("legacy_id"),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    name: varchar("name", { length: 120 }).notNull(),
+    metric: varchar("metric", { length: 48 }).notNull(),
+    scope: varchar("scope", { length: 24 }).notNull().default("owner"),
+    targetUnit: varchar("target_unit", { length: 16 }).notNull(),
+    targetCount: int("target_count"),
+    targetAmount: inrDecimal("target_amount"),
+    period: varchar("period", { length: 24 }).notNull(),
+    customFromIst: istDateChar("custom_from_ist"),
+    customToIst: istDateChar("custom_to_ist"),
+    effectiveFromIst: istDateChar("effective_from_ist").notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("active"),
+    archivedAt: utcDateTime("archived_at"),
+    archiveReason: varchar("archive_reason", { length: 255 }),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }),
+    createdByUserId: crmId("created_by_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    updatedByUserId: crmId("updated_by_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    version: versionCol("version"),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    uniqueIndex("uq_crm_sg_owner_legacy").on(table.ownerUserId, table.legacyId),
+    uniqueIndex("uq_crm_sg_owner_idem").on(table.ownerUserId, table.idempotencyKey),
+    index("idx_crm_sg_owner_status").on(table.ownerUserId, table.status),
+    index("idx_crm_sg_owner_metric").on(table.ownerUserId, table.metric),
+    index("idx_crm_sg_owner_created").on(table.ownerUserId, table.createdAt),
+  ],
+);
+
+/**
+ * B6A: Immutable append-only revision history for Sales Goals (`definitionOn` time-travel accuracy).
+ */
+export const crmSalesGoalRevisions = mysqlTable(
+  "crm_sales_goal_revisions",
+  {
+    id: crmId("id").primaryKey(),
+    goalId: crmId("goal_id")
+      .notNull()
+      .references(() => crmSalesGoals.id, { onDelete: "restrict" }),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    actorUserId: crmId("actor_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    revisionNumber: int("revision_number").notNull(),
+    eventType: varchar("event_type", { length: 32 }).notNull(),
+    effectiveFromIst: istDateChar("effective_from_ist").notNull(),
+    snapshotJson: text("snapshot_json").notNull(),
+    changeSummary: varchar("change_summary", { length: 255 }).notNull(),
+    occurredIstDate: istDateChar("occurred_ist_date").notNull(),
+    createdAt: utcDateTime("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("uq_crm_sgr_goal_rev").on(table.goalId, table.revisionNumber),
+    index("idx_crm_sgr_owner_goal_rev").on(table.ownerUserId, table.goalId, table.revisionNumber),
+    index("idx_crm_sgr_owner_effective").on(
+      table.ownerUserId,
+      table.goalId,
+      table.effectiveFromIst,
+    ),
+  ],
+);
+
 export const b1aFoundationSchema = {
   crmSchemaMeta,
 } as const;
@@ -1230,6 +1383,13 @@ export const crmProjectsSchema = {
   crmProjectAuditEvents,
 } as const;
 
+export const crmSettingsGoalsSchema = {
+  crmOwnerSettings,
+  crmSettingsAuditEvents,
+  crmSalesGoals,
+  crmSalesGoalRevisions,
+} as const;
+
 export const crmCoreSchema = {
   crmLeads,
   crmLeadActivities,
@@ -1244,6 +1404,7 @@ export const crmCoreSchema = {
   ...crmFinanceSchema,
   ...crmQuotationSchema,
   ...crmProjectsSchema,
+  ...crmSettingsGoalsSchema,
 } as const;
 
 export const appSchema = {

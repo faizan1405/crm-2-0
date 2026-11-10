@@ -64,6 +64,13 @@
       "when": 1794295255209,
       "tag": "0008_b5a_projects",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1794309689120,
+      "tag": "0009_b6a_settings_goals",
+      "breakpoints": true
     }
   ]
 }

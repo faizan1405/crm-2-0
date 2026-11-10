@@ -53,6 +53,11 @@ export type CrmErrorCode =
   | "dependency_not_found"
   | "resolution_required"
   | "idempotency_key_mismatch"
+  | "goal_not_found"
+  | "goal_archived"
+  | "goal_already_archived"
+  | "forbidden_setting_key"
+  | "unsupported_metric"
   | "crm_unavailable";
 
 export interface CrmErrorPayload {

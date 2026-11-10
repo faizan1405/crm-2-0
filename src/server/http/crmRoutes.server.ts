@@ -206,6 +206,34 @@ import {
   voidPaymentBodySchema,
 } from "../crm/validation.server";
 import {
+  archiveGoalRecord,
+  changeGoalStatusRecord,
+  createGoalRecord,
+  getGoalProgressRecord,
+  getGoalRecord,
+  listActiveGoalsProgressRecord,
+  listGoalRevisionsRecord,
+  listGoalsRecord,
+  updateGoalRecord,
+} from "../crm/goalsService.server";
+import {
+  getOwnerSettingsRecord,
+  getSettingsDefinitionsRecord,
+  listSettingsAuditEventsRecord,
+  updateOwnerSettingsRecord,
+} from "../crm/settingsService.server";
+import {
+  archiveGoalBodySchema,
+  changeGoalStatusBodySchema,
+  goalProgressQuerySchema,
+  listGoalRevisionsQuerySchema,
+  listGoalsQuerySchema,
+  listSettingsAuditQuerySchema,
+  parseCreateGoalBody,
+  parseUpdateGoalBody,
+  parseUpdateSettingsBody,
+} from "../crm/settingsGoalsValidation.server";
+import {
   createWhatsAppLogRecord,
   getWhatsAppLogRecord,
   listWhatsAppLogs,
@@ -857,7 +885,9 @@ export async function handleCrmApiRequest(
     !pathname.startsWith("/api/v1/deliverables") &&
     !pathname.startsWith("/api/v1/support-tickets") &&
     !pathname.startsWith("/api/v1/project-templates") &&
-    !pathname.startsWith("/api/v1/analytics")
+    !pathname.startsWith("/api/v1/analytics") &&
+    !pathname.startsWith("/api/v1/settings") &&
+    !pathname.startsWith("/api/v1/goals")
   ) {
     return null;
   }
@@ -3229,6 +3259,272 @@ export async function handleCrmApiRequest(
             query.from,
             query.to,
           );
+          return jsonResponse(result, 200);
+        }
+      }
+
+      return null;
+    }
+
+    // =======================================================================
+    // OWNER BUSINESS SETTINGS & DEFINITIONS ENDPOINTS (B6A)
+    // =======================================================================
+    if (resource === "settings") {
+      // GET|PUT|PATCH /api/v1/settings
+      if (segments.length === 3) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const settings = await getOwnerSettingsRecord(auth.db, auth.userId);
+          return jsonResponse({ ok: true, settings }, 200);
+        }
+
+        if (request.method === "PUT" || request.method === "PATCH") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = parseUpdateSettingsBody(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+
+          const res = await updateOwnerSettingsRecord(auth.db, auth.userId, auth.userId, input, {
+            idempotencyKey: idemKey,
+          });
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        return methodNotAllowed(["GET", "PUT", "PATCH"]);
+      }
+
+      const sub = segments[3];
+
+      // GET /api/v1/settings/definitions
+      if (segments.length === 4 && sub === "definitions") {
+        if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+        const auth = await requireAuthenticatedOwnerDb(request, env);
+        if (!auth.ok) return auth.response;
+
+        return jsonResponse(getSettingsDefinitionsRecord(), 200);
+      }
+
+      // GET /api/v1/settings/audit
+      if (segments.length === 4 && sub === "audit") {
+        if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+        const auth = await requireAuthenticatedOwnerDb(request, env);
+        if (!auth.ok) return auth.response;
+
+        const query = listSettingsAuditQuerySchema.parse(searchParamsObject(parsedUrl));
+        const result = await listSettingsAuditEventsRecord(auth.db, auth.userId, query);
+        return jsonResponse({ ok: true, ...result }, 200);
+      }
+
+      return null;
+    }
+
+    // =======================================================================
+    // OWNER SALES GOALS & GOAL PROGRESS ENDPOINTS (B6A)
+    // =======================================================================
+    if (resource === "goals") {
+      // GET|POST /api/v1/goals
+      if (segments.length === 3) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const query = listGoalsQuerySchema.parse(searchParamsObject(parsedUrl));
+          const result = await listGoalsRecord(auth.db, auth.userId, query);
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
+
+        if (request.method === "POST") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = parseCreateGoalBody(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+
+          const res = await createGoalRecord(auth.db, auth.userId, auth.userId, input, {
+            idempotencyKey: idemKey,
+          });
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        return methodNotAllowed(["GET", "POST"]);
+      }
+
+      // GET /api/v1/goals/progress
+      if (segments.length === 4 && segments[3] === "progress") {
+        if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+        const auth = await requireAuthenticatedOwnerDb(request, env);
+        if (!auth.ok) return auth.response;
+
+        const query = goalProgressQuerySchema.parse(searchParamsObject(parsedUrl));
+        const result = await listActiveGoalsProgressRecord(auth.db, auth.userId, query);
+        return jsonResponse(result, 200);
+      }
+
+      const idSeg = decodeIdSegment(segments[3] ?? "");
+      if (!idSeg.ok) return idSeg.response;
+      const goalId = idSeg.value;
+
+      // GET|PATCH /api/v1/goals/:id
+      if (segments.length === 4) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const result = await getGoalRecord(auth.db, auth.userId, goalId);
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
+
+        if (request.method === "PATCH") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = parseUpdateGoalBody(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+
+          const res = await updateGoalRecord(auth.db, auth.userId, auth.userId, goalId, input, {
+            idempotencyKey: idemKey,
+          });
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        return methodNotAllowed(["GET", "PATCH"]);
+      }
+
+      if (segments.length === 5) {
+        const sub = segments[4];
+
+        // POST|PATCH /api/v1/goals/:id/status
+        if (sub === "status") {
+          if (request.method !== "POST" && request.method !== "PATCH") {
+            return methodNotAllowed(["POST", "PATCH"]);
+          }
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = changeGoalStatusBodySchema.parse(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+
+          const res = await changeGoalStatusRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            goalId,
+            input,
+            { idempotencyKey: idemKey },
+          );
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        // POST /api/v1/goals/:id/archive
+        if (sub === "archive") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const hasBody = hasRequestBodyHint(request);
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: hasBody });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request, { allowEmpty: true });
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = archiveGoalBodySchema.parse(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+
+          const res = await archiveGoalRecord(auth.db, auth.userId, auth.userId, goalId, input, {
+            idempotencyKey: idemKey,
+          });
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        // GET /api/v1/goals/:id/revisions
+        if (sub === "revisions") {
+          if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const query = listGoalRevisionsQuerySchema.parse(searchParamsObject(parsedUrl));
+          const result = await listGoalRevisionsRecord(auth.db, auth.userId, goalId, query);
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
+
+        // GET /api/v1/goals/:id/progress
+        if (sub === "progress") {
+          if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const query = goalProgressQuerySchema.parse(searchParamsObject(parsedUrl));
+          const result = await getGoalProgressRecord(auth.db, auth.userId, goalId, query);
           return jsonResponse(result, 200);
         }
       }
