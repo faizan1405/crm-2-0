@@ -18,6 +18,7 @@ import {
   SunMedium,
   XCircle,
   FileText,
+  Lock,
   Plus,
 } from "lucide-react";
 import { useCreateActivityMutation, useLeadActivitiesQuery } from "@/lib/api/activitiesApi";
@@ -47,6 +48,18 @@ import {
   useRestoreLeadMutation,
   useUpdateLeadMutation,
 } from "@/lib/api/leadsApi";
+import {
+  useCustomFieldsQuery,
+  useLeadCustomFieldsQuery,
+  useSetLeadCustomFieldsMutation,
+  useTagsQuery,
+  useLeadTagsQuery,
+  useAddTagToLeadMutation,
+  useRemoveTagFromLeadMutation,
+  type CustomFieldDto,
+  type TagDto,
+  type TagColorApi,
+} from "@/lib/api/customizationsApi";
 import {
   MANUAL_ACTIVITY_TYPES_API,
   type DuplicateLeadConflict,
@@ -123,6 +136,284 @@ const formOf = (l: LeadDto): Record<string, string> => ({
   notes: l.notes ?? "",
 });
 
+const TAG_COLOR_BADGES: Record<TagColorApi, string> = {
+  graphite: "bg-zinc-800 text-zinc-100 border-zinc-700",
+  green: "bg-emerald-950/70 text-emerald-300 border-emerald-800/60",
+  amber: "bg-amber-950/70 text-amber-300 border-amber-800/60",
+  rose: "bg-rose-950/70 text-rose-300 border-rose-800/60",
+  sky: "bg-sky-950/70 text-sky-300 border-sky-800/60",
+  violet: "bg-purple-950/70 text-purple-300 border-purple-800/60",
+};
+
+const TAG_COLOR_DOTS: Record<TagColorApi, string> = {
+  graphite: "bg-zinc-400",
+  green: "bg-emerald-400",
+  amber: "bg-amber-400",
+  rose: "bg-rose-400",
+  sky: "bg-sky-400",
+  violet: "bg-purple-400",
+};
+
+function formatCustomFieldValue(field: CustomFieldDto, val: unknown): React.ReactNode {
+  if (val === undefined || val === null || val === "") {
+    return field.required ? (
+      <span className="text-amber-500 font-semibold">Needs completion</span>
+    ) : (
+      "—"
+    );
+  }
+  if (field.type === "currency") {
+    if (typeof val === "object" && val !== null && "amount" in val) {
+      return formatINR((val as { amount: number }).amount);
+    }
+    if (typeof val === "number") return formatINR(val);
+  }
+  if (field.type === "checkbox") {
+    return val ? "Yes" : "No";
+  }
+  if (field.type === "select") {
+    const opt = field.options.find((o) => o.id === val);
+    return opt?.label ?? String(val);
+  }
+  if (field.type === "multiselect" && Array.isArray(val)) {
+    const labels = val.map((v) => {
+      const opt = field.options.find((o) => o.id === v);
+      return opt?.label ?? String(v);
+    });
+    return labels.join(", ") || "—";
+  }
+  if (field.type === "url") {
+    const s = String(val);
+    const href = s.startsWith("http://") || s.startsWith("https://") ? s : `https://${s}`;
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">
+        {s}
+      </a>
+    );
+  }
+  return String(val);
+}
+
+function CustomFieldValueInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: CustomFieldDto;
+  value: unknown;
+  onChange: (val: unknown) => void;
+}) {
+  switch (field.type) {
+    case "checkbox": {
+      const isTrue = value === true || value === "true" || value === 1;
+      const isFalse = value === false || value === "false" || value === 0;
+      return (
+        <div className="flex items-center gap-3 text-xs pt-1">
+          <label className="flex items-center gap-1 cursor-pointer">
+            <input
+              type="radio"
+              name={`cf-${field.id}`}
+              checked={isTrue}
+              onChange={() => onChange(true)}
+            />
+            <span>Yes</span>
+          </label>
+          <label className="flex items-center gap-1 cursor-pointer">
+            <input
+              type="radio"
+              name={`cf-${field.id}`}
+              checked={isFalse}
+              onChange={() => onChange(false)}
+            />
+            <span>No</span>
+          </label>
+          {(isTrue || isFalse) && (
+            <button
+              type="button"
+              onClick={() => onChange(undefined)}
+              className="text-muted-foreground hover:text-foreground underline text-[11px]"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    case "select":
+      return (
+        <select
+          id={`cf-input-${field.id}`}
+          data-testid={`cf-input-${field.id}`}
+          value={String(value ?? "")}
+          onChange={(e) => onChange(e.target.value ? e.target.value : undefined)}
+          className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs"
+        >
+          <option value="">— Unset —</option>
+          {field.options
+            .filter((o) => !o.archived || o.id === value)
+            .map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+                {o.archived ? " (archived)" : ""}
+              </option>
+            ))}
+        </select>
+      );
+
+    case "multiselect": {
+      const cur = Array.isArray(value) ? value : [];
+      return (
+        <div id={`cf-input-${field.id}`} data-testid={`cf-input-${field.id}`} className="flex flex-wrap gap-1.5 pt-1">
+          {field.options.map((o) => {
+            const isSelected = cur.includes(o.id);
+            return (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => {
+                  if (isSelected) {
+                    onChange(cur.filter((id) => id !== o.id));
+                  } else {
+                    onChange([...cur, o.id]);
+                  }
+                }}
+                className={cn(
+                  "rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
+                  isSelected
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+
+    case "date":
+      return (
+        <Input
+          id={`cf-input-${field.id}`}
+          data-testid={`cf-input-${field.id}`}
+          type="date"
+          value={String(value ?? "")}
+          onChange={(e) => onChange(e.target.value ? e.target.value : undefined)}
+          className="h-8 text-xs"
+        />
+      );
+
+    case "currency": {
+      const numVal =
+        typeof value === "object" && value !== null && "amount" in value
+          ? (value as { amount: number }).amount
+          : typeof value === "number"
+            ? value
+            : String(value ?? "");
+      return (
+        <div className="relative">
+          <span className="pointer-events-none absolute left-2.5 top-2 text-xs text-muted-foreground">
+            ₹
+          </span>
+          <Input
+            id={`cf-input-${field.id}`}
+            data-testid={`cf-input-${field.id}`}
+            type="number"
+            className="pl-6 h-8 text-xs"
+            placeholder="0"
+            value={numVal}
+            onChange={(e) => {
+              const str = e.target.value;
+              onChange(
+                str === "" ? undefined : { amount: Number(str), currency: field.currency ?? "INR" },
+              );
+            }}
+          />
+        </div>
+      );
+    }
+
+    case "number":
+      return (
+        <Input
+          id={`cf-input-${field.id}`}
+          data-testid={`cf-input-${field.id}`}
+          type="number"
+          placeholder="0"
+          value={value !== undefined ? String(value) : ""}
+          onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+          className="h-8 text-xs"
+        />
+      );
+
+    case "longtext":
+      return (
+        <Textarea
+          id={`cf-input-${field.id}`}
+          data-testid={`cf-input-${field.id}`}
+          rows={3}
+          value={String(value ?? "")}
+          onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)}
+          className="text-xs"
+          placeholder={field.description ?? "Enter notes..."}
+        />
+      );
+
+    case "email":
+      return (
+        <Input
+          id={`cf-input-${field.id}`}
+          data-testid={`cf-input-${field.id}`}
+          type="email"
+          placeholder="email@example.com"
+          value={String(value ?? "")}
+          onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)}
+          className="h-8 text-xs"
+        />
+      );
+
+    case "url":
+      return (
+        <Input
+          id={`cf-input-${field.id}`}
+          data-testid={`cf-input-${field.id}`}
+          type="url"
+          placeholder="https://..."
+          value={String(value ?? "")}
+          onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)}
+          className="h-8 text-xs"
+        />
+      );
+
+    case "phone":
+      return (
+        <Input
+          id={`cf-input-${field.id}`}
+          data-testid={`cf-input-${field.id}`}
+          type="tel"
+          placeholder="9876543210"
+          value={String(value ?? "")}
+          onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)}
+          className="h-8 text-xs"
+        />
+      );
+
+    default:
+      return (
+        <Input
+          id={`cf-input-${field.id}`}
+          data-testid={`cf-input-${field.id}`}
+          type="text"
+          value={String(value ?? "")}
+          onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)}
+          className="h-8 text-xs"
+        />
+      );
+  }
+}
+
 export function PilotLeadDetailPage({ id }: { id: string }) {
   const navigate = useNavigate();
   const leadQuery = useLeadQuery(id);
@@ -143,6 +434,20 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
   const createActivityMutation = useCreateActivityMutation();
   const completeFollowUpMutation = useCompleteFollowUpMutation();
   const rescheduleFollowUpMutation = useRescheduleFollowUpMutation();
+
+  const leadTagsQuery = useLeadTagsQuery(id);
+  const allTagsQuery = useTagsQuery();
+  const addTagMutation = useAddTagToLeadMutation(id);
+  const removeTagMutation = useRemoveTagFromLeadMutation(id);
+
+  const customFieldsQuery = useCustomFieldsQuery("lead");
+  const leadCustomFieldsQuery = useLeadCustomFieldsQuery(id);
+  const setLeadCustomFieldsMutation = useSetLeadCustomFieldsMutation(id);
+
+  const [editingCustomFields, setEditingCustomFields] = useState(false);
+  const [customFieldsDraft, setCustomFieldsDraft] = useState<Record<string, unknown>>({});
+  const [customFieldsError, setCustomFieldsError] = useState<string | null>(null);
+  const [tagPickerOpen, setTagPickerOpen] = useState(false);
 
   const [edit, setEdit] = useState(false);
   const [lostOpen, setLostOpen] = useState(false);
@@ -580,33 +885,270 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
               </dl>
             )}
 
-            <div className="mt-5 flex flex-wrap items-center gap-2 border-t pt-4">
-              <span className="text-xs text-muted-foreground">Tags</span>
-              {lead.tagIds.length > 0 ? (
-                <span className="text-xs text-foreground">
-                  {lead.tagIds.join(", ")} (read-only in B2B1 Pilot)
+            {/* Server-Backed Tags Section */}
+            <div className="mt-5 border-t pt-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Lead Tags
                 </span>
+                {!archived && (
+                  <div className="relative">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setTagPickerOpen((o) => !o)}
+                      className="h-6 px-2 text-[11px] gap-1 rounded-md"
+                    >
+                      <Plus className="size-3" /> Add Tag
+                    </Button>
+                    {tagPickerOpen && (
+                      <div className="absolute right-0 top-7 z-20 w-48 rounded-lg border bg-popover p-1 shadow-md">
+                        <div className="text-[10px] font-semibold text-muted-foreground px-2 py-1">
+                          Select a tag to assign
+                        </div>
+                        {(() => {
+                          const assignedIds = new Set(
+                            leadTagsQuery.data?.tags.map((t) => t.id) ?? lead.tagIds,
+                          );
+                          const unassigned = (allTagsQuery.data?.items ?? []).filter(
+                            (t) => t.status === "active" && !assignedIds.has(t.id),
+                          );
+                          if (unassigned.length === 0) {
+                            return (
+                              <div className="p-2 text-xs text-muted-foreground italic">
+                                No unassigned tags
+                              </div>
+                            );
+                          }
+                          return unassigned.map((t) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  await addTagMutation.mutateAsync(t.id);
+                                  toast.success(`Tag "${t.name}" added`);
+                                  setTagPickerOpen(false);
+                                } catch (err) {
+                                  toast.error(formatApiErrorMessage(err, "Failed to add tag"));
+                                }
+                              }}
+                              className="flex w-full items-center gap-1.5 px-2 py-1 text-xs rounded hover:bg-muted text-left"
+                            >
+                              <span
+                                className={cn("size-2 rounded-full", TAG_COLOR_DOTS[t.color])}
+                              />
+                              {t.name}
+                            </button>
+                          ));
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {leadTagsQuery.isLoading ? (
+                <div className="flex gap-2">
+                  <div className="h-5 w-16 bg-muted rounded-full animate-pulse" />
+                </div>
+              ) : (leadTagsQuery.data?.tags ?? []).length > 0 ? (
+                <div className="flex flex-wrap gap-1.5" data-testid="lead-tags-container">
+                  {leadTagsQuery.data!.tags.map((t) => {
+                    const style = TAG_COLOR_BADGES[t.color] ?? TAG_COLOR_BADGES.graphite;
+                    return (
+                      <span
+                        key={t.id}
+                        data-testid={`lead-tag-chip-${t.id}`}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border",
+                          style,
+                        )}
+                      >
+                        <span className={cn("size-1.5 rounded-full", TAG_COLOR_DOTS[t.color])} />
+                        {t.name}
+                        {!archived && (
+                          <button
+                            type="button"
+                            aria-label={`Remove tag ${t.name}`}
+                            onClick={async () => {
+                              try {
+                                await removeTagMutation.mutateAsync(t.id);
+                                toast.success(`Tag "${t.name}" removed`);
+                              } catch (err) {
+                                toast.error(formatApiErrorMessage(err, "Failed to remove tag"));
+                              }
+                            }}
+                            className="hover:text-destructive p-0.5"
+                          >
+                            <XCircle className="size-3" />
+                          </button>
+                        )}
+                      </span>
+                    );
+                  })}
+                </div>
               ) : (
-                <span className="text-xs text-muted-foreground">
-                  Tag editing disabled in B2B1 Pilot (no `/api/v1/tags` yet)
-                </span>
+                <p className="text-xs text-muted-foreground italic">
+                  No tags assigned to this lead.
+                </p>
               )}
             </div>
 
-            {fieldEntries.length > 0 ? (
-              <dl className="mt-4 grid gap-3 border-t pt-4 text-xs sm:grid-cols-2">
-                {fieldEntries.map(([fk, fv]) => (
-                  <div key={fk}>
-                    <dt className="text-muted-foreground">{fk} (server custom field)</dt>
-                    <dd className="font-medium">{String(fv ?? "—")}</dd>
-                  </div>
-                ))}
-              </dl>
-            ) : (
-              <p className="mt-3 text-xs text-muted-foreground">
-                Custom field definitions remain local until later checkpoints.
-              </p>
-            )}
+            {/* Server-Backed Custom Fields Section */}
+            <div className="mt-5 border-t pt-4 space-y-3">
+              {(() => {
+                const activeFields = (customFieldsQuery.data?.items ?? []).filter(
+                  (f) => f.status === "active",
+                );
+                return (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        Custom Information ({activeFields.length} field
+                        {activeFields.length === 1 ? "" : "s"})
+                      </span>
+                      {!archived && activeFields.length > 0 && !editingCustomFields && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setCustomFieldsDraft(
+                              leadCustomFieldsQuery.data?.values ?? lead.fieldValues ?? {},
+                            );
+                            setCustomFieldsError(null);
+                            setEditingCustomFields(true);
+                          }}
+                          className="h-6 px-2 text-[11px] gap-1 rounded-md"
+                        >
+                          <Pencil className="size-3" /> Edit Fields
+                        </Button>
+                      )}
+                    </div>
+
+                    {customFieldsQuery.isLoading || leadCustomFieldsQuery.isLoading ? (
+                      <div className="space-y-2">
+                        <div className="h-6 w-full bg-muted rounded animate-pulse" />
+                        <div className="h-6 w-full bg-muted rounded animate-pulse" />
+                      </div>
+                    ) : activeFields.length === 0 ? (
+                      <div className="text-xs text-muted-foreground italic flex items-center justify-between">
+                        <span>No custom fields configured yet.</span>
+                        <Link
+                          to="/crm-config"
+                          search={{ pilot: 1 }}
+                          className="text-primary underline font-medium"
+                        >
+                          Configure Custom Fields
+                        </Link>
+                      </div>
+                    ) : editingCustomFields ? (
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          setCustomFieldsError(null);
+                          try {
+                            await setLeadCustomFieldsMutation.mutateAsync(customFieldsDraft);
+                            toast.success("Custom fields saved to MariaDB");
+                            setEditingCustomFields(false);
+                          } catch (err) {
+                            setCustomFieldsError(
+                              formatApiErrorMessage(err, "Failed to save custom fields"),
+                            );
+                          }
+                        }}
+                        className="space-y-3 pt-1"
+                      >
+                        {customFieldsError && (
+                          <div className="p-2.5 rounded border border-destructive/30 bg-destructive/10 text-xs text-destructive">
+                            {customFieldsError}
+                          </div>
+                        )}
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {activeFields.map((f) => (
+                            <div
+                              key={f.id}
+                              className={cn(
+                                "space-y-1",
+                                (f.type === "longtext" || f.type === "multiselect") &&
+                                  "sm:col-span-2",
+                              )}
+                            >
+                              <Label
+                                htmlFor={`cf-input-${f.id}`}
+                                className="text-xs font-medium flex items-center gap-1"
+                              >
+                                {f.label}
+                                {f.required && <span className="text-destructive">*</span>}
+                                {f.visibility === "owner" && (
+                                  <Lock
+                                    className="size-2.5 text-muted-foreground"
+                                    aria-label="Owner only"
+                                  />
+                                )}
+                              </Label>
+                              <CustomFieldValueInput
+                                field={f}
+                                value={customFieldsDraft[f.id]}
+                                onChange={(val) =>
+                                  setCustomFieldsDraft((prev) => ({ ...prev, [f.id]: val }))
+                                }
+                              />
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setEditingCustomFields(false)}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="submit"
+                            size="sm"
+                            disabled={setLeadCustomFieldsMutation.isPending}
+                          >
+                            {setLeadCustomFieldsMutation.isPending
+                              ? "Saving..."
+                              : "Save Custom Fields"}
+                          </Button>
+                        </div>
+                      </form>
+                    ) : (
+                      <dl className="grid gap-3 text-xs sm:grid-cols-2">
+                        {activeFields.map((f) => {
+                          const rawVal =
+                            leadCustomFieldsQuery.data?.values?.[f.id] ?? lead.fieldValues?.[f.id];
+                          return (
+                            <div key={f.id} data-testid={`lead-custom-field-${f.id}`}>
+                              <dt className="text-muted-foreground flex items-center gap-1">
+                                {f.label}
+                                {f.visibility === "owner" && (
+                                  <Lock
+                                    className="size-2.5 text-muted-foreground"
+                                    aria-label="Owner only"
+                                  />
+                                )}
+                              </dt>
+                              <dd className="font-medium mt-0.5 break-words">
+                                {formatCustomFieldValue(f, rawVal)}
+                              </dd>
+                            </div>
+                          );
+                        })}
+                      </dl>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
           </section>
 
           <section className="surface p-5" data-testid="pilot-lead-calls-panel">
@@ -1137,7 +1679,9 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
               </p>
             ) : leadQuotations.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border/80 p-4 text-center">
-                <p className="text-xs text-muted-foreground">No proposals or quotations created for this lead yet.</p>
+                <p className="text-xs text-muted-foreground">
+                  No proposals or quotations created for this lead yet.
+                </p>
                 {!archived && (
                   <Button
                     type="button"
@@ -1179,7 +1723,9 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
                       {q.title}
                     </div>
                     <div className="flex items-center justify-between pt-1 text-[11px] text-muted-foreground">
-                      <span>{q.items?.length ?? 0} item{(q.items?.length ?? 0) === 1 ? "" : "s"}</span>
+                      <span>
+                        {q.items?.length ?? 0} item{(q.items?.length ?? 0) === 1 ? "" : "s"}
+                      </span>
                       <span className="font-mono font-medium text-foreground">
                         {formatINR(q.totalAmount)}
                       </span>

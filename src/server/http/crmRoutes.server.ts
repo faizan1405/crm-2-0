@@ -991,8 +991,8 @@ export async function handleCrmApiRequest(
         return methodNotAllowed(["GET", "POST"]);
       }
 
-      // POST /api/v1/leads/bulk-tag
-      if (segments.length === 4 && segments[3] === "bulk-tag") {
+      // POST /api/v1/leads/bulk-tag or /api/v1/leads/bulk-tags
+      if (segments.length === 4 && (segments[3] === "bulk-tag" || segments[3] === "bulk-tags")) {
         if (request.method !== "POST") return methodNotAllowed(["POST"]);
         const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
         if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);

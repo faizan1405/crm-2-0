@@ -32,6 +32,7 @@ export interface LeadsListFilters {
   createdFrom?: string | undefined;
   createdTo?: string | undefined;
   tagId?: string | undefined;
+  viewId?: string | undefined;
   sort?: LeadSortOption | undefined;
   pinnedFirst?: boolean | undefined;
   limit?: number | undefined;
@@ -113,6 +114,7 @@ export async function listLeads(
       createdFrom: filters.createdFrom,
       createdTo: filters.createdTo,
       tagId: filters.tagId,
+      viewId: filters.viewId,
       sort: filters.sort ?? "recent",
       pinnedFirst: filters.pinnedFirst ?? true,
       limit: filters.limit ?? 50,

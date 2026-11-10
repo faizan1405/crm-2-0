@@ -21,11 +21,28 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Tag as TagIcon,
   Trash2,
   UserCheck,
   Users,
   XCircle,
 } from "lucide-react";
+import {
+  useSavedViewsQuery,
+  useTagsQuery,
+  useBulkTagLeadsMutation,
+  type TagDto,
+  type TagColorApi,
+} from "@/lib/api/customizationsApi";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { useCreateActivityMutation, useLeadActivitiesQuery } from "@/lib/api/activitiesApi";
 import { useLeadCallsQuery } from "@/lib/api/callsApi";
 import { createIdempotencyKey } from "@/lib/api/client";
@@ -87,6 +104,24 @@ const ACTIVITY_TYPE_LABEL: Record<ManualActivityTypeApi, string> = {
   email: "Email",
 };
 
+const TAG_COLOR_BADGES: Record<TagColorApi, string> = {
+  graphite: "bg-zinc-800 text-zinc-100 border-zinc-700",
+  green: "bg-emerald-950/70 text-emerald-300 border-emerald-800/60",
+  amber: "bg-amber-950/70 text-amber-300 border-amber-800/60",
+  rose: "bg-rose-950/70 text-rose-300 border-rose-800/60",
+  sky: "bg-sky-950/70 text-sky-300 border-sky-800/60",
+  violet: "bg-purple-950/70 text-purple-300 border-purple-800/60",
+};
+
+const TAG_COLOR_DOTS: Record<TagColorApi, string> = {
+  graphite: "bg-zinc-400",
+  green: "bg-emerald-400",
+  amber: "bg-amber-400",
+  rose: "bg-rose-400",
+  sky: "bg-sky-400",
+  violet: "bg-purple-400",
+};
+
 export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
   const navigate = useNavigate();
 
@@ -126,6 +161,22 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
     isStale: boolean;
   } | null>(null);
 
+  const savedViewsQuery = useSavedViewsQuery();
+  const tagsQuery = useTagsQuery();
+  const bulkTagMutation = useBulkTagLeadsMutation();
+
+  const [activeViewId, setActiveViewId] = useState<string | undefined>(
+    ((search as Record<string, unknown>)["viewId"] as string | undefined) ||
+      ((search as Record<string, unknown>)["view"] as string | undefined) ||
+      undefined,
+  );
+  const [activeTagId, setActiveTagId] = useState<string | undefined>(undefined);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
+  const [bulkTagDialogOpen, setBulkTagDialogOpen] = useState(false);
+  const [bulkTagMode, setBulkTagMode] = useState<"add" | "remove">("add");
+  const [bulkSelectedTagId, setBulkSelectedTagId] = useState<string>("");
+  const [bulkTagBusy, setBulkTagBusy] = useState(false);
+
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQ(qInput.trim()), 250);
     return () => window.clearTimeout(timer);
@@ -133,7 +184,19 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
 
   useEffect(() => {
     setPage(0);
-  }, [debouncedQ, status, source, priority, quickStatus, followUp, sort, search.from, search.to]);
+  }, [
+    debouncedQ,
+    status,
+    source,
+    priority,
+    quickStatus,
+    followUp,
+    sort,
+    search.from,
+    search.to,
+    activeViewId,
+    activeTagId,
+  ]);
 
   const filters = {
     ...(debouncedQ ? { q: debouncedQ } : {}),
@@ -145,6 +208,8 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
     followUp,
     ...(search.from ? { createdFrom: search.from } : {}),
     ...(search.to ? { createdTo: search.to } : {}),
+    ...(activeViewId ? { viewId: activeViewId } : {}),
+    ...(activeTagId ? { tagId: activeTagId } : {}),
     sort,
     pinnedFirst: true,
     limit: PAGE_SIZE,
@@ -180,6 +245,8 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
     setQuickStatus("all");
     setFollowUp("all");
     setSort("recent");
+    setActiveViewId(undefined);
+    setActiveTagId(undefined);
     setPage(0);
   };
 
@@ -468,13 +535,208 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
         </div>
       </div>
 
-      <div className="sv-bar" role="status" aria-label="Saved views status">
-        <Bookmark className="size-4 text-muted-foreground" aria-hidden />
-        <span className="text-xs text-muted-foreground">
-          Saved views, tag filters, assignee filters & bulk actions are disabled in B2B1 Pilot and
-          remain untouched in local storage.
-        </span>
+      {/* Server-Backed Saved Views & Tag Filter Bar */}
+      <div
+        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-3"
+        role="region"
+        aria-label="Saved views and tags"
+      >
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Saved Views Selector */}
+          <div className="flex items-center gap-1.5">
+            <Bookmark className="size-4 text-primary shrink-0" aria-hidden />
+            <select
+              aria-label="Filter by Saved View"
+              value={activeViewId ?? ""}
+              onChange={(e) => setActiveViewId(e.target.value ? e.target.value : undefined)}
+              className={selectCls}
+            >
+              <option value="">All Leads (Standard View)</option>
+              {savedViewsQuery.data?.items.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name} ({v.filter.conditions.length} condition
+                  {v.filter.conditions.length === 1 ? "" : "s"})
+                </option>
+              ))}
+            </select>
+            {activeViewId && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setActiveViewId(undefined)}
+                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                title="Reset saved view filter"
+              >
+                Reset
+              </Button>
+            )}
+          </div>
+
+          <span className="text-border hidden sm:inline">|</span>
+
+          {/* Tag Filter Selector */}
+          <div className="flex items-center gap-1.5">
+            <TagIcon className="size-4 text-primary shrink-0" aria-hidden />
+            <select
+              aria-label="Filter by Tag"
+              value={activeTagId ?? ""}
+              onChange={(e) => setActiveTagId(e.target.value ? e.target.value : undefined)}
+              className={selectCls}
+            >
+              <option value="">Any Tag</option>
+              {tagsQuery.data?.items.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+            {activeTagId && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setActiveTagId(undefined)}
+                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                title="Reset tag filter"
+              >
+                Reset
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs">
+          <Link
+            to="/crm-config"
+            search={{ pilot: 1 }}
+            className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 font-medium"
+          >
+            Manage Views & Tags <ChevronRight className="size-3" />
+          </Link>
+        </div>
       </div>
+
+      {/* Floating Bulk Actions Bar */}
+      {selectedLeadIds.size > 0 && (
+        <div
+          data-testid="pilot-bulk-actions-bar"
+          className="sticky top-2 z-30 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/10 p-3 shadow-md backdrop-blur"
+        >
+          <div className="flex items-center gap-2 text-xs font-semibold text-primary">
+            <span className="rounded-full bg-primary text-primary-foreground size-5 flex items-center justify-center text-[10px]">
+              {selectedLeadIds.size}
+            </span>
+            <span>lead{selectedLeadIds.size === 1 ? "" : "s"} selected</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setBulkTagMode("add");
+                setBulkSelectedTagId(tagsQuery.data?.items[0]?.id ?? "");
+                setBulkTagDialogOpen(true);
+              }}
+              className="h-8 text-xs gap-1.5 rounded-lg"
+            >
+              <Plus className="size-3.5" /> Add Tag to Selected
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setBulkTagMode("remove");
+                setBulkSelectedTagId(tagsQuery.data?.items[0]?.id ?? "");
+                setBulkTagDialogOpen(true);
+              }}
+              className="h-8 text-xs gap-1.5 rounded-lg"
+            >
+              <Trash2 className="size-3.5" /> Remove Tag
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelectedLeadIds(new Set())}
+              className="h-8 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Deselect All
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Tag Dialog */}
+      <Dialog open={bulkTagDialogOpen} onOpenChange={setBulkTagDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {bulkTagMode === "add"
+                ? "Add Tag to Selected Leads"
+                : "Remove Tag from Selected Leads"}
+            </DialogTitle>
+            <DialogDescription>
+              {bulkTagMode === "add"
+                ? `Assign a tag to ${selectedLeadIds.size} selected lead(s) in a single transaction.`
+                : `Remove a tag from ${selectedLeadIds.size} selected lead(s).`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-3">
+            <div className="space-y-1.5">
+              <Label>Select Tag</Label>
+              <select
+                value={bulkSelectedTagId}
+                onChange={(e) => setBulkSelectedTagId(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                {tagsQuery.data?.items.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setBulkTagDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={bulkTagBusy || !bulkSelectedTagId}
+              onClick={async () => {
+                setBulkTagBusy(true);
+                try {
+                  const res = await bulkTagMutation.mutateAsync({
+                    leadIds: Array.from(selectedLeadIds),
+                    tagId: bulkSelectedTagId,
+                    mode: bulkTagMode,
+                  });
+                  toast.success(
+                    bulkTagMode === "add"
+                      ? `Tag added to ${res.changedCount} lead(s) (${selectedLeadIds.size - res.changedCount} unchanged)`
+                      : `Tag removed from ${res.changedCount} lead(s)`,
+                  );
+                  setSelectedLeadIds(new Set());
+                  setBulkTagDialogOpen(false);
+                } catch (err) {
+                  toast.error(formatApiErrorMessage(err, "Bulk tagging failed"));
+                } finally {
+                  setBulkTagBusy(false);
+                }
+              }}
+            >
+              {bulkTagBusy ? "Processing..." : bulkTagMode === "add" ? "Apply Tag" : "Remove Tag"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="mb-6 flex flex-wrap gap-2">
         <div className="relative min-w-56 flex-1">
@@ -602,6 +864,19 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select lead ${l.name}`}
+                        checked={selectedLeadIds.has(l.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          const next = new Set(selectedLeadIds);
+                          if (e.target.checked) next.add(l.id);
+                          else next.delete(l.id);
+                          setSelectedLeadIds(next);
+                        }}
+                        className="rounded size-3.5 mr-1"
+                      />
                       <span className="prio-dot shrink-0" />
                       <span className="truncate text-sm font-semibold">{l.name}</span>
                       {l.pinned && <Pin className="size-3 shrink-0" aria-label="Pinned" />}
@@ -609,7 +884,7 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
                         <span className="aging is-old shrink-0">stale {st}d</span>
                       )}
                     </div>
-                    <div className="mt-1 flex items-center gap-2 truncate pl-4 text-xs text-muted-foreground">
+                    <div className="mt-1 flex items-center gap-2 truncate pl-6 text-xs text-muted-foreground">
                       <span className="stage-chip shrink-0" data-stage={l.status}>
                         {STATUS_LABEL[l.status]}
                       </span>
@@ -619,6 +894,26 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
                       </span>
                       <span className="num text-[10px] opacity-70">v{l.version}</span>
                     </div>
+                    {l.tagIds && l.tagIds.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1 pl-6">
+                        {l.tagIds.map((tid) => {
+                          const tag = tagsQuery.data?.items.find((t) => t.id === tid);
+                          if (!tag) return null;
+                          const style = TAG_COLOR_BADGES[tag.color] ?? TAG_COLOR_BADGES.graphite;
+                          return (
+                            <span
+                              key={tid}
+                              className={cn(
+                                "text-[10px] px-1.5 py-0.2 rounded-full border font-medium",
+                                style,
+                              )}
+                            >
+                              {tag.name}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                   <div className="shrink-0 text-right">
                     <div className="num text-sm">
@@ -817,6 +1112,18 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
           <table className="w-full min-w-[1040px] text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
             <thead className="text-left text-muted-foreground">
               <tr>
+                <th className="px-2 py-2 w-8">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all leads"
+                    checked={rows.length > 0 && rows.every((r) => selectedLeadIds.has(r.id))}
+                    onChange={(e) => {
+                      if (e.target.checked) setSelectedLeadIds(new Set(rows.map((r) => r.id)));
+                      else setSelectedLeadIds(new Set());
+                    }}
+                    className="rounded size-3.5"
+                  />
+                </th>
                 {[
                   "",
                   "Lead",
@@ -839,6 +1146,20 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
             <tbody>
               {rows.map((l) => (
                 <tr key={l.id} className="border-b hover:bg-card">
+                  <td className="px-2 py-2 w-8" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      aria-label={`Select lead ${l.name}`}
+                      checked={selectedLeadIds.has(l.id)}
+                      onChange={(e) => {
+                        const next = new Set(selectedLeadIds);
+                        if (e.target.checked) next.add(l.id);
+                        else next.delete(l.id);
+                        setSelectedLeadIds(next);
+                      }}
+                      className="rounded size-3.5"
+                    />
+                  </td>
                   <td className="pl-1">
                     <Button
                       type="button"
@@ -866,6 +1187,26 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
                     >
                       <Identity name={l.name} company={l.company} />
                     </Link>
+                    {l.tagIds && l.tagIds.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {l.tagIds.map((tid) => {
+                          const tag = tagsQuery.data?.items.find((t) => t.id === tid);
+                          if (!tag) return null;
+                          const style = TAG_COLOR_BADGES[tag.color] ?? TAG_COLOR_BADGES.graphite;
+                          return (
+                            <span
+                              key={tid}
+                              className={cn(
+                                "text-[10px] px-1.5 py-0.2 rounded-full border font-medium",
+                                style,
+                              )}
+                            >
+                              {tag.name}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                   </td>
                   <td className="num px-3 text-muted-foreground">
                     {telHref(l.phone) ? (
@@ -1049,6 +1390,7 @@ function PilotLeadInspector({
   const callsQuery = useLeadCallsQuery(lead.id, { limit: 5 });
   const waMessagesQuery = useLeadWhatsAppMessagesQuery(lead.id, { limit: 5 });
   const activitiesQuery = useLeadActivitiesQuery(lead.id, { limit: 7 });
+  const tagsQuery = useTagsQuery();
   const leadFollowUpsQuery = useLeadFollowUpsQuery(lead.id);
   const createActivityMutation = useCreateActivityMutation();
   const completeFollowUpMutation = useCompleteFollowUpMutation();
@@ -1227,24 +1569,28 @@ function PilotLeadInspector({
         </div>
       </dl>
 
-      <div className="as-insp">
-        <span className="eyebrow">Tags & Assignment</span>
-        <span className="text-xs text-muted-foreground">
-          {lead.tagIds.length > 0
-            ? `${lead.tagIds.length} server tag(s) (read-only)`
-            : "Disabled in B2B1 Pilot"}
-        </span>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled
-          title="Assignments connect in Team CRM phase"
-          className="ml-auto rounded-full opacity-60"
-        >
-          <UserCheck className="size-3.5" />
-          Assign (Local)
-        </Button>
+      <div className="as-insp flex-wrap">
+        <span className="eyebrow w-full mb-1">Tags (MariaDB)</span>
+        {lead.tagIds.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {lead.tagIds.map((tid) => {
+              const tag = tagsQuery.data?.items.find((t) => t.id === tid);
+              const name = tag?.name ?? tid;
+              const color = tag?.color ?? "graphite";
+              const style = TAG_COLOR_BADGES[color] ?? TAG_COLOR_BADGES.graphite;
+              return (
+                <span
+                  key={tid}
+                  className={cn("text-[11px] px-2 py-0.5 rounded-full border font-medium", style)}
+                >
+                  {name}
+                </span>
+              );
+            })}
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground italic">No tags assigned</span>
+        )}
       </div>
 
       {lead.requirement && (

@@ -797,7 +797,14 @@ describe("B6B Server-Backed Settings, Goals & Boundary Pilot UI", () => {
   }, 20000);
 
   it("PilotCrmConfigPage renders server invariants and deferred boundaries without touching localStorage", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(jsonRes(MOCK_DEFINITIONS));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (info) => {
+      const url = String(info);
+      if (url.includes("/api/v1/settings/definitions")) return jsonRes(MOCK_DEFINITIONS);
+      if (url.includes("/api/v1/custom-fields")) return jsonRes({ ok: true, customFields: [] });
+      if (url.includes("/api/v1/tags")) return jsonRes({ ok: true, tags: [] });
+      if (url.includes("/api/v1/saved-views")) return jsonRes({ ok: true, savedViews: [] });
+      return jsonRes({ ok: true });
+    });
 
     render(wrap(<PilotCrmConfigPage />));
 

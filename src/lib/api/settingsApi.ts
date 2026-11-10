@@ -18,6 +18,7 @@ import {
 } from "./schemas";
 
 export { createIdempotencyKey } from "./client";
+export type { SettingsDefinitionsResponse } from "./schemas";
 
 // ---------------------------------------------------------------------------
 // Constants & Pure Validation Helpers

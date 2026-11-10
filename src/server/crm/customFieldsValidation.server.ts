@@ -446,7 +446,13 @@ const nullableTrimmedString = (max: number) =>
   );
 
 export const fieldOptionSchema = z.object({
-  id: z.string().trim().min(1).max(64),
+  id: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .optional()
+    .transform((val) => val && val.length > 0 ? val : `opt_${Math.random().toString(36).slice(2, 10)}`),
   label: z.string().trim().min(1).max(120),
   archived: z.boolean().optional(),
 });
