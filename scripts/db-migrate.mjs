@@ -85,5 +85,8 @@ async function main() {
 
 main().catch((error) => {
   console.error("[db:migrate] Failed:", error instanceof Error ? error.message : String(error));
+  if (error && typeof error === "object" && "cause" in error) {
+    console.error("[db:migrate] Cause:", error.cause);
+  }
   process.exitCode = 1;
 });

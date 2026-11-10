@@ -83,50 +83,109 @@ import {
   updateQuotationTemplateRecord,
 } from "../crm/quotationsService.server";
 import {
+  addDeliverableRevisionRecord,
+  addProjectNoteRecord,
+  archiveProjectRecord,
+  configureProjectSupportRecord,
+  createDeliverableRecord,
+  createMilestoneRecord,
+  createProjectRecord,
+  createSupportTicketRecord,
+  createTaskRecord,
+  deliverProjectRecord,
+  getProjectDetailsRecord,
+  getProjectOverviewMetricsRecord,
+  listProjectTemplatesRecord,
+  listProjectsRecords,
+  moveProjectStageRecord,
+  reopenSupportTicketRecord,
+  resolveSupportTicketRecord,
+  saveProjectTemplateRecord,
+  setProjectStatusRecord,
+  setTaskDoneRecord,
+  toggleChecklistItemRecord,
+  toggleDependencyItemRecord,
+  undoProjectStageRecord,
+  updateDeliverableRecord,
+  updateMilestoneRecord,
+  updateProjectRecord,
+  updateSupportTicketRecord,
+  updateTaskRecord,
+} from "../crm/projectsService.server";
+import {
+  addDeliverableRevisionBodySchema,
+  addProjectNoteBodySchema,
   archiveLeadBodySchema,
+  archiveProjectBodySchema,
   archiveQuotationBodySchema,
   cancelDealBodySchema,
   cancelFollowUpBodySchema,
   changeDealStatusBodySchema,
   changeQuotationStatusBodySchema,
   completeFollowUpBodySchema,
+  completeTaskBodySchema,
+  configureProjectSupportBodySchema,
   createActivityBodySchema,
   createCallLogBodySchema,
   createDealBodySchema,
+  createDeliverableBodySchema,
   createFollowUpBodySchema,
   createLeadBodySchema,
+  createMilestoneBodySchema,
   createPaymentBodySchema,
   createPaymentWithDealBodySchema,
+  createProjectBodySchema,
   createQuotationBodySchema,
   createQuotationTemplateBodySchema,
+  createSupportTicketBodySchema,
+  createTaskBodySchema,
   createWhatsAppLogBodySchema,
+  deliverProjectBodySchema,
   financeSummaryQuerySchema,
   listActivitiesQuerySchema,
   listCallsQuerySchema,
   listDealAuditQuerySchema,
   listDealPaymentsQuerySchema,
   listDealsQuerySchema,
+  listDeliverablesQuerySchema,
   listFollowUpsQuerySchema,
   listLeadCallsQuerySchema,
   listLeadWhatsAppQuerySchema,
   listLeadsQuerySchema,
   listPaymentsQuerySchema,
+  listProjectTemplatesQuerySchema,
+  listProjectsQuerySchema,
   listProofHistoryQuerySchema,
   listQuotationAuditQuerySchema,
   listQuotationRevisionsQuerySchema,
   listQuotationsQuerySchema,
   listQuotationTemplatesQuerySchema,
+  listSupportTicketsQuerySchema,
+  listTasksQuerySchema,
   listWhatsAppQuerySchema,
+  moveProjectStageBodySchema,
   removeProofBodySchema,
+  reopenSupportTicketBodySchema,
   reorderQuotationTemplatesBodySchema,
   replaceProofBodySchema,
+  resolveSupportTicketBodySchema,
   restoreLeadBodySchema,
   restoreQuotationBodySchema,
+  saveProjectTemplateBodySchema,
+  setProjectStatusBodySchema,
+  toggleChecklistItemBodySchema,
+  toggleDependencyItemBodySchema,
+  undoProjectStageBodySchema,
   updateDealBodySchema,
+  updateDeliverableBodySchema,
   updateFollowUpBodySchema,
   updateLeadBodySchema,
+  updateMilestoneBodySchema,
+  updateProjectBodySchema,
   updateQuotationBodySchema,
   updateQuotationTemplateBodySchema,
+  updateSupportTicketBodySchema,
+  updateTaskBodySchema,
   verifyDealWonDateBodySchema,
   voidPaymentBodySchema,
 } from "../crm/validation.server";
@@ -745,7 +804,13 @@ export async function handleCrmApiRequest(
     !pathname.startsWith("/api/v1/payments") &&
     !pathname.startsWith("/api/v1/finance") &&
     !pathname.startsWith("/api/v1/quotation-templates") &&
-    !pathname.startsWith("/api/v1/quotations")
+    !pathname.startsWith("/api/v1/quotations") &&
+    !pathname.startsWith("/api/v1/projects") &&
+    !pathname.startsWith("/api/v1/project-milestones") &&
+    !pathname.startsWith("/api/v1/tasks") &&
+    !pathname.startsWith("/api/v1/deliverables") &&
+    !pathname.startsWith("/api/v1/support-tickets") &&
+    !pathname.startsWith("/api/v1/project-templates")
   ) {
     return null;
   }
@@ -2403,6 +2468,607 @@ export async function handleCrmApiRequest(
           const result = await listQuotationAuditEventsRecord(auth.db, auth.userId, quotationId, query);
           return jsonResponse({ ok: true, quotationId, ...result }, 200);
         }
+      }
+
+      return null;
+    }
+
+    // =======================================================================
+    // PROJECTS & PROJECT WORKSPACE (CHECKPOINT B5A)
+    // =======================================================================
+    if (resource === "projects") {
+      // GET /api/v1/projects/summary/metrics
+      if (segments.length === 5 && segments[3] === "summary" && segments[4] === "metrics") {
+        if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+        const auth = await requireAuthenticatedOwnerDb(request, env);
+        if (!auth.ok) return auth.response;
+
+        const overview = await getProjectOverviewMetricsRecord(auth.db, auth.userId);
+        return jsonResponse({ ok: true, ...overview }, 200);
+      }
+
+      // GET|POST /api/v1/projects
+      if (segments.length === 3) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const query = listProjectsQuerySchema.parse(searchParamsObject(parsedUrl));
+          const result = await listProjectsRecords(auth.db, auth.userId, query);
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
+
+        if (request.method === "POST") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = createProjectBodySchema.parse(parsedBody.data);
+          const idempotencyKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+
+          const result = await createProjectRecord(auth.db, auth.userId, auth.userId, {
+            ...input,
+            idempotencyKey: idempotencyKey ?? undefined,
+          });
+
+          return jsonResponse(
+            result.body,
+            result.status,
+            result.replayed ? { "x-idempotent-replay": "true" } : undefined,
+          );
+        }
+
+        return methodNotAllowed(["GET", "POST"]);
+      }
+
+      // Routes under /api/v1/projects/:id
+      if (segments.length >= 4) {
+        const projectId = segments[3]!;
+
+        // GET /api/v1/projects/:id
+        if (segments.length === 4) {
+          if (request.method === "GET") {
+            const auth = await requireAuthenticatedOwnerDb(request, env);
+            if (!auth.ok) return auth.response;
+
+            const details = await getProjectDetailsRecord(auth.db, auth.userId, projectId);
+            if (!details) {
+              return jsonResponse(
+                { ok: false, error: { code: "project_not_found", message: "Project not found." } },
+                404,
+              );
+            }
+            return jsonResponse({ ok: true, ...details }, 200);
+          }
+
+          if (request.method === "PATCH") {
+            const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+            if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+            const auth = await requireAuthenticatedOwnerDb(request, env);
+            if (!auth.ok) return auth.response;
+
+            const parsedBody = await parseJsonObject(request);
+            if (!parsedBody.ok) return parsedBody.response;
+
+            const input = updateProjectBodySchema.parse(parsedBody.data);
+            const project = await updateProjectRecord(auth.db, auth.userId, auth.userId, projectId, input);
+            return jsonResponse({ ok: true, project }, 200);
+          }
+
+          return methodNotAllowed(["GET", "PATCH"]);
+        }
+
+        const sub = segments[4];
+
+        // POST /api/v1/projects/:id/status
+        if (sub === "status" && segments.length === 5) {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = setProjectStatusBodySchema.parse(parsedBody.data);
+          const project = await setProjectStatusRecord(auth.db, auth.userId, auth.userId, projectId, input);
+          return jsonResponse({ ok: true, project }, 200);
+        }
+
+        // POST /api/v1/projects/:id/stage
+        if (sub === "stage" && segments.length === 5) {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = moveProjectStageBodySchema.parse(parsedBody.data);
+          const result = await moveProjectStageRecord(auth.db, auth.userId, auth.userId, projectId, input);
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
+
+        // POST /api/v1/projects/:id/stage/undo
+        if (sub === "stage" && segments.length === 6 && segments[5] === "undo") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = undoProjectStageBodySchema.parse(parsedBody.data);
+          const project = await undoProjectStageRecord(auth.db, auth.userId, auth.userId, projectId, input);
+          return jsonResponse({ ok: true, project }, 200);
+        }
+
+        // POST /api/v1/projects/:id/delivery
+        if (sub === "delivery" && segments.length === 5) {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = deliverProjectBodySchema.parse(parsedBody.data);
+          const project = await deliverProjectRecord(auth.db, auth.userId, auth.userId, projectId, input);
+          return jsonResponse({ ok: true, project }, 200);
+        }
+
+        // POST /api/v1/projects/:id/support
+        if (sub === "support" && segments.length === 5) {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = configureProjectSupportBodySchema.parse(parsedBody.data);
+          const project = await configureProjectSupportRecord(auth.db, auth.userId, auth.userId, projectId, input);
+          return jsonResponse({ ok: true, project }, 200);
+        }
+
+        // POST /api/v1/projects/:id/archive
+        if (sub === "archive" && segments.length === 5) {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = archiveProjectBodySchema.parse(parsedBody.data);
+          const result = await archiveProjectRecord(auth.db, auth.userId, auth.userId, projectId, input);
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
+
+        // POST /api/v1/projects/:id/notes
+        if (sub === "notes" && segments.length === 5) {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = addProjectNoteBodySchema.parse(parsedBody.data);
+          const event = await addProjectNoteRecord(auth.db, auth.userId, auth.userId, projectId, input.text);
+          return jsonResponse({ ok: true, event }, 201);
+        }
+
+        // POST /api/v1/projects/:id/checklists/:list/toggle
+        if (sub === "checklists" && segments.length === 7 && segments[6] === "toggle") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const listName = segments[5];
+          if (listName !== "requirements" && listName !== "qa" && listName !== "handover") {
+            return jsonResponse({ ok: false, error: { code: "validation_error", message: "Invalid checklist name." } }, 400);
+          }
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = toggleChecklistItemBodySchema.parse(parsedBody.data);
+          const project = await toggleChecklistItemRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            projectId,
+            listName,
+            input.itemId,
+            input.expectedVersion,
+          );
+          return jsonResponse({ ok: true, project }, 200);
+        }
+
+        // POST /api/v1/projects/:id/dependencies/toggle
+        if (sub === "dependencies" && segments.length === 6 && segments[5] === "toggle") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = toggleDependencyItemBodySchema.parse(parsedBody.data);
+          const project = await toggleDependencyItemRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            projectId,
+            input.depId,
+            input.expectedVersion,
+          );
+          return jsonResponse({ ok: true, project }, 200);
+        }
+
+        // POST /api/v1/projects/:id/milestones
+        if (sub === "milestones" && segments.length === 5) {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = createMilestoneBodySchema.parse(parsedBody.data);
+          const milestone = await createMilestoneRecord(auth.db, auth.userId, auth.userId, projectId, input);
+          return jsonResponse({ ok: true, milestone }, 201);
+        }
+
+        // POST /api/v1/projects/:id/tasks
+        if (sub === "tasks" && segments.length === 5) {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = createTaskBodySchema.parse(parsedBody.data);
+          const idempotencyKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+
+          const result = await createTaskRecord(auth.db, auth.userId, auth.userId, projectId, {
+            ...input,
+            idempotencyKey: idempotencyKey ?? undefined,
+          });
+
+          return jsonResponse(
+            result.body,
+            result.status,
+            result.replayed ? { "x-idempotent-replay": "true" } : undefined,
+          );
+        }
+
+        // POST /api/v1/projects/:id/deliverables
+        if (sub === "deliverables" && segments.length === 5) {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = createDeliverableBodySchema.parse(parsedBody.data);
+          const idempotencyKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+
+          const result = await createDeliverableRecord(auth.db, auth.userId, auth.userId, projectId, {
+            ...input,
+            idempotencyKey: idempotencyKey ?? undefined,
+          });
+
+          return jsonResponse(
+            result.body,
+            result.status,
+            result.replayed ? { "x-idempotent-replay": "true" } : undefined,
+          );
+        }
+
+        // POST /api/v1/projects/:id/support-tickets
+        if (sub === "support-tickets" && segments.length === 5) {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = createSupportTicketBodySchema.parse(parsedBody.data);
+          const idempotencyKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+
+          const result = await createSupportTicketRecord(auth.db, auth.userId, auth.userId, projectId, {
+            ...input,
+            idempotencyKey: idempotencyKey ?? undefined,
+          });
+
+          return jsonResponse(
+            result.body,
+            result.status,
+            result.replayed ? { "x-idempotent-replay": "true" } : undefined,
+          );
+        }
+      }
+
+      return null;
+    }
+
+    // =======================================================================
+    // MILESTONES INDEPENDENT ENDPOINTS
+    // =======================================================================
+    if (resource === "project-milestones") {
+      if (segments.length === 4) {
+        const milestoneId = segments[3]!;
+        if (request.method === "PATCH") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = updateMilestoneBodySchema.parse(parsedBody.data);
+          const milestone = await updateMilestoneRecord(auth.db, auth.userId, auth.userId, milestoneId, input);
+          return jsonResponse({ ok: true, milestone }, 200);
+        }
+
+        return methodNotAllowed(["PATCH"]);
+      }
+
+      return null;
+    }
+
+    // =======================================================================
+    // TASKS INDEPENDENT ENDPOINTS
+    // =======================================================================
+    if (resource === "tasks") {
+      if (segments.length >= 4) {
+        const taskId = segments[3]!;
+
+        // PATCH /api/v1/tasks/:id
+        if (segments.length === 4) {
+          if (request.method === "PATCH") {
+            const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+            if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+            const auth = await requireAuthenticatedOwnerDb(request, env);
+            if (!auth.ok) return auth.response;
+
+            const parsedBody = await parseJsonObject(request);
+            if (!parsedBody.ok) return parsedBody.response;
+
+            const input = updateTaskBodySchema.parse(parsedBody.data);
+            const task = await updateTaskRecord(auth.db, auth.userId, auth.userId, taskId, input);
+            return jsonResponse({ ok: true, task }, 200);
+          }
+
+          return methodNotAllowed(["PATCH"]);
+        }
+
+        const sub = segments[4];
+
+        // POST /api/v1/tasks/:id/done
+        if (sub === "done" && segments.length === 5) {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = completeTaskBodySchema.parse(parsedBody.data);
+          const task = await setTaskDoneRecord(auth.db, auth.userId, auth.userId, taskId, input.done, input.expectedVersion);
+          return jsonResponse({ ok: true, task }, 200);
+        }
+      }
+
+      return null;
+    }
+
+    // =======================================================================
+    // DELIVERABLES REVISIONS ENDPOINTS
+    // =======================================================================
+    if (resource === "deliverables") {
+      if (segments.length === 5 && segments[4] === "revisions") {
+        const deliverableId = segments[3]!;
+        if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+        const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+        if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+        const auth = await requireAuthenticatedOwnerDb(request, env);
+        if (!auth.ok) return auth.response;
+
+        const parsedBody = await parseJsonObject(request);
+        if (!parsedBody.ok) return parsedBody.response;
+
+        const input = addDeliverableRevisionBodySchema.parse(parsedBody.data);
+        const result = await addDeliverableRevisionRecord(auth.db, auth.userId, auth.userId, deliverableId, input);
+        return jsonResponse({ ok: true, ...result }, 201);
+      }
+
+      return null;
+    }
+
+    // =======================================================================
+    // SUPPORT TICKETS ENDPOINTS
+    // =======================================================================
+    if (resource === "support-tickets") {
+      if (segments.length >= 4) {
+        const ticketId = segments[3]!;
+
+        // PATCH /api/v1/support-tickets/:id
+        if (segments.length === 4) {
+          if (request.method === "PATCH") {
+            const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+            if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+            const auth = await requireAuthenticatedOwnerDb(request, env);
+            if (!auth.ok) return auth.response;
+
+            const parsedBody = await parseJsonObject(request);
+            if (!parsedBody.ok) return parsedBody.response;
+
+            const input = updateSupportTicketBodySchema.parse(parsedBody.data);
+            const ticket = await updateSupportTicketRecord(auth.db, auth.userId, auth.userId, ticketId, input);
+            return jsonResponse({ ok: true, ticket }, 200);
+          }
+
+          return methodNotAllowed(["PATCH"]);
+        }
+
+        const sub = segments[4];
+
+        // POST /api/v1/support-tickets/:id/resolve
+        if (sub === "resolve" && segments.length === 5) {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = resolveSupportTicketBodySchema.parse(parsedBody.data);
+          const ticket = await resolveSupportTicketRecord(auth.db, auth.userId, auth.userId, ticketId, input.resolution, input.expectedVersion);
+          return jsonResponse({ ok: true, ticket }, 200);
+        }
+
+        // POST /api/v1/support-tickets/:id/reopen
+        if (sub === "reopen" && segments.length === 5) {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request, { allowEmpty: true });
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = reopenSupportTicketBodySchema.parse(parsedBody.data ?? {});
+          const ticket = await reopenSupportTicketRecord(auth.db, auth.userId, auth.userId, ticketId, input.reason, input.expectedVersion);
+          return jsonResponse({ ok: true, ticket }, 200);
+        }
+      }
+
+      return null;
+    }
+
+    // =======================================================================
+    // PROJECT TEMPLATES ENDPOINTS
+    // =======================================================================
+    if (resource === "project-templates") {
+      if (segments.length === 3) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const query = listProjectTemplatesQuerySchema.parse(searchParamsObject(parsedUrl));
+          const templates = await listProjectTemplatesRecord(auth.db, auth.userId, query.includeArchived);
+          return jsonResponse({ ok: true, items: templates }, 200);
+        }
+
+        if (request.method === "POST") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = saveProjectTemplateBodySchema.parse(parsedBody.data);
+          const template = await saveProjectTemplateRecord(auth.db, auth.userId, input);
+          return jsonResponse({ ok: true, template }, 200);
+        }
+
+        return methodNotAllowed(["GET", "POST"]);
       }
 
       return null;

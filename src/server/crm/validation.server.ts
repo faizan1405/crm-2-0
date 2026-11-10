@@ -1228,3 +1228,502 @@ export const listQuotationAuditQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 export type ListQuotationAuditQuery = z.infer<typeof listQuotationAuditQuerySchema>;
+
+// ============================================================================
+// CHECKPOINT B5A: PROJECTS, TASKS, DELIVERABLES & SUPPORT SCHEMAS
+// ============================================================================
+
+import {
+  DELIVERABLE_REVISION_STATUSES,
+  DELIVERABLE_STATUSES,
+  PROJECT_PRIORITIES,
+  PROJECT_STAGES,
+  PROJECT_STATUSES,
+  REQUEST_STATUSES,
+  SUPPORT_COVERAGES,
+  SUPPORT_KINDS,
+  SUPPORT_STATUSES,
+  type DeliverableRevisionStatus,
+  type DeliverableStatus,
+  type ProjectPriority,
+  type ProjectStage,
+  type ProjectStatus,
+  type RequestStatus,
+  type SupportCoverage,
+  type SupportKind,
+  type SupportStatus,
+} from "./projectsCalc.server";
+
+export {
+  DELIVERABLE_REVISION_STATUSES,
+  DELIVERABLE_STATUSES,
+  PROJECT_PRIORITIES,
+  PROJECT_STAGES,
+  PROJECT_STATUSES,
+  REQUEST_STATUSES,
+  SUPPORT_COVERAGES,
+  SUPPORT_KINDS,
+  SUPPORT_STATUSES,
+  type DeliverableRevisionStatus,
+  type DeliverableStatus,
+  type ProjectPriority,
+  type ProjectStage,
+  type ProjectStatus,
+  type RequestStatus,
+  type SupportCoverage,
+  type SupportKind,
+  type SupportStatus,
+};
+
+const checkItemSchema = z.object({
+  id: z.string().trim().min(1).max(64),
+  label: z.string().trim().min(1).max(255),
+  done: z.boolean(),
+  doneAt: optionalTrimmedString(40),
+  note: optionalTrimmedString(500),
+});
+
+const dependencyItemSchema = z.object({
+  id: z.string().trim().min(1).max(64),
+  label: z.string().trim().min(1).max(255),
+  done: z.boolean(),
+  doneAt: optionalTrimmedString(40),
+});
+
+const projectLinkSchema = z.object({
+  id: z.string().trim().min(1).max(64),
+  label: z.string().trim().min(1).max(255),
+  url: z.string().trim().min(1).max(1024),
+  addedAt: z.string().trim().min(1).max(40),
+});
+
+const projectSupportSchema = z.object({
+  included: z.boolean().nullable().optional(),
+  months: z.number().int().min(1).max(120).optional(),
+  start: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "start must be YYYY-MM-DD"),
+  end: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "end must be YYYY-MM-DD"),
+  description: optionalTrimmedString(5000),
+});
+
+export const createProjectBodySchema = z
+  .object({
+    name: z.string().trim().min(1, "Project name is required.").max(255),
+    clientName: z.string().trim().min(1, "Client name is required.").max(160),
+    company: optionalTrimmedString(160),
+    phone: optionalTrimmedString(40),
+    email: optionalTrimmedString(160).refine(
+      (v) => v === undefined || isValidLeadEmail(v),
+      "Invalid client email format.",
+    ),
+    leadId: optionalTrimmedString(64),
+    dealId: optionalTrimmedString(64),
+    templateId: optionalTrimmedString(64),
+    legacyId: optionalTrimmedString(64),
+    type: z.string().trim().min(1).max(160).default("Other Custom Project"),
+    scope: optionalTrimmedString(10_000),
+    bookingDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "bookingDate must be YYYY-MM-DD"),
+    plannedStart: optionalTrimmedString(10).refine(
+      (v) => !v || isValidCalendarDay(v),
+      "plannedStart must be YYYY-MM-DD",
+    ),
+    actualStart: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "actualStart must be YYYY-MM-DD"),
+    targetDelivery: optionalTrimmedString(10).refine(
+      (v) => !v || isValidCalendarDay(v),
+      "targetDelivery must be YYYY-MM-DD",
+    ),
+    status: z.enum(PROJECT_STATUSES).default("accepted"),
+    stage: z.enum(PROJECT_STAGES).default("discovery"),
+    priority: z.enum(PROJECT_PRIORITIES).default("normal"),
+    projectOwnerId: optionalTrimmedString(64).default("owner"),
+    memberIds: z.array(z.string().trim().min(1).max(64)).max(50).default([]),
+    dependencies: z.array(dependencyItemSchema).max(100).default([]),
+    requirements: z.array(checkItemSchema).max(100).default([]),
+    qa: z.array(checkItemSchema).max(100).default([]),
+    handover: z.array(checkItemSchema).max(100).default([]),
+    links: z.array(projectLinkSchema).max(100).default([]),
+    support: projectSupportSchema.default({ included: null }),
+    carried: z.record(z.string(), z.unknown()).default({}),
+    notes: optionalTrimmedString(10_000),
+    plan: z
+      .object({
+        milestones: z.array(z.string().trim().min(1).max(255)).max(50).optional(),
+        tasks: z
+          .array(
+            z.object({
+              title: z.string().trim().min(1).max(255),
+              milestone: optionalTrimmedString(255),
+            }),
+          )
+          .max(200)
+          .optional(),
+        allowAnother: z.boolean().default(false),
+      })
+      .optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict()
+  .superRefine((val, ctx) => {
+    if (val.plannedStart && val.targetDelivery && val.targetDelivery < val.plannedStart) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["targetDelivery"],
+        message: "Target delivery can't be before the planned start.",
+      });
+    }
+  });
+export type CreateProjectInput = z.infer<typeof createProjectBodySchema>;
+
+export const updateProjectBodySchema = z
+  .object({
+    name: optionalTrimmedString(255),
+    scope: optionalTrimmedString(10_000),
+    bookingDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "bookingDate must be YYYY-MM-DD"),
+    plannedStart: optionalTrimmedString(10).refine(
+      (v) => !v || isValidCalendarDay(v),
+      "plannedStart must be YYYY-MM-DD",
+    ),
+    actualStart: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "actualStart must be YYYY-MM-DD"),
+    targetDelivery: optionalTrimmedString(10).refine(
+      (v) => !v || isValidCalendarDay(v),
+      "targetDelivery must be YYYY-MM-DD",
+    ),
+    priority: z.enum(PROJECT_PRIORITIES).optional(),
+    projectOwnerId: optionalTrimmedString(64),
+    memberIds: z.array(z.string().trim().min(1).max(64)).max(50).optional(),
+    notes: optionalTrimmedString(10_000),
+    changeNote: optionalTrimmedString(500),
+    expectedVersion: z.number().int().min(1, "expectedVersion must be >= 1").optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type UpdateProjectInput = z.infer<typeof updateProjectBodySchema>;
+
+export const setProjectStatusBodySchema = z
+  .object({
+    status: z.enum(PROJECT_STATUSES),
+    expectedVersion: z.number().int().min(1).optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type SetProjectStatusInput = z.infer<typeof setProjectStatusBodySchema>;
+
+export const moveProjectStageBodySchema = z
+  .object({
+    stage: z.enum(PROJECT_STAGES),
+    from: z.enum(PROJECT_STAGES).optional(),
+    expectedVersion: z.number().int().min(1).optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type MoveProjectStageInput = z.infer<typeof moveProjectStageBodySchema>;
+
+export const undoProjectStageBodySchema = z
+  .object({
+    to: z.enum(PROJECT_STAGES),
+    expectedVersion: z.number().int().min(1, "expectedVersion is mandatory for safe Undo"),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type UndoProjectStageInput = z.infer<typeof undoProjectStageBodySchema>;
+
+export const deliverProjectBodySchema = z
+  .object({
+    date: z.string().trim().refine(isValidCalendarDay, "date must be valid YYYY-MM-DD"),
+    url: optionalTrimmedString(1024),
+    notes: optionalTrimmedString(5000),
+    approval: z.enum(["pending", "approved", "not_required"]),
+    override: optionalTrimmedString(5000),
+    expectedVersion: z.number().int().min(1).optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type DeliverProjectInput = z.infer<typeof deliverProjectBodySchema>;
+
+export const configureProjectSupportBodySchema = z
+  .object({
+    included: z.boolean().nullable(),
+    months: z.number().int().min(1).max(120).optional(),
+    start: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "start must be YYYY-MM-DD"),
+    end: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "end must be YYYY-MM-DD"),
+    description: optionalTrimmedString(5000),
+    expectedVersion: z.number().int().min(1).optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type ConfigureProjectSupportInput = z.infer<typeof configureProjectSupportBodySchema>;
+
+export const archiveProjectBodySchema = z
+  .object({
+    archived: z.boolean(),
+    expectedVersion: z.number().int().min(1).optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type ArchiveProjectInput = z.infer<typeof archiveProjectBodySchema>;
+
+export const addProjectNoteBodySchema = z
+  .object({
+    text: z.string().trim().min(1, "Note cannot be empty.").max(10_000),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type AddProjectNoteInput = z.infer<typeof addProjectNoteBodySchema>;
+
+export const toggleChecklistItemBodySchema = z
+  .object({
+    itemId: z.string().trim().min(1).max(64),
+    expectedVersion: z.number().int().min(1).optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type ToggleChecklistItemInput = z.infer<typeof toggleChecklistItemBodySchema>;
+
+export const toggleDependencyItemBodySchema = z
+  .object({
+    depId: z.string().trim().min(1).max(64),
+    expectedVersion: z.number().int().min(1).optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type ToggleDependencyItemInput = z.infer<typeof toggleDependencyItemBodySchema>;
+
+export const listProjectsQuerySchema = z.object({
+  q: optionalTrimmedString(120),
+  stage: z.enum(["all", ...PROJECT_STAGES]).default("all"),
+  status: z.enum(["all", ...PROJECT_STATUSES]).default("all"),
+  priority: z.enum(["all", ...PROJECT_PRIORITIES]).default("all"),
+  type: optionalTrimmedString(160).default("all"),
+  support: z.enum(["all", ...SUPPORT_STATUSES]).default("all"),
+  leadId: optionalTrimmedString(64),
+  dealId: optionalTrimmedString(64),
+  archived: z
+    .enum(["true", "false", "all"])
+    .default("false")
+    .transform((v) => (v === "true" ? true : v === "false" ? false : undefined)),
+  sort: z.enum(["due", "start", "created"]).default("due"),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;
+
+// Project Milestones
+export const createMilestoneBodySchema = z
+  .object({
+    title: z.string().trim().min(1, "Milestone name is required.").max(255),
+    dueDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "dueDate must be YYYY-MM-DD"),
+    sortOrder: z.number().int().min(0).optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type CreateMilestoneInput = z.infer<typeof createMilestoneBodySchema>;
+
+export const updateMilestoneBodySchema = z
+  .object({
+    title: optionalTrimmedString(255),
+    dueDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "dueDate must be YYYY-MM-DD"),
+    sortOrder: z.number().int().min(0).optional(),
+    status: z.enum(["open", "completed"]).optional(),
+    expectedVersion: z.number().int().min(1).optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type UpdateMilestoneInput = z.infer<typeof updateMilestoneBodySchema>;
+
+// Tasks
+export const createTaskBodySchema = z
+  .object({
+    title: z.string().trim().min(1, "Task title is required.").max(255),
+    milestoneId: optionalTrimmedString(64),
+    notes: optionalTrimmedString(10_000),
+    assigneeId: optionalTrimmedString(64),
+    dueDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "dueDate must be YYYY-MM-DD"),
+    priority: z.enum(PROJECT_PRIORITIES).default("normal"),
+    sortOrder: z.number().int().min(0).optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type CreateTaskInput = z.infer<typeof createTaskBodySchema>;
+
+export const updateTaskBodySchema = z
+  .object({
+    title: optionalTrimmedString(255),
+    milestoneId: optionalTrimmedString(64),
+    notes: optionalTrimmedString(10_000),
+    assigneeId: optionalTrimmedString(64),
+    dueDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "dueDate must be YYYY-MM-DD"),
+    priority: z.enum(PROJECT_PRIORITIES).optional(),
+    sortOrder: z.number().int().min(0).optional(),
+    expectedVersion: z.number().int().min(1).optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type UpdateTaskInput = z.infer<typeof updateTaskBodySchema>;
+
+export const completeTaskBodySchema = z
+  .object({
+    done: z.boolean(),
+    expectedVersion: z.number().int().min(1).optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type CompleteTaskInput = z.infer<typeof completeTaskBodySchema>;
+
+export const moveTaskBodySchema = z
+  .object({
+    dir: z.union([z.literal(-1), z.literal(1)]),
+    expectedVersion: z.number().int().min(1).optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type MoveTaskInput = z.infer<typeof moveTaskBodySchema>;
+
+export const listTasksQuerySchema = z.object({
+  status: z.enum(["all", "open", "done"]).default("all"),
+  milestoneId: optionalTrimmedString(64),
+  limit: z.coerce.number().int().min(1).max(500).default(200),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type ListTasksQuery = z.infer<typeof listTasksQuerySchema>;
+
+// Deliverables & Revisions
+export const createDeliverableBodySchema = z
+  .object({
+    title: z.string().trim().min(1, "Deliverable title is required.").max(255),
+    description: optionalTrimmedString(5000),
+    category: optionalTrimmedString(64).default("general"),
+    status: z.enum(DELIVERABLE_STATUSES).default("draft"),
+    dueDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "dueDate must be YYYY-MM-DD"),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type CreateDeliverableInput = z.infer<typeof createDeliverableBodySchema>;
+
+export const updateDeliverableBodySchema = z
+  .object({
+    title: optionalTrimmedString(255),
+    description: optionalTrimmedString(5000),
+    category: optionalTrimmedString(64),
+    status: z.enum(DELIVERABLE_STATUSES).optional(),
+    dueDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "dueDate must be YYYY-MM-DD"),
+    clientFeedback: optionalTrimmedString(5000),
+    expectedVersion: z.number().int().min(1).optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type UpdateDeliverableInput = z.infer<typeof updateDeliverableBodySchema>;
+
+export const addDeliverableRevisionBodySchema = z
+  .object({
+    summary: z.string().trim().min(1, "Revision summary is required.").max(255),
+    title: optionalTrimmedString(255),
+    fileUrl: optionalTrimmedString(1024),
+    notes: optionalTrimmedString(5000),
+    clientFeedback: optionalTrimmedString(5000),
+    status: z.enum(DELIVERABLE_REVISION_STATUSES).default("submitted"),
+    expectedVersion: z.number().int().min(1).optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type AddDeliverableRevisionInput = z.infer<typeof addDeliverableRevisionBodySchema>;
+
+export const listDeliverablesQuerySchema = z.object({
+  status: z.enum(["all", ...DELIVERABLE_STATUSES]).default("all"),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type ListDeliverablesQuery = z.infer<typeof listDeliverablesQuerySchema>;
+
+// Support Tickets
+export const createSupportTicketBodySchema = z
+  .object({
+    kind: z.enum(SUPPORT_KINDS),
+    title: z.string().trim().min(1, "Ticket title is required.").max(255),
+    description: optionalTrimmedString(10_000),
+    priority: z.enum(PROJECT_PRIORITIES).default("normal"),
+    assigneeId: optionalTrimmedString(64),
+    dueDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "dueDate must be YYYY-MM-DD"),
+    coverage: z.enum(SUPPORT_COVERAGES).default("undecided"),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type CreateSupportTicketInput = z.infer<typeof createSupportTicketBodySchema>;
+
+export const updateSupportTicketBodySchema = z
+  .object({
+    kind: z.enum(SUPPORT_KINDS).optional(),
+    title: optionalTrimmedString(255),
+    description: optionalTrimmedString(10_000),
+    priority: z.enum(PROJECT_PRIORITIES).optional(),
+    assigneeId: optionalTrimmedString(64),
+    dueDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "dueDate must be YYYY-MM-DD"),
+    coverage: z.enum(SUPPORT_COVERAGES).optional(),
+    status: z.enum(REQUEST_STATUSES).optional(),
+    resolution: optionalTrimmedString(5000),
+    expectedVersion: z.number().int().min(1).optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type UpdateSupportTicketInput = z.infer<typeof updateSupportTicketBodySchema>;
+
+export const resolveSupportTicketBodySchema = z
+  .object({
+    resolution: z.string().trim().min(1, "Resolution notes are required before resolving."),
+    expectedVersion: z.number().int().min(1).optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type ResolveSupportTicketInput = z.infer<typeof resolveSupportTicketBodySchema>;
+
+export const reopenSupportTicketBodySchema = z
+  .object({
+    reason: optionalTrimmedString(500),
+    expectedVersion: z.number().int().min(1).optional(),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type ReopenSupportTicketInput = z.infer<typeof reopenSupportTicketBodySchema>;
+
+export const listSupportTicketsQuerySchema = z.object({
+  status: z.enum(["all", ...REQUEST_STATUSES]).default("all"),
+  priority: z.enum(["all", ...PROJECT_PRIORITIES]).default("all"),
+  kind: z.enum(["all", ...SUPPORT_KINDS]).default("all"),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type ListSupportTicketsQuery = z.infer<typeof listSupportTicketsQuerySchema>;
+
+// Templates
+export const saveProjectTemplateBodySchema = z
+  .object({
+    id: optionalTrimmedString(64),
+    name: z.string().trim().min(1, "Template name is required.").max(160),
+    type: z.string().trim().min(1, "Template type is required.").max(160),
+    builtIn: z.boolean().default(false),
+    milestones: z.array(z.string().trim().min(1).max(255)).default([]),
+    tasks: z
+      .array(
+        z.object({
+          title: z.string().trim().min(1).max(255),
+          milestone: optionalTrimmedString(255),
+        }),
+      )
+      .default([]),
+    requirements: z.array(z.string().trim().min(1).max(255)).default([]),
+    qa: z.array(z.string().trim().min(1).max(255)).default([]),
+    handover: z.array(z.string().trim().min(1).max(255)).default([]),
+    archived: z.boolean().default(false),
+    idempotencyKey: optionalTrimmedString(128),
+  })
+  .strict();
+export type SaveProjectTemplateInput = z.infer<typeof saveProjectTemplateBodySchema>;
+
+export const listProjectTemplatesQuerySchema = z.object({
+  includeArchived: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type ListProjectTemplatesQuery = z.infer<typeof listProjectTemplatesQuerySchema>;
+

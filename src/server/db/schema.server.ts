@@ -914,6 +914,282 @@ export const crmQuotationAuditEvents = mysqlTable(
   ],
 );
 
+/**
+ * B5A: Reusable project package/process templates.
+ */
+export const crmProjectTemplates = mysqlTable(
+  "crm_project_templates",
+  {
+    id: crmId("id").primaryKey(),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    name: varchar("name", { length: 160 }).notNull(),
+    type: varchar("type", { length: 160 }).notNull(),
+    builtIn: boolean("built_in").notNull().default(false),
+    milestonesJson: text("milestones_json").notNull(),
+    tasksJson: text("tasks_json").notNull(),
+    requirementsJson: text("requirements_json").notNull(),
+    qaJson: text("qa_json").notNull(),
+    handoverJson: text("handover_json").notNull(),
+    archived: boolean("archived").notNull().default(false),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    index("idx_crm_ptpl_owner").on(table.ownerUserId),
+    index("idx_crm_ptpl_owner_archived").on(table.ownerUserId, table.archived),
+  ],
+);
+
+/**
+ * B5A: Projects table tracking physical delivery from won deals or direct creation.
+ */
+export const crmProjects = mysqlTable(
+  "crm_projects",
+  {
+    id: crmId("id").primaryKey(),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    clientName: varchar("client_name", { length: 160 }).notNull(),
+    company: varchar("company", { length: 160 }),
+    phone: varchar("phone", { length: 40 }),
+    email: varchar("email", { length: 160 }),
+    leadId: crmId("lead_id").references(() => crmLeads.id, { onDelete: "set null" }),
+    dealId: crmId("deal_id").references(() => crmDeals.id, { onDelete: "set null" }),
+    templateId: crmId("template_id").references(() => crmProjectTemplates.id, { onDelete: "set null" }),
+    legacyId: varchar("legacy_id", { length: 64 }),
+    type: varchar("type", { length: 160 }).notNull(),
+    scope: text("scope"),
+    bookingDate: istDateChar("booking_date"),
+    plannedStart: istDateChar("planned_start"),
+    actualStart: istDateChar("actual_start"),
+    targetDelivery: istDateChar("target_delivery"),
+    status: varchar("status", { length: 32 }).notNull().default("accepted"),
+    stage: varchar("stage", { length: 32 }).notNull().default("discovery"),
+    priority: varchar("priority", { length: 16 }).notNull().default("normal"),
+    projectOwnerId: varchar("project_owner_id", { length: 64 }),
+    memberIdsJson: text("member_ids_json"),
+    dependenciesJson: text("dependencies_json"),
+    requirementsJson: text("requirements_json"),
+    qaJson: text("qa_json"),
+    handoverJson: text("handover_json"),
+    linksJson: text("links_json"),
+    deliveryJson: text("delivery_json"),
+    supportJson: text("support_json"),
+    carriedJson: text("carried_json"),
+    notes: text("notes"),
+    reviewFlag: varchar("review_flag", { length: 255 }),
+    attentionJson: text("attention_json"),
+    archived: boolean("archived").notNull().default(false),
+    archivedAt: utcDateTime("archived_at"),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }),
+    version: versionCol("version"),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    uniqueIndex("uq_crm_projects_owner_idem").on(table.ownerUserId, table.idempotencyKey),
+    uniqueIndex("uq_crm_projects_owner_legacy").on(table.ownerUserId, table.legacyId),
+    index("idx_crm_projects_owner_lead").on(table.ownerUserId, table.leadId),
+    index("idx_crm_projects_owner_deal").on(table.ownerUserId, table.dealId),
+    index("idx_crm_projects_owner_status").on(table.ownerUserId, table.status),
+    index("idx_crm_projects_owner_stage").on(table.ownerUserId, table.stage),
+    index("idx_crm_projects_owner_archived").on(table.ownerUserId, table.archived),
+    index("idx_crm_projects_owner_target").on(table.ownerUserId, table.targetDelivery),
+    index("idx_crm_projects_owner_created").on(table.ownerUserId, table.createdAt),
+  ],
+);
+
+/**
+ * B5A: Project delivery milestones (delivery phases, distinct from payment milestones).
+ */
+export const crmProjectMilestones = mysqlTable(
+  "crm_project_milestones",
+  {
+    id: crmId("id").primaryKey(),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    projectId: crmId("project_id")
+      .notNull()
+      .references(() => crmProjects.id, { onDelete: "cascade" }),
+    title: varchar("title", { length: 255 }).notNull(),
+    dueDate: istDateChar("due_date"),
+    sortOrder: int("sort_order").notNull().default(0),
+    status: varchar("status", { length: 32 }).notNull().default("open"),
+    completedAt: utcDateTime("completed_at"),
+    version: versionCol("version"),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    index("idx_crm_pm_project_order").on(table.projectId, table.sortOrder),
+    index("idx_crm_pm_owner_project").on(table.ownerUserId, table.projectId),
+  ],
+);
+
+/**
+ * B5A: Project tasks with assignees, due dates, ordering and optimistic locking.
+ */
+export const crmProjectTasks = mysqlTable(
+  "crm_project_tasks",
+  {
+    id: crmId("id").primaryKey(),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    projectId: crmId("project_id")
+      .notNull()
+      .references(() => crmProjects.id, { onDelete: "cascade" }),
+    milestoneId: crmId("milestone_id")
+      .references(() => crmProjectMilestones.id, { onDelete: "set null" }),
+    title: varchar("title", { length: 255 }).notNull(),
+    notes: text("notes"),
+    assigneeId: varchar("assignee_id", { length: 64 }),
+    dueDate: istDateChar("due_date"),
+    priority: varchar("priority", { length: 16 }).notNull().default("normal"),
+    status: varchar("status", { length: 16 }).notNull().default("open"),
+    completedAt: utcDateTime("completed_at"),
+    completedBy: varchar("completed_by", { length: 64 }),
+    sortOrder: int("sort_order").notNull().default(0),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }),
+    version: versionCol("version"),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    index("idx_crm_pt_project_order").on(table.projectId, table.sortOrder),
+    index("idx_crm_pt_project_milestone").on(table.projectId, table.milestoneId),
+    index("idx_crm_pt_owner_project_status").on(table.ownerUserId, table.projectId, table.status),
+    index("idx_crm_pt_owner_due").on(table.ownerUserId, table.dueDate),
+    uniqueIndex("uq_crm_pt_owner_idem").on(table.ownerUserId, table.idempotencyKey),
+  ],
+);
+
+/**
+ * B5A: Project deliverables and client review tracking.
+ */
+export const crmProjectDeliverables = mysqlTable(
+  "crm_project_deliverables",
+  {
+    id: crmId("id").primaryKey(),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    projectId: crmId("project_id")
+      .notNull()
+      .references(() => crmProjects.id, { onDelete: "cascade" }),
+    title: varchar("title", { length: 255 }).notNull(),
+    description: text("description"),
+    category: varchar("category", { length: 64 }).notNull().default("general"),
+    status: varchar("status", { length: 32 }).notNull().default("draft"),
+    dueDate: istDateChar("due_date"),
+    deliveredAt: utcDateTime("delivered_at"),
+    revisionCount: int("revision_count").notNull().default(0),
+    latestRevisionNotes: text("latest_revision_notes"),
+    clientFeedback: text("client_feedback"),
+    version: versionCol("version"),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    index("idx_crm_pdel_owner_project").on(table.ownerUserId, table.projectId),
+    index("idx_crm_pdel_owner_status").on(table.ownerUserId, table.status),
+    index("idx_crm_pdel_project_created").on(table.projectId, table.createdAt),
+  ],
+);
+
+/**
+ * B5A: Historical deliverable revisions preserving feedback and version history.
+ */
+export const crmProjectDeliverableRevisions = mysqlTable(
+  "crm_project_deliverable_revisions",
+  {
+    id: crmId("id").primaryKey(),
+    deliverableId: crmId("deliverable_id")
+      .notNull()
+      .references(() => crmProjectDeliverables.id, { onDelete: "cascade" }),
+    revisionNumber: int("revision_number").notNull(),
+    title: varchar("title", { length: 255 }),
+    summary: varchar("summary", { length: 255 }).notNull(),
+    fileUrl: varchar("file_url", { length: 1024 }),
+    notes: text("notes"),
+    clientFeedback: text("client_feedback"),
+    status: varchar("status", { length: 32 }).notNull().default("submitted"),
+    createdByUserId: crmId("created_by_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    createdAt: utcDateTime("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("uq_crm_pdr_deliv_rev").on(table.deliverableId, table.revisionNumber),
+    index("idx_crm_pdr_deliv_created").on(table.deliverableId, table.createdAt),
+  ],
+);
+
+/**
+ * B5A: Client support tickets / requests tied to projects with resolution history.
+ */
+export const crmClientSupportTickets = mysqlTable(
+  "crm_client_support_tickets",
+  {
+    id: crmId("id").primaryKey(),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    projectId: crmId("project_id")
+      .notNull()
+      .references(() => crmProjects.id, { onDelete: "cascade" }),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    title: varchar("title", { length: 255 }).notNull(),
+    description: text("description"),
+    priority: varchar("priority", { length: 16 }).notNull().default("normal"),
+    assigneeId: varchar("assignee_id", { length: 64 }),
+    dueDate: istDateChar("due_date"),
+    status: varchar("status", { length: 32 }).notNull().default("open"),
+    resolution: text("resolution"),
+    resolvedAt: utcDateTime("resolved_at"),
+    resolvedByUserId: crmId("resolved_by_user_id").references(() => crmUsers.id, { onDelete: "set null" }),
+    coverage: varchar("coverage", { length: 32 }).notNull().default("undecided"),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }),
+    version: versionCol("version"),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    index("idx_crm_cst_owner_project_status").on(table.ownerUserId, table.projectId, table.status),
+    index("idx_crm_cst_owner_status").on(table.ownerUserId, table.status),
+    index("idx_crm_cst_owner_priority").on(table.ownerUserId, table.priority),
+    uniqueIndex("uq_crm_cst_owner_idem").on(table.ownerUserId, table.idempotencyKey),
+  ],
+);
+
+/**
+ * B5A: Append-only project activity and audit events.
+ */
+export const crmProjectAuditEvents = mysqlTable(
+  "crm_project_audit_events",
+  {
+    id: crmId("id").primaryKey(),
+    projectId: crmId("project_id")
+      .notNull()
+      .references(() => crmProjects.id, { onDelete: "cascade" }),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    actorUserId: crmId("actor_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    eventType: varchar("event_type", { length: 64 }).notNull(),
+    summary: varchar("summary", { length: 255 }).notNull(),
+    detailsJson: text("details_json"),
+    occurredIstDate: istDateChar("occurred_ist_date").notNull(),
+    createdAt: utcDateTime("created_at").notNull(),
+  },
+  (table) => [
+    index("idx_crm_pae_owner_project").on(table.ownerUserId, table.projectId, table.createdAt),
+    index("idx_crm_pae_owner_type").on(table.ownerUserId, table.eventType),
+    index("idx_crm_pae_owner_created").on(table.ownerUserId, table.createdAt),
+  ],
+);
+
 export const b1aFoundationSchema = {
   crmSchemaMeta,
 } as const;
@@ -943,6 +1219,17 @@ export const crmQuotationSchema = {
   crmQuotationAuditEvents,
 } as const;
 
+export const crmProjectsSchema = {
+  crmProjectTemplates,
+  crmProjects,
+  crmProjectMilestones,
+  crmProjectTasks,
+  crmProjectDeliverables,
+  crmProjectDeliverableRevisions,
+  crmClientSupportTickets,
+  crmProjectAuditEvents,
+} as const;
+
 export const crmCoreSchema = {
   crmLeads,
   crmLeadActivities,
@@ -956,6 +1243,7 @@ export const crmCoreSchema = {
   crmIdempotencyKeys,
   ...crmFinanceSchema,
   ...crmQuotationSchema,
+  ...crmProjectsSchema,
 } as const;
 
 export const appSchema = {
