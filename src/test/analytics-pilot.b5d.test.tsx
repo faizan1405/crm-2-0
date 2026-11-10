@@ -436,16 +436,46 @@ describe("B5D Server-Backed Dashboard, Analytics & My Performance Pilot UI", () 
       const url = String(info);
       if (url.includes("/api/v1/analytics/performance")) return jsonRes(MOCK_PERF);
       if (url.includes("/api/v1/analytics/trends")) return jsonRes(MOCK_TRENDS);
+      if (url.includes("/api/v1/settings/definitions")) {
+        return jsonRes({
+          ok: true,
+          definitions: {
+            invariants: { businessTimezone: "Asia/Kolkata", currencyCode: "INR", readOnly: true },
+            leadStatuses: ["new", "contacted", "qualified", "proposal", "won", "lost"],
+            leadSources: ["Website"],
+            defaultLeadSortOptions: ["recent", "score", "value"],
+            goalMetrics: [],
+            goalPeriods: ["daily", "weekly", "monthly", "custom"],
+            goalScopes: [{ key: "owner", supported: true, description: "Owner workspace" }],
+            serverBackedFields: [],
+            deviceLocalPreferences: [],
+            existingTemplateEndpoints: {
+              quotationTemplates: "/api/v1/quotation-templates",
+              projectTemplates: "/api/v1/project-templates",
+            },
+            deferredModules: [],
+          },
+        });
+      }
+      if (url.includes("/api/v1/goals/progress")) {
+        return jsonRes({
+          ok: true,
+          asOfIstDate: "2026-11-10",
+          status: "not_configured",
+          note: "No sales goals configured yet.",
+          items: [],
+        });
+      }
       return jsonRes({ ok: false }, 404);
     });
 
     render(wrap(<PilotMyPerformancePage search={{ pilot: 1 }} />));
 
     await waitFor(() => {
-      expect(screen.getByText(/Goals & Target Tracking/i)).toBeTruthy();
+      expect(screen.getByText(/Sales Goals & Target Tracking/i)).toBeTruthy();
     });
 
-    expect(screen.getByText(/Deferred \/ Server Schema Pending/i)).toBeTruthy();
+    expect(screen.getAllByText(/Target not configured/i).length).toBeGreaterThan(0);
     // Ensure Local Browser Goal is NOT leaked into Pilot My Performance
     expect(screen.queryByText(/Local Browser Goal/i)).toBeNull();
   });

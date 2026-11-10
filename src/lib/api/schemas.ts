@@ -551,10 +551,11 @@ export const duplicateLeadConflictSchema = z.object({
 export type DuplicateLeadConflict = z.infer<typeof duplicateLeadConflictSchema>;
 
 export const staleConflictSchema = z.object({
-  resource: z.enum(["lead", "followup", "deal", "payment"]),
-  id: z.string(),
+  resource: z.enum(["lead", "followup", "deal", "payment", "settings", "goal"]),
+  id: z.string().optional(),
   expectedVersion: z.number().int().optional(),
   currentVersion: z.number().int().optional(),
+  status: z.string().optional(),
 });
 
 export type StaleConflict = z.infer<typeof staleConflictSchema>;
@@ -755,44 +756,46 @@ export const financeEventDtoSchema = z.object({
 });
 export type FinanceEventDto = z.infer<typeof financeEventDtoSchema>;
 
-export const ownerFinanceSummaryDtoSchema = z.object({
-  todayIstDate: z.string(),
-  period: z.enum(["all_time", "this_month", "last_month", "custom"]).or(z.string()),
-  fromIstDate: z.string().nullable(),
-  toIstDate: z.string().nullable(),
-  totalBooked: z.number(),
-  totalBookedDecimal: z.string(),
-  totalBookedPaise: z.number().int(),
-  activeBooked: z.number(),
-  activeBookedDecimal: z.string(),
-  activeBookedPaise: z.number().int(),
-  cancelledBooked: z.number(),
-  cancelledBookedDecimal: z.string(),
-  cancelledBookedPaise: z.number().int(),
-  cashCollected: z.number(),
-  cashCollectedDecimal: z.string(),
-  cashCollectedPaise: z.number().int(),
-  activeCashCollected: z.number(),
-  activeCashCollectedDecimal: z.string(),
-  activeCashCollectedPaise: z.number().int(),
-  cancelledCashCollected: z.number(),
-  cancelledCashCollectedDecimal: z.string(),
-  cancelledCashCollectedPaise: z.number().int(),
-  outstanding: z.number(),
-  outstandingDecimal: z.string(),
-  outstandingPaise: z.number().int(),
-  overdue: z.number(),
-  overdueDecimal: z.string(),
-  overduePaise: z.number().int(),
-  voidedAmount: z.number(),
-  voidedDecimal: z.string(),
-  voidedPaise: z.number().int(),
-  activeDealCount: z.number().int(),
-  cancelledDealCount: z.number().int(),
-  activePaymentCount: z.number().int(),
-  voidedPaymentCount: z.number().int(),
-  collectionRate: z.number().nullable(),
-}).passthrough();
+export const ownerFinanceSummaryDtoSchema = z
+  .object({
+    todayIstDate: z.string(),
+    period: z.enum(["all_time", "this_month", "last_month", "custom"]).or(z.string()),
+    fromIstDate: z.string().nullable(),
+    toIstDate: z.string().nullable(),
+    totalBooked: z.number(),
+    totalBookedDecimal: z.string(),
+    totalBookedPaise: z.number().int(),
+    activeBooked: z.number(),
+    activeBookedDecimal: z.string(),
+    activeBookedPaise: z.number().int(),
+    cancelledBooked: z.number(),
+    cancelledBookedDecimal: z.string(),
+    cancelledBookedPaise: z.number().int(),
+    cashCollected: z.number(),
+    cashCollectedDecimal: z.string(),
+    cashCollectedPaise: z.number().int(),
+    activeCashCollected: z.number(),
+    activeCashCollectedDecimal: z.string(),
+    activeCashCollectedPaise: z.number().int(),
+    cancelledCashCollected: z.number(),
+    cancelledCashCollectedDecimal: z.string(),
+    cancelledCashCollectedPaise: z.number().int(),
+    outstanding: z.number(),
+    outstandingDecimal: z.string(),
+    outstandingPaise: z.number().int(),
+    overdue: z.number(),
+    overdueDecimal: z.string(),
+    overduePaise: z.number().int(),
+    voidedAmount: z.number(),
+    voidedDecimal: z.string(),
+    voidedPaise: z.number().int(),
+    activeDealCount: z.number().int(),
+    cancelledDealCount: z.number().int(),
+    activePaymentCount: z.number().int(),
+    voidedPaymentCount: z.number().int(),
+    collectionRate: z.number().nullable(),
+  })
+  .passthrough();
 export type OwnerFinanceSummaryDto = z.infer<typeof ownerFinanceSummaryDtoSchema>;
 
 // API Response Envelopes
@@ -1096,13 +1099,17 @@ export const quotationTemplateDuplicateResponseSchema = z.object({
   ok: z.literal(true),
   template: quotationTemplateDtoSchema,
 });
-export type QuotationTemplateDuplicateResponse = z.infer<typeof quotationTemplateDuplicateResponseSchema>;
+export type QuotationTemplateDuplicateResponse = z.infer<
+  typeof quotationTemplateDuplicateResponseSchema
+>;
 
 export const quotationTemplateReorderResponseSchema = z.object({
   ok: z.literal(true),
   reorderedCount: z.number().int().min(0),
 });
-export type QuotationTemplateReorderResponse = z.infer<typeof quotationTemplateReorderResponseSchema>;
+export type QuotationTemplateReorderResponse = z.infer<
+  typeof quotationTemplateReorderResponseSchema
+>;
 
 export const quotationsListResponseSchema = z.object({
   ok: z.literal(true),
@@ -1201,7 +1208,6 @@ export const apiErrorEnvelopeSchema = z.object({
   }),
 });
 
-
 // ============================================================================
 // B5A / B5B PROJECTS, MILESTONES, TASKS, DELIVERABLES, SUPPORT SCHEMAS
 // ============================================================================
@@ -1234,7 +1240,13 @@ export type ProjectStageApi = (typeof PROJECT_STAGES_API)[number];
 export const PROJECT_PRIORITIES_API = ["high", "normal", "low"] as const;
 export type ProjectPriorityApi = (typeof PROJECT_PRIORITIES_API)[number];
 
-export const SUPPORT_STATUSES_API = ["not_set", "not_included", "scheduled", "active", "ended"] as const;
+export const SUPPORT_STATUSES_API = [
+  "not_set",
+  "not_included",
+  "scheduled",
+  "active",
+  "ended",
+] as const;
 export type SupportStatusApi = (typeof SUPPORT_STATUSES_API)[number];
 
 export const SUPPORT_KINDS_API = ["bug", "technical", "content", "integration", "general"] as const;
@@ -1246,10 +1258,21 @@ export type RequestStatusApi = (typeof REQUEST_STATUSES_API)[number];
 export const SUPPORT_COVERAGES_API = ["undecided", "included", "billable"] as const;
 export type SupportCoverageApi = (typeof SUPPORT_COVERAGES_API)[number];
 
-export const DELIVERABLE_STATUSES_API = ["draft", "review", "approved", "rejected", "delivered"] as const;
+export const DELIVERABLE_STATUSES_API = [
+  "draft",
+  "review",
+  "approved",
+  "rejected",
+  "delivered",
+] as const;
 export type DeliverableStatusApi = (typeof DELIVERABLE_STATUSES_API)[number];
 
-export const DELIVERABLE_REVISION_STATUSES_API = ["submitted", "in_review", "changes_requested", "approved"] as const;
+export const DELIVERABLE_REVISION_STATUSES_API = [
+  "submitted",
+  "in_review",
+  "changes_requested",
+  "approved",
+] as const;
 export type DeliverableRevisionStatusApi = (typeof DELIVERABLE_REVISION_STATUSES_API)[number];
 
 export const checkItemSchema = z.object({
@@ -1559,7 +1582,9 @@ export const projectDeliverableCreateResponseSchema = z.object({
   ok: z.literal(true),
   deliverable: projectDeliverableDtoSchema,
 });
-export type ProjectDeliverableCreateResponse = z.infer<typeof projectDeliverableCreateResponseSchema>;
+export type ProjectDeliverableCreateResponse = z.infer<
+  typeof projectDeliverableCreateResponseSchema
+>;
 
 export const projectDeliverableRevisionCreateResponseSchema = z.object({
   ok: z.literal(true),
@@ -1574,13 +1599,17 @@ export const projectSupportTicketCreateResponseSchema = z.object({
   ok: z.literal(true),
   ticket: clientSupportTicketDtoSchema,
 });
-export type ProjectSupportTicketCreateResponse = z.infer<typeof projectSupportTicketCreateResponseSchema>;
+export type ProjectSupportTicketCreateResponse = z.infer<
+  typeof projectSupportTicketCreateResponseSchema
+>;
 
 export const projectSupportTicketUpdateResponseSchema = z.object({
   ok: z.literal(true),
   ticket: clientSupportTicketDtoSchema,
 });
-export type ProjectSupportTicketUpdateResponse = z.infer<typeof projectSupportTicketUpdateResponseSchema>;
+export type ProjectSupportTicketUpdateResponse = z.infer<
+  typeof projectSupportTicketUpdateResponseSchema
+>;
 
 export const projectTemplatesListResponseSchema = z.object({
   ok: z.literal(true),
@@ -1823,9 +1852,7 @@ export const communicationsAnalyticsResponseSchema = z.object({
     cancelled: z.number(),
   }),
 });
-export type CommunicationsAnalyticsResponse = z.infer<
-  typeof communicationsAnalyticsResponseSchema
->;
+export type CommunicationsAnalyticsResponse = z.infer<typeof communicationsAnalyticsResponseSchema>;
 
 export const financeAnalyticsResponseSchema = z.object({
   ok: z.literal(true),
@@ -2003,9 +2030,7 @@ export const performanceAnalyticsResponseSchema = z.object({
     items: z.array(z.unknown()),
   }),
 });
-export type PerformanceAnalyticsResponse = z.infer<
-  typeof performanceAnalyticsResponseSchema
->;
+export type PerformanceAnalyticsResponse = z.infer<typeof performanceAnalyticsResponseSchema>;
 
 export const trendsAnalyticsResponseSchema = z.object({
   ok: z.literal(true),
@@ -2028,3 +2053,322 @@ export const trendsAnalyticsResponseSchema = z.object({
   ),
 });
 export type TrendsAnalyticsResponse = z.infer<typeof trendsAnalyticsResponseSchema>;
+
+// ============================================================================
+// B6A / B6B Server-Backed Owner Settings & Sales Goals Schemas
+// ============================================================================
+
+export const DEFAULT_LEAD_SORTS_API = ["recent", "score", "value"] as const;
+export type DefaultLeadSortApi = (typeof DEFAULT_LEAD_SORTS_API)[number];
+
+export const SETTINGS_AUDIT_SECTIONS_API = [
+  "all",
+  "profile",
+  "crm",
+  "notifications",
+  "mixed",
+] as const;
+export type SettingsAuditSectionApi = (typeof SETTINGS_AUDIT_SECTIONS_API)[number];
+
+export const GOAL_PERIODS_API = ["daily", "weekly", "monthly", "custom"] as const;
+export type GoalPeriodApi = (typeof GOAL_PERIODS_API)[number];
+
+export const GOAL_SCOPES_API = ["owner", "team"] as const;
+export type GoalScopeApi = (typeof GOAL_SCOPES_API)[number];
+
+export const GOAL_STATUSES_API = ["active", "paused", "archived"] as const;
+export type GoalStatusApi = (typeof GOAL_STATUSES_API)[number];
+
+export const GOAL_TARGET_UNITS_API = ["count", "inr"] as const;
+export type GoalTargetUnitApi = (typeof GOAL_TARGET_UNITS_API)[number];
+
+export const GOAL_METRIC_KEYS_API = [
+  "calls_logged",
+  "calls_connected",
+  "followups_completed",
+  "leads_created",
+  "leads_contacted",
+  "leads_qualified",
+  "deals_booked",
+  "deals_booked_value",
+  "cash_collected",
+  "quotations_created",
+  "quotations_sent",
+  "projects_completed",
+] as const;
+export type GoalMetricKeyApi = (typeof GOAL_METRIC_KEYS_API)[number];
+
+export const GOAL_PROGRESS_STATUSES_API = [
+  "not_configured",
+  "not_measurable",
+  "not_started",
+  "outside_range",
+  "paused",
+  "archived",
+  "no_activity",
+  "in_progress",
+  "met",
+  "exceeded",
+] as const;
+export type GoalProgressStatusApi = (typeof GOAL_PROGRESS_STATUSES_API)[number];
+
+export const GOAL_WINDOW_STATES_API = ["active", "future", "expired", "not_started"] as const;
+export type GoalWindowStateApi = (typeof GOAL_WINDOW_STATES_API)[number];
+
+export const ownerSettingsDtoSchema = z.object({
+  configured: z.boolean(),
+  id: z.string().nullable(),
+  ownerUserId: z.string(),
+  ownerDisplayName: z.string().nullable(),
+  businessName: z.string().nullable(),
+  profileEmail: z.string().nullable(),
+  businessPhone: z.string().nullable(),
+  businessWebsite: z.string().nullable(),
+  businessAddress: z.string().nullable(),
+  gstin: z.string().nullable(),
+  paymentInstructions: z.string().nullable(),
+  businessTimezone: z.literal("Asia/Kolkata"),
+  currencyCode: z.literal("INR"),
+  defaultLeadSort: z.enum(DEFAULT_LEAD_SORTS_API),
+  notifyFollowUps: z.boolean(),
+  notifyPayments: z.boolean(),
+  notifyDigest: z.boolean(),
+  notifyGoalAchieved: z.boolean(),
+  notifyTeamGoal: z.boolean(),
+  notifyMilestone: z.boolean(),
+  notifyOverdue: z.boolean(),
+  overdueThreshold: z.number().int().min(1).max(1000),
+  updatedByUserId: z.string().nullable(),
+  version: z.number().int().min(0),
+  createdAt: z.string().nullable(),
+  updatedAt: z.string().nullable(),
+});
+export type OwnerSettingsDto = z.infer<typeof ownerSettingsDtoSchema>;
+
+export const settingsAuditEventDtoSchema = z.object({
+  id: z.string(),
+  settingsId: z.string(),
+  ownerUserId: z.string(),
+  actorUserId: z.string(),
+  section: z.string(),
+  eventType: z.string(),
+  summary: z.string(),
+  changedFields: z.array(z.string()),
+  before: z.record(z.string(), z.unknown()).nullable(),
+  after: z.record(z.string(), z.unknown()),
+  versionBefore: z.number().int().min(0),
+  versionAfter: z.number().int().min(1),
+  occurredIstDate: z.string(),
+  createdAt: z.string(),
+});
+export type SettingsAuditEventDto = z.infer<typeof settingsAuditEventDtoSchema>;
+
+export const goalMetricDefinitionDtoSchema = z.object({
+  key: z.enum(GOAL_METRIC_KEYS_API),
+  label: z.string(),
+  unit: z.enum(GOAL_TARGET_UNITS_API),
+  financial: z.boolean(),
+  dataSource: z.string(),
+  description: z.string(),
+});
+export type GoalMetricDefinitionDto = z.infer<typeof goalMetricDefinitionDtoSchema>;
+
+export const settingsDefinitionsResponseSchema = z.object({
+  ok: z.literal(true),
+  definitions: z.object({
+    invariants: z.object({
+      businessTimezone: z.literal("Asia/Kolkata"),
+      currencyCode: z.literal("INR"),
+      readOnly: z.literal(true),
+    }),
+    leadStatuses: z.array(z.string()),
+    leadSources: z.array(z.string()),
+    defaultLeadSortOptions: z.array(z.enum(DEFAULT_LEAD_SORTS_API)),
+    goalMetrics: z.array(goalMetricDefinitionDtoSchema),
+    goalPeriods: z.array(z.enum(GOAL_PERIODS_API)),
+    goalScopes: z.array(
+      z.object({
+        key: z.string(),
+        supported: z.boolean(),
+        description: z.string(),
+      }),
+    ),
+    serverBackedFields: z.array(z.string()),
+    deviceLocalPreferences: z.array(z.string()),
+    existingTemplateEndpoints: z.object({
+      quotationTemplates: z.string(),
+      projectTemplates: z.string(),
+    }),
+    deferredModules: z.array(z.string()),
+  }),
+});
+export type SettingsDefinitionsResponse = z.infer<typeof settingsDefinitionsResponseSchema>;
+
+export const ownerSettingsGetResponseSchema = z.object({
+  ok: z.literal(true),
+  settings: ownerSettingsDtoSchema,
+});
+export type OwnerSettingsGetResponse = z.infer<typeof ownerSettingsGetResponseSchema>;
+
+export const ownerSettingsUpdateResponseSchema = z.object({
+  ok: z.literal(true),
+  settings: ownerSettingsDtoSchema,
+  auditEvent: settingsAuditEventDtoSchema.nullable(),
+  changed: z.boolean(),
+});
+export type OwnerSettingsUpdateResponse = z.infer<typeof ownerSettingsUpdateResponseSchema>;
+
+export const settingsAuditListResponseSchema = z.object({
+  ok: z.literal(true),
+  items: z.array(settingsAuditEventDtoSchema),
+  total: z.number().int().min(0),
+  limit: z.number().int().min(1),
+  offset: z.number().int().min(0),
+});
+export type SettingsAuditListResponse = z.infer<typeof settingsAuditListResponseSchema>;
+
+export const salesGoalDtoSchema = z.object({
+  id: z.string(),
+  legacyId: z.string().nullable(),
+  ownerUserId: z.string(),
+  name: z.string(),
+  metric: z.enum(GOAL_METRIC_KEYS_API),
+  metricLabel: z.string(),
+  scope: z.enum(GOAL_SCOPES_API).or(z.string()),
+  targetUnit: z.enum(GOAL_TARGET_UNITS_API),
+  target: z.number().nullable(),
+  targetDecimal: z.string().nullable(),
+  targetCount: z.number().int().nullable(),
+  targetAmount: z.string().nullable(),
+  period: z.enum(GOAL_PERIODS_API),
+  customFromIst: z.string().nullable(),
+  customToIst: z.string().nullable(),
+  effectiveFromIst: z.string(),
+  status: z.enum(GOAL_STATUSES_API),
+  archivedAt: z.string().nullable(),
+  archiveReason: z.string().nullable(),
+  createdByUserId: z.string(),
+  updatedByUserId: z.string(),
+  version: z.number().int().min(1),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type SalesGoalDto = z.infer<typeof salesGoalDtoSchema>;
+
+export const goalDefinitionSnapshotDtoSchema = z.object({
+  name: z.string(),
+  metric: z.enum(GOAL_METRIC_KEYS_API),
+  scope: z.enum(GOAL_SCOPES_API).or(z.string()),
+  targetUnit: z.enum(GOAL_TARGET_UNITS_API),
+  targetCount: z.number().int().nullable(),
+  targetAmount: z.string().nullable(),
+  period: z.enum(GOAL_PERIODS_API),
+  customFromIst: z.string().nullable(),
+  customToIst: z.string().nullable(),
+  effectiveFromIst: z.string(),
+  status: z.enum(GOAL_STATUSES_API),
+  version: z.number().int().min(1),
+});
+export type GoalDefinitionSnapshotDto = z.infer<typeof goalDefinitionSnapshotDtoSchema>;
+
+export const salesGoalRevisionDtoSchema = z.object({
+  id: z.string(),
+  goalId: z.string(),
+  ownerUserId: z.string(),
+  actorUserId: z.string(),
+  revisionNumber: z.number().int().min(1),
+  eventType: z.string(),
+  effectiveFromIst: z.string(),
+  snapshot: goalDefinitionSnapshotDtoSchema,
+  changeSummary: z.string(),
+  occurredIstDate: z.string(),
+  createdAt: z.string(),
+});
+export type SalesGoalRevisionDto = z.infer<typeof salesGoalRevisionDtoSchema>;
+
+export const goalProgressResultDtoSchema = z.object({
+  asOfIstDate: z.string(),
+  appliedVersion: z.number().int().nullable(),
+  appliedEffectiveFromIst: z.string().nullable(),
+  window: analyticsDateWindowSchema.nullable(),
+  windowState: z.enum(GOAL_WINDOW_STATES_API),
+  status: z.enum(GOAL_PROGRESS_STATUSES_API),
+  measurable: z.boolean(),
+  unavailableReason: z.string().nullable(),
+  unit: z.enum(GOAL_TARGET_UNITS_API),
+  target: z.number().nullable(),
+  targetDecimal: z.string().nullable(),
+  actual: z.number().nullable(),
+  actualDecimal: z.string().nullable(),
+  pct: z.number().nullable(),
+  pctPercent: z.number().nullable(),
+  remaining: z.number().nullable(),
+  remainingDecimal: z.string().nullable(),
+  excludedUnknownDateCount: z.number().int().min(0),
+  note: z.string().nullable(),
+});
+export type GoalProgressResultDto = z.infer<typeof goalProgressResultDtoSchema>;
+
+export const goalsListResponseSchema = z.object({
+  ok: z.literal(true),
+  items: z.array(salesGoalDtoSchema),
+  total: z.number().int().min(0),
+  limit: z.number().int().min(1),
+  offset: z.number().int().min(0),
+  configuredCount: z.number().int().min(0),
+  note: z.string().nullable(),
+});
+export type GoalsListResponse = z.infer<typeof goalsListResponseSchema>;
+
+export const goalDetailResponseSchema = z.object({
+  ok: z.literal(true),
+  goal: salesGoalDtoSchema,
+  revisionCount: z.number().int().min(0),
+});
+export type GoalDetailResponse = z.infer<typeof goalDetailResponseSchema>;
+
+export const goalMutationResponseSchema = z.object({
+  ok: z.literal(true),
+  goal: salesGoalDtoSchema,
+  revision: salesGoalRevisionDtoSchema,
+});
+export type GoalMutationResponse = z.infer<typeof goalMutationResponseSchema>;
+
+export const goalStatusMutationResponseSchema = z.object({
+  ok: z.literal(true),
+  goal: salesGoalDtoSchema,
+  revision: salesGoalRevisionDtoSchema.nullable(),
+});
+export type GoalStatusMutationResponse = z.infer<typeof goalStatusMutationResponseSchema>;
+
+export const goalRevisionsResponseSchema = z.object({
+  ok: z.literal(true),
+  goalId: z.string(),
+  items: z.array(salesGoalRevisionDtoSchema),
+  total: z.number().int().min(0),
+  limit: z.number().int().min(1),
+  offset: z.number().int().min(0),
+});
+export type GoalRevisionsResponse = z.infer<typeof goalRevisionsResponseSchema>;
+
+export const goalSingleProgressResponseSchema = z.object({
+  ok: z.literal(true),
+  goal: salesGoalDtoSchema,
+  progress: goalProgressResultDtoSchema,
+});
+export type GoalSingleProgressResponse = z.infer<typeof goalSingleProgressResponseSchema>;
+
+export const goalsProgressItemSchema = z.object({
+  goal: salesGoalDtoSchema,
+  progress: goalProgressResultDtoSchema,
+});
+export type GoalsProgressItemDto = z.infer<typeof goalsProgressItemSchema>;
+
+export const goalsProgressListResponseSchema = z.object({
+  ok: z.literal(true),
+  asOfIstDate: z.string(),
+  status: z.enum(["active", "not_configured"]),
+  note: z.string().nullable(),
+  items: z.array(goalsProgressItemSchema),
+});
+export type GoalsProgressListResponse = z.infer<typeof goalsProgressListResponseSchema>;

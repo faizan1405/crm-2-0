@@ -12,14 +12,17 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { AlertCircle, Calendar, Info, RotateCw, Target, ShieldCheck } from "lucide-react";
+import { AlertCircle, Calendar, Info, RotateCw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { PilotShell } from "./PilotShell";
+import { PilotGoalsSection } from "./PilotGoalsSection";
 import {
   invalidateAnalytics,
   usePerformanceAnalyticsQuery,
   useTrendsAnalyticsQuery,
 } from "@/lib/api/analyticsApi";
+import { goalsKeys } from "@/lib/api/goalsApi";
+import { useResolvedAuthState } from "@/lib/auth/authClient";
 import type { AnalyticsGranularity, AnalyticsPeriod } from "@/lib/api/schemas";
 import { CHART, EmptyChart, Kpi, Panel, axis, tip } from "@/components/analytics/parts";
 import { formatDate, formatINR, formatINRCompact, formatPct } from "@/lib/crm/format";
@@ -46,6 +49,7 @@ const fmtSafePct = (r: number | null) => (r == null ? "N/A" : formatPct(r));
 
 export function PilotMyPerformancePage(_props: { search?: Record<string, unknown> }) {
   const queryClient = useQueryClient();
+  const { user: authUser } = useResolvedAuthState();
   const [period, setPeriod] = useState<AnalyticsPeriod>("7d");
   const [customFrom, setCustomFrom] = useState<string>("");
   const [customTo, setCustomTo] = useState<string>("");
@@ -71,8 +75,12 @@ export function PilotMyPerformancePage(_props: { search?: Record<string, unknown
 
   const handleRefresh = async () => {
     try {
-      await invalidateAnalytics(queryClient);
-      toast.success("Owner performance refreshed from MariaDB");
+      await Promise.all([
+        invalidateAnalytics(queryClient),
+        queryClient.invalidateQueries({ queryKey: goalsKeys.progressRoot(authUser?.id) }),
+        queryClient.invalidateQueries({ queryKey: goalsKeys.lists(authUser?.id) }),
+      ]);
+      toast.success("Owner performance and goals refreshed from MariaDB");
     } catch {
       toast.error("Failed to refresh owner performance");
     }
@@ -362,36 +370,12 @@ export function PilotMyPerformancePage(_props: { search?: Record<string, unknown
                 </Panel>
               </div>
             )}
-
-            {/* Goals & Data Attribution Boundaries */}
-            <div className="rounded-2xl border bg-card p-5">
-              <div className="flex items-start gap-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-secondary text-foreground">
-                  <Target className="size-4" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-sm font-semibold">Goals & Target Tracking</h3>
-                    <span className="rounded-full border bg-secondary px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-                      {perf.goals.status === "not_configured"
-                        ? "Deferred / Server Schema Pending"
-                        : "Active"}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-                    {perf.goals.note}
-                  </p>
-                  {perf.ownerSummary.unknownWonDatesCount > 0 && (
-                    <p className="mt-2 text-xs text-warning">
-                      Note: {perf.ownerSummary.unknownWonDatesCount} won deal(s) have
-                      missing/unknown won dates and are listed separately from dated period figures.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
           </div>
         ) : null}
+
+        <div className="mt-5">
+          <PilotGoalsSection unknownWonDatesCount={perf?.ownerSummary.unknownWonDatesCount ?? 0} />
+        </div>
       </PilotShell>
     </TooltipProvider>
   );

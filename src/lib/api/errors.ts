@@ -170,6 +170,41 @@ export function extractFieldValidationErrors(error: unknown): Record<string, str
   return out;
 }
 
+export function extractSettingsOrGoalFieldErrors(error: unknown): Record<string, string> {
+  if (!isApiError(error) || !error.details) {
+    return {};
+  }
+  if (
+    error.code !== "validation_error" &&
+    error.code !== "secret_detected" &&
+    error.code !== "unsupported_metric" &&
+    error.code !== "forbidden_setting_key"
+  ) {
+    return {};
+  }
+  const out: Record<string, string> = {};
+  for (const [key, val] of Object.entries(error.details)) {
+    if (typeof val === "string" && val.trim()) {
+      out[key] = val;
+    }
+  }
+  return out;
+}
+
+export function extractForbiddenSettingKey(error: unknown): string | null {
+  if (!isApiError(error) || error.code !== "forbidden_setting_key" || !error.details) {
+    return null;
+  }
+  const key = error.details["key"];
+  return typeof key === "string" && key.trim() ? key.trim() : null;
+}
+
+export function isArchivedGoalError(error: unknown): boolean {
+  return (
+    isApiError(error) && (error.code === "goal_archived" || error.code === "goal_already_archived")
+  );
+}
+
 export function formatApiErrorMessage(
   error: unknown,
   fallback = "Could not complete request. Nothing was saved.",

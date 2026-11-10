@@ -1,11 +1,15 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { User, Palette, Clock, SlidersHorizontal, Bell, Shield, Database, Sun, Moon, Monitor, Download } from "lucide-react";
 import { Shell, selectCls } from "@/components/crm/Shell";
+import { AppShellSkeleton } from "@/components/crm/ShellPrimitives";
+import { PilotSettingsPage } from "@/components/pilot/PilotSettingsPage";
 import { useCRM, type Prefs } from "@/lib/crm/store";
 import { TIMEZONE, formatDateTime, initials } from "@/lib/crm/format";
 import { logoutOwner, useResolvedAuthState } from "@/lib/auth/authClient";
+import { setLeadPilotSessionOptIn } from "@/lib/api/pilotGate";
+import { parsePilotSearch, useLeadPilotState } from "@/lib/api/pilotHook";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +17,8 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/lib/crm/session";
 import { StorageDiagnostic } from "@/components/crm/StorageDiagnostic";
+
+type SettingsSearch = { section?: string | undefined; pilot?: 1 | 0 | undefined };
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -25,9 +31,28 @@ export const Route = createFileRoute("/settings")({
       { property: "og:description", content: "Profile, appearance, preferences and demo data." },
     ],
   }),
-  validateSearch: (s: Record<string, unknown>): { section?: string } => (typeof s["section"] === "string" ? { section: s["section"] } : {}),
-  component: Settings,
+  validateSearch: (s: Record<string, unknown>): SettingsSearch => {
+    const pilotObj = parsePilotSearch(s);
+    return {
+      ...(typeof s["section"] === "string" && s["section"] ? { section: s["section"] } : {}),
+      ...(pilotObj.pilot !== undefined ? { pilot: pilotObj.pilot } : {}),
+    };
+  },
+  component: SettingsEntry,
 });
+
+function SettingsEntry() {
+  const search = Route.useSearch();
+  const { pilotActive, pilotResolved } = useLeadPilotState(search.pilot);
+
+  if (pilotActive) {
+    return <PilotSettingsPage search={search} />;
+  }
+  if (!pilotResolved) {
+    return <AppShellSkeleton />;
+  }
+  return <Settings />;
+}
 
 const SECTIONS = [
   { id: "profile", label: "Profile & account", icon: User },
@@ -45,12 +70,14 @@ const Pending = () => <span className="rounded-full bg-neutral-soft px-2 py-0.5 
 function Settings() {
   const s = useCRM();
   const { section } = Route.useSearch();
+  const navigate = useNavigate({ from: "/settings" });
   const [sec, setSec] = useState<Sec>(SECTIONS.some((x) => x.id === section) ? (section as Sec) : "profile");
   const pv = useSession((x) => x.preview);
   const [owner, setOwner] = useState(s.owner);
   const [business, setBusiness] = useState(s.business);
   const [email, setEmail] = useState(s.email);
-  const { user: authUser, idleExpiresAt, expiresAt } = useResolvedAuthState();
+  const { user: authUser, idleExpiresAt, expiresAt, status: authStatus, leadPilotAvailable: serverPilotAvailable } = useResolvedAuthState();
+  const leadPilotAvailable = authStatus === "authenticated" && serverPilotAvailable;
   const [sessionBusy, setSessionBusy] = useState<"logout" | "logout-all" | null>(null);
   const p = (patch: Partial<Prefs>) => { s.preferences(patch); toast.success("Preference saved"); };
   const Choice = <T extends string>({ value, options, onChange }: { value: T; options: readonly (readonly [T, string, React.ReactNode?])[]; onChange: (v: T) => void }) => (
@@ -61,7 +88,26 @@ function Settings() {
   );
 
   return (
-    <Shell title="Settings" subtitle="Preferences are saved on this device">
+    <Shell
+      title="Settings"
+      subtitle="Preferences are saved on this device"
+      actions={
+        leadPilotAvailable ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-lg gap-1.5"
+            onClick={() => {
+              setLeadPilotSessionOptIn(true);
+              void navigate({ to: "/settings", search: (prev) => ({ ...prev, pilot: 1 }) });
+            }}
+          >
+            <Database className="size-4" />
+            Dev Settings Pilot
+          </Button>
+        ) : undefined
+      }
+    >
       <div className="grid gap-5 xl:grid-cols-[220px_minmax(0,1fr)]">
         <nav className="flex gap-1 overflow-x-auto xl:flex-col">
           {SECTIONS.map((x) => <Button variant="ghost" key={x.id} onClick={() => setSec(x.id)} className={cn("flex shrink-0 justify-start items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors", sec === x.id ? "bg-card font-medium text-foreground shadow-card" : "text-muted-foreground hover:text-foreground")}><x.icon className="size-4" />{x.label}</Button>)}

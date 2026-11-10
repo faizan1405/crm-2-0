@@ -1,10 +1,15 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Archive, ArrowDown, ArrowUp, Copy, Eye, Lock, Pencil, Pin, Plus, RotateCcw, Settings2, SlidersHorizontal, Star, Tag, Trash2, AlertTriangle } from "lucide-react";
+import { Archive, ArrowDown, ArrowUp, Copy, Database, Eye, Lock, Pencil, Pin, Plus, RotateCcw, Settings2, SlidersHorizontal, Star, Tag, Trash2, AlertTriangle } from "lucide-react";
 import { Shell, Empty, selectCls } from "@/components/crm/Shell";
+import { AppShellSkeleton } from "@/components/crm/ShellPrimitives";
+import { PilotCrmConfigPage } from "@/components/pilot/PilotCrmConfigPage";
 import { FieldInput, toDraft, type Draft } from "@/components/crm/Customize";
 import { ViewEditor, newView } from "@/components/crm/ViewEditor";
+import { useResolvedAuthState } from "@/lib/auth/authClient";
+import { setLeadPilotSessionOptIn } from "@/lib/api/pilotGate";
+import { parsePilotSearch, useLeadPilotState } from "@/lib/api/pilotHook";
 import { useAccess } from "@/lib/crm/session";
 import { useCRM, viewCtxOf } from "@/lib/crm/store";
 import { OWNER_ACTOR_ID } from "@/lib/crm/activity";
@@ -22,8 +27,17 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { cn } from "@/lib/utils";
 
 type TabKey = "fields" | "tags" | "views";
+type CrmConfigSearch = { tab?: TabKey; entity?: FieldEntity; pilot?: 1 | 0 };
+
 export const Route = createFileRoute("/crm-config")({
-  validateSearch: (s: Record<string, unknown>): { tab?: TabKey; entity?: FieldEntity } => ({ ...(s["tab"] === "tags" || s["tab"] === "views" || s["tab"] === "fields" ? { tab: s["tab"] } : {}), ...(s["entity"] === "project" ? { entity: "project" as const } : {}) }),
+  validateSearch: (s: Record<string, unknown>): CrmConfigSearch => {
+    const pilotObj = parsePilotSearch(s);
+    return {
+      ...(s["tab"] === "tags" || s["tab"] === "views" || s["tab"] === "fields" ? { tab: s["tab"] } : {}),
+      ...(s["entity"] === "project" ? { entity: "project" as const } : {}),
+      ...(pilotObj.pilot !== undefined ? { pilot: pilotObj.pilot } : {}),
+    };
+  },
   head: () => ({
     meta: [
       { title: "CRM Configuration · Scale Flow Sales OS" },
@@ -34,18 +48,55 @@ export const Route = createFileRoute("/crm-config")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: CrmConfig,
+  component: CrmConfigEntry,
 });
+
+function CrmConfigEntry() {
+  const search = Route.useSearch();
+  const { pilotActive, pilotResolved } = useLeadPilotState(search.pilot);
+
+  if (pilotActive) {
+    return <PilotCrmConfigPage />;
+  }
+  if (!pilotResolved) {
+    return <AppShellSkeleton />;
+  }
+  return <CrmConfig />;
+}
 
 function CrmConfig() {
   const { preview } = useAccess();
   const search = Route.useSearch(); const tab = search.tab ?? "fields"; const entity = search.entity ?? "lead";
+  const navigate = useNavigate({ from: "/crm-config" });
+  const { status: authStatus, leadPilotAvailable: serverPilotAvailable } = useResolvedAuthState();
+  const leadPilotAvailable = authStatus === "authenticated" && serverPilotAvailable;
   if (preview) return <Shell title="CRM Configuration"><Empty icon={<Lock />} title="Owner only" hint="Employees can't change custom fields, tags or company views." /></Shell>;
   const tabs: [TabKey, string, typeof Settings2][] = [["fields", "Custom fields", SlidersHorizontal], ["tags", "Tags", Tag], ["views", "Saved views", Eye]];
-  return <Shell title="CRM Configuration" subtitle="Shape the information you keep on every lead and project — without touching code.">
-    <div className="mb-6 flex gap-4 overflow-x-auto border-t border-foreground pt-4" >{tabs.map(([k, l, I]) => <Link key={k} to="/crm-config" search={{ tab: k }} aria-current={tab === k ? "page" : undefined} className={cn("flex shrink-0 items-center gap-1.5 border-b-2 pb-1.5 text-sm", tab === k ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}><I className="size-4" />{l}</Link>)}</div>
-    {tab === "fields" ? <FieldsTab key={entity} entity={entity} /> : tab === "tags" ? <TagsTab /> : <ViewsTab />}
-  </Shell>;
+  return (
+    <Shell
+      title="CRM Configuration"
+      subtitle="Shape the information you keep on every lead and project — without touching code."
+      actions={
+        leadPilotAvailable ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-lg gap-1.5"
+            onClick={() => {
+              setLeadPilotSessionOptIn(true);
+              void navigate({ to: "/crm-config", search: (prev) => ({ ...prev, pilot: 1 }) });
+            }}
+          >
+            <Database className="size-4" />
+            Dev Config Pilot
+          </Button>
+        ) : undefined
+      }
+    >
+      <div className="mb-6 flex gap-4 overflow-x-auto border-t border-foreground pt-4" >{tabs.map(([k, l, I]) => <Link key={k} to="/crm-config" search={{ tab: k }} aria-current={tab === k ? "page" : undefined} className={cn("flex shrink-0 items-center gap-1.5 border-b-2 pb-1.5 text-sm", tab === k ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}><I className="size-4" />{l}</Link>)}</div>
+      {tab === "fields" ? <FieldsTab key={entity} entity={entity} /> : tab === "tags" ? <TagsTab /> : <ViewsTab />}
+    </Shell>
+  );
 }
 
 /* ================================ fields ================================ */

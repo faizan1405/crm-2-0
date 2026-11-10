@@ -20,6 +20,8 @@ import {
   FileText,
   BarChart3,
   Target,
+  Settings,
+  SlidersHorizontal,
 } from "lucide-react";
 import { logoutOwner, useResolvedAuthState } from "@/lib/auth/authClient";
 import { setLeadPilotSessionOptIn } from "@/lib/api/pilotGate";
@@ -40,6 +42,8 @@ const PILOT_LINKS = [
   { to: "/projects" as const, label: "Projects (Pilot)", icon: FolderKanban, pilot: true },
   { to: "/analytics" as const, label: "Analytics (Pilot)", icon: BarChart3, pilot: true },
   { to: "/my-performance" as const, label: "My Performance (Pilot)", icon: Target, pilot: true },
+  { to: "/settings" as const, label: "Settings (Pilot)", icon: Settings, pilot: true },
+  { to: "/crm-config" as const, label: "CRM Config (Pilot)", icon: SlidersHorizontal, pilot: true },
   { to: "/leads/bin" as const, label: "Waste & deleted", icon: Trash2, pilot: true },
 ];
 
@@ -124,18 +128,24 @@ export function PilotShell({
                   ? path === "/analytics" || path.startsWith("/analytics/")
                   : item.to === "/my-performance"
                     ? path === "/my-performance" || path.startsWith("/my-performance/")
-                    : item.to === "/leads/bin"
-                      ? path.startsWith("/leads/bin")
-                      : item.to === "/follow-ups"
-                        ? path === "/follow-ups" || path.startsWith("/follow-ups/")
-                        : item.to === "/deals"
-                          ? path === "/deals" || path.startsWith("/deals/")
-                          : item.to === "/sales-studio"
-                            ? path === "/sales-studio" || path.startsWith("/sales-studio/")
-                            : item.to === "/projects"
-                              ? path === "/projects" || path.startsWith("/projects/")
-                              : path === "/leads" ||
-                                (path.startsWith("/leads/") && !path.startsWith("/leads/bin"));
+                    : item.to === "/settings"
+                      ? path === "/settings" || path.startsWith("/settings/")
+                      : item.to === "/crm-config"
+                        ? path === "/crm-config" || path.startsWith("/crm-config/")
+                        : item.to === "/leads/bin"
+                          ? path.startsWith("/leads/bin")
+                          : item.to === "/follow-ups"
+                            ? path === "/follow-ups" || path.startsWith("/follow-ups/")
+                            : item.to === "/deals"
+                              ? path === "/deals" || path.startsWith("/deals/")
+                              : item.to === "/sales-studio"
+                                ? path === "/sales-studio" || path.startsWith("/sales-studio/")
+                                : item.to === "/projects"
+                                  ? path === "/projects" || path.startsWith("/projects/")
+                                  : item.to === "/leads" &&
+                                    (path === "/leads" ||
+                                      (path.startsWith("/leads/") &&
+                                        !path.startsWith("/leads/bin")));
             return (
               <Link
                 key={item.to}
@@ -248,7 +258,7 @@ export function PilotShell({
             <Database className="size-4 shrink-0 text-primary" aria-hidden />
             <span className="min-w-0">
               <b>Dev CRM Pilot (Synthetic MariaDB)</b> — Server-backed Leads, Calls, WhatsApp,
-              Activities & Follow-ups only.{" "}
+              Follow-ups, Finance, Projects, Analytics, Settings & Goals only.{" "}
               <span className="hidden sm:inline">
                 Browser-local CRM records and IndexedDB proofs remain untouched.
               </span>
@@ -295,17 +305,21 @@ export function PilotShell({
                     ? "Analytics"
                     : path.startsWith("/my-performance")
                       ? "My Performance"
-                      : path.startsWith("/deals")
-                        ? "Finance"
-                        : path.startsWith("/sales-studio")
-                          ? "Sales Studio"
-                          : path.startsWith("/projects")
-                            ? "Projects"
-                            : path.startsWith("/follow-ups")
-                              ? "Follow-ups"
-                              : path.startsWith("/leads/bin")
-                                ? "Waste & Recently Deleted"
-                                : "Leads"}
+                      : path.startsWith("/settings")
+                        ? "Settings"
+                        : path.startsWith("/crm-config")
+                          ? "CRM Configuration"
+                          : path.startsWith("/deals")
+                            ? "Finance"
+                            : path.startsWith("/sales-studio")
+                              ? "Sales Studio"
+                              : path.startsWith("/projects")
+                                ? "Projects"
+                                : path.startsWith("/follow-ups")
+                                  ? "Follow-ups"
+                                  : path.startsWith("/leads/bin")
+                                    ? "Waste & Recently Deleted"
+                                    : "Leads"}
               </span>
             </div>
             <button
