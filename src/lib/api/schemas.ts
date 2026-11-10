@@ -1593,3 +1593,420 @@ export const projectTemplateSaveResponseSchema = z.object({
   template: projectTemplateDtoSchema,
 });
 export type ProjectTemplateSaveResponse = z.infer<typeof projectTemplateSaveResponseSchema>;
+
+// ============================================================================
+// B5C Server-Side Analytics & Reporting Schemas
+// ============================================================================
+
+export const inrDecimalStringSchema = z.string();
+
+export const analyticsDateWindowSchema = z.object({
+  start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+export type AnalyticsDateWindow = z.infer<typeof analyticsDateWindowSchema>;
+
+export const dashboardOverviewResponseSchema = z.object({
+  ok: z.literal(true),
+  todayIstDate: z.string(),
+  kpis: z.object({
+    openPipelineValue: z.number(),
+    openPipelineValueDecimal: inrDecimalStringSchema,
+    activeLeadsCount: z.number(),
+    hotLeadsCount: z.number(),
+    followUpsTodayCount: z.number(),
+    followUpsOverdueCount: z.number(),
+    oldestOverdueDueAt: z.string().nullable(),
+    receivedValue: z.number(),
+    receivedValueDecimal: inrDecimalStringSchema,
+    outstandingValue: z.number(),
+    outstandingValueDecimal: inrDecimalStringSchema,
+    overdueDealsValue: z.number(),
+    overdueDealsValueDecimal: inrDecimalStringSchema,
+    dueDealsCount: z.number(),
+    winRate: z.number().nullable(),
+  }),
+  bottleneck: z.object({
+    stage: z.string(),
+    name: z.string(),
+    count: z.number(),
+    value: z.number(),
+    valueDecimal: inrDecimalStringSchema,
+  }),
+  stages: z.array(
+    z.object({
+      stage: z.string(),
+      name: z.string(),
+      count: z.number(),
+      value: z.number(),
+      valueDecimal: inrDecimalStringSchema,
+    }),
+  ),
+  collectionProgress: z.object({
+    received: z.number(),
+    receivedDecimal: inrDecimalStringSchema,
+    outstanding: z.number(),
+    outstandingDecimal: inrDecimalStringSchema,
+    overdue: z.number(),
+    overdueDecimal: inrDecimalStringSchema,
+    collectionRate: z.number().nullable(),
+  }),
+  actionCenter: z.object({
+    counts: z.object({
+      all: z.number(),
+      overdue: z.number(),
+      today: z.number(),
+      hot: z.number(),
+      money: z.number(),
+    }),
+    items: z.array(
+      z.object({
+        key: z.string(),
+        kind: z.enum(["overdue", "today", "hot", "money"]),
+        leadId: z.string().optional(),
+        dealId: z.string().optional(),
+        title: z.string(),
+        detail: z.string(),
+        when: z.string(),
+        followUpId: z.string().optional(),
+        phone: z.string().optional(),
+        amount: z.number().optional(),
+      }),
+    ),
+  }),
+  priorityProspects: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      company: z.string().nullable().optional(),
+      source: z.string(),
+      status: z.string(),
+      priority: z.string(),
+      quotedAmount: z.number().nullable().optional(),
+      lastContactAt: z.string().nullable().optional(),
+      nextFollowUpAt: z.string().nullable().optional(),
+      phone: z.string().nullable().optional(),
+    }),
+  ),
+  recentActivities: z.array(
+    z.object({
+      id: z.string(),
+      leadId: z.string(),
+      leadName: z.string(),
+      type: z.string(),
+      text: z.string(),
+      occurredAt: z.string(),
+    }),
+  ),
+  next7DaysFollowUps: z.array(
+    z.object({
+      day: z.string(),
+      count: z.number(),
+    }),
+  ),
+});
+export type DashboardOverviewResponse = z.infer<typeof dashboardOverviewResponseSchema>;
+
+export const funnelAnalyticsResponseSchema = z.object({
+  ok: z.literal(true),
+  window: analyticsDateWindowSchema,
+  currentDistribution: z.array(
+    z.object({
+      stage: z.string(),
+      label: z.string(),
+      count: z.number(),
+      value: z.number(),
+      valueDecimal: inrDecimalStringSchema,
+    }),
+  ),
+  stageMoves: z.array(
+    z.object({
+      stage: z.string(),
+      label: z.string(),
+      count: z.number(),
+    }),
+  ),
+  totalMovesRecorded: z.number(),
+  cohort: z.object({
+    size: z.number(),
+    qualified: z.number(),
+    won: z.number(),
+    lost: z.number(),
+    winRate: z.number().nullable(),
+    qualRate: z.number().nullable(),
+    isDeveloping: z.boolean(),
+  }),
+  closedConversion: z.object({
+    won: z.number(),
+    lost: z.number(),
+    winRate: z.number().nullable(),
+  }),
+  lostReasons: z.array(
+    z.object({
+      reason: z.string(),
+      count: z.number(),
+      value: z.number(),
+      valueDecimal: inrDecimalStringSchema,
+    }),
+  ),
+  sourcePerformance: z.array(
+    z.object({
+      source: z.string(),
+      leads: z.number(),
+      qualified: z.number(),
+      won: z.number(),
+      winRate: z.number().nullable(),
+      medianFirstAttemptH: z.number().nullable(),
+    }),
+  ),
+});
+export type FunnelAnalyticsResponse = z.infer<typeof funnelAnalyticsResponseSchema>;
+
+export const communicationsAnalyticsResponseSchema = z.object({
+  ok: z.literal(true),
+  window: analyticsDateWindowSchema,
+  calls: z.object({
+    attempts: z.number(),
+    connected: z.number(),
+    connectionRate: z.number().nullable(),
+    noAnswer: z.number(),
+    busy: z.number(),
+    byOutcome: z.array(
+      z.object({
+        outcome: z.string(),
+        count: z.number(),
+      }),
+    ),
+    medianFirstAttemptHours: z.number().nullable(),
+    cohortAttempted: z.number(),
+    cohortSize: z.number(),
+  }),
+  whatsapp: z.object({
+    confirmedSent: z.number(),
+    byTemplate: z.array(
+      z.object({
+        templateId: z.string().nullable(),
+        templateName: z.string().nullable(),
+        count: z.number(),
+      }),
+    ),
+    byPurpose: z.array(
+      z.object({
+        purpose: z.string(),
+        count: z.number(),
+      }),
+    ),
+  }),
+  followUps: z.object({
+    scheduled: z.number(),
+    completed: z.number(),
+    completionRate: z.number().nullable(),
+    overdueNow: z.number(),
+    cancelled: z.number(),
+  }),
+});
+export type CommunicationsAnalyticsResponse = z.infer<
+  typeof communicationsAnalyticsResponseSchema
+>;
+
+export const financeAnalyticsResponseSchema = z.object({
+  ok: z.literal(true),
+  window: analyticsDateWindowSchema,
+  todayIstDate: z.string(),
+  kpis: z.object({
+    wonDealValue: z.number(),
+    wonDealValueDecimal: inrDecimalStringSchema,
+    wonDealCount: z.number(),
+    receivedCash: z.number(),
+    receivedCashDecimal: inrDecimalStringSchema,
+    paymentCount: z.number(),
+    outstanding: z.number(),
+    outstandingDecimal: inrDecimalStringSchema,
+    overdue: z.number(),
+    overdueDecimal: inrDecimalStringSchema,
+    collectionRate: z.number().nullable(),
+    unknownWonCount: z.number(),
+    unknownWonValue: z.number(),
+    unknownWonValueDecimal: inrDecimalStringSchema,
+  }),
+  dealsBreakdown: z.object({
+    fullyPaidCount: z.number(),
+    partialCount: z.number(),
+    awaitingCount: z.number(),
+    overdueCount: z.number(),
+    noTermsCount: z.number(),
+  }),
+  voided: z.object({
+    count: z.number(),
+    amount: z.number(),
+    amountDecimal: inrDecimalStringSchema,
+  }),
+  cancelledDeals: z.object({
+    count: z.number(),
+    historicalCollectedCash: z.number(),
+    historicalCollectedCashDecimal: inrDecimalStringSchema,
+  }),
+  byMonth: z.array(
+    z.object({
+      month: z.string(),
+      wonValue: z.number(),
+      wonValueDecimal: inrDecimalStringSchema,
+      receivedCash: z.number(),
+      receivedCashDecimal: inrDecimalStringSchema,
+    }),
+  ),
+  byPaymentMethod: z.array(
+    z.object({
+      method: z.string(),
+      amount: z.number(),
+      amountDecimal: inrDecimalStringSchema,
+      count: z.number(),
+    }),
+  ),
+});
+export type FinanceAnalyticsResponse = z.infer<typeof financeAnalyticsResponseSchema>;
+
+export const quotationsAnalyticsResponseSchema = z.object({
+  ok: z.literal(true),
+  window: analyticsDateWindowSchema,
+  counts: z.object({
+    draft: z.number(),
+    sent: z.number(),
+    accepted: z.number(),
+    rejected: z.number(),
+    expired: z.number(),
+    total: z.number(),
+  }),
+  values: z.object({
+    totalQuoted: z.number(),
+    totalQuotedDecimal: inrDecimalStringSchema,
+    sentQuoted: z.number(),
+    sentQuotedDecimal: inrDecimalStringSchema,
+    acceptedQuoted: z.number(),
+    acceptedQuotedDecimal: inrDecimalStringSchema,
+    rejectedQuoted: z.number(),
+    rejectedQuotedDecimal: inrDecimalStringSchema,
+  }),
+  conversion: z.object({
+    rateAcceptedOfSent: z.number().nullable(),
+    rateAcceptedOfTotal: z.number().nullable(),
+  }),
+  byMonth: z.array(
+    z.object({
+      month: z.string(),
+      createdCount: z.number(),
+      sentCount: z.number(),
+      acceptedCount: z.number(),
+      acceptedValue: z.number(),
+      acceptedValueDecimal: inrDecimalStringSchema,
+    }),
+  ),
+});
+export type QuotationsAnalyticsResponse = z.infer<typeof quotationsAnalyticsResponseSchema>;
+
+export const projectsAnalyticsResponseSchema = z.object({
+  ok: z.literal(true),
+  window: analyticsDateWindowSchema,
+  todayIstDate: z.string(),
+  projectCounts: z.object({
+    created: z.number(),
+    active: z.number(),
+    inProgress: z.number(),
+    awaitingClient: z.number(),
+    completed: z.number(),
+    delivered: z.number(),
+    overdue: z.number(),
+  }),
+  byType: z.array(
+    z.object({
+      type: z.string(),
+      count: z.number(),
+    }),
+  ),
+  byStage: z.array(
+    z.object({
+      stage: z.string(),
+      count: z.number(),
+    }),
+  ),
+  tasks: z.object({
+    total: z.number(),
+    done: z.number(),
+    completionRate: z.number().nullable(),
+    overdue: z.number(),
+  }),
+  dependencies: z.object({
+    openClientDependencies: z.number(),
+    projectsWaitingOnClient: z.number(),
+  }),
+  support: z.object({
+    openTickets: z.number(),
+    inProgressTickets: z.number(),
+    resolvedTickets: z.number(),
+    closedTickets: z.number(),
+    activeSupportAgreements: z.number(),
+    supportEndingSoon: z.number(),
+  }),
+  deliveryPerformance: z.object({
+    avgDeliveryDays: z.number().nullable(),
+    deliveryMeasuredCount: z.number(),
+    deliveredUnpaidCount: z.number(),
+  }),
+});
+export type ProjectsAnalyticsResponse = z.infer<typeof projectsAnalyticsResponseSchema>;
+
+export const performanceAnalyticsResponseSchema = z.object({
+  ok: z.literal(true),
+  window: analyticsDateWindowSchema,
+  todayIstDate: z.string(),
+  ownerSummary: z.object({
+    callsAttempted: z.number(),
+    callsConnected: z.number(),
+    connectionRate: z.number().nullable(),
+    followUpsCompleted: z.number(),
+    followUpsDue: z.number(),
+    followUpRate: z.number().nullable(),
+    followUpsOverdueNow: z.number(),
+    leadsCreated: z.number(),
+    leadsQualified: z.number(),
+    quotationsConfirmedSent: z.number(),
+    dealsWon: z.number(),
+    wonDealValue: z.number(),
+    wonDealValueDecimal: inrDecimalStringSchema,
+    unknownWonDatesCount: z.number(),
+    cohortSize: z.number(),
+    cohortWon: z.number(),
+    cohortWinRate: z.number().nullable(),
+    unattributedEventsCount: z.number(),
+  }),
+  goals: z.object({
+    status: z.enum(["not_configured", "available"]),
+    note: z.string(),
+    items: z.array(z.unknown()),
+  }),
+});
+export type PerformanceAnalyticsResponse = z.infer<
+  typeof performanceAnalyticsResponseSchema
+>;
+
+export const trendsAnalyticsResponseSchema = z.object({
+  ok: z.literal(true),
+  window: analyticsDateWindowSchema,
+  granularity: z.enum(["day", "week", "month"]),
+  series: z.array(
+    z.object({
+      bucket: z.string(),
+      leadsReceived: z.number(),
+      leadsQualified: z.number(),
+      leadsWon: z.number(),
+      callsAttempted: z.number(),
+      callsConnected: z.number(),
+      followUpsCompleted: z.number(),
+      paymentsCollected: z.number(),
+      paymentsCollectedDecimal: inrDecimalStringSchema,
+      wonDealValue: z.number(),
+      wonDealValueDecimal: inrDecimalStringSchema,
+    }),
+  ),
+});
+export type TrendsAnalyticsResponse = z.infer<typeof trendsAnalyticsResponseSchema>;

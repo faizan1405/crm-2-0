@@ -1,6 +1,6 @@
 import "@tanstack/react-start/server-only";
 import { Readable } from "node:stream";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 import { resolveAuthenticatedSession } from "../auth/authService.server";
 import {
   buildClearSessionCookie,
@@ -40,6 +40,22 @@ import {
   listFollowUpsForLead,
   rescheduleFollowUpRecord,
 } from "../crm/followupsService.server";
+import {
+  getDashboardOverview,
+  getFunnelAnalytics,
+  getCommunicationsAnalytics,
+  getFinanceAnalytics,
+  getQuotationsAnalytics,
+  getProjectsAnalytics,
+  getPerformanceAnalytics,
+  getTrendsAnalytics,
+} from "../crm/analyticsService.server";
+import {
+  ANALYTICS_PERIODS,
+  type AnalyticsPeriod,
+  type Granularity,
+} from "../crm/analyticsCalc.server";
+import { isValidCalendarDay } from "../crm/dates.server";
 import { resolveEffectiveIdempotencyKey } from "../crm/idempotency.server";
 import {
   archiveLeadRecord,
@@ -784,10 +800,40 @@ function hasRequestBodyHint(request: Request): boolean {
   return len > 0 || Boolean(transferEncoding);
 }
 
+const analyticsQuerySchema = z
+  .object({
+    period: z
+      .enum(ANALYTICS_PERIODS as unknown as [string, ...string[]])
+      .optional(),
+    from: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid from date (expected YYYY-MM-DD)")
+      .refine((v) => isValidCalendarDay(v), "from must be a valid calendar date")
+      .optional(),
+    to: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid to date (expected YYYY-MM-DD)")
+      .refine((v) => isValidCalendarDay(v), "to must be a valid calendar date")
+      .optional(),
+    granularity: z.enum(["day", "week", "month"]).optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.from && data.to) {
+        return data.from <= data.to;
+      }
+      return true;
+    },
+    {
+      message: "'from' date cannot be after 'to' date",
+      path: ["from"],
+    },
+  );
+
 /**
  * Handles all Core CRM `/api/v1/leads*`, `/api/v1/follow-ups*`, `/api/v1/calls*`,
  * `/api/v1/whatsapp-messages*`, `/api/v1/deals*`, `/api/v1/payments*`, `/api/v1/finance*`,
- * `/api/v1/quotation-templates*`, and `/api/v1/quotations*`
+ * `/api/v1/quotation-templates*`, `/api/v1/quotations*`, `/api/v1/projects*`, and `/api/v1/analytics*`
  * endpoints. Returns `null` if the pathname does not match any CRM route.
  */
 export async function handleCrmApiRequest(
@@ -810,7 +856,8 @@ export async function handleCrmApiRequest(
     !pathname.startsWith("/api/v1/tasks") &&
     !pathname.startsWith("/api/v1/deliverables") &&
     !pathname.startsWith("/api/v1/support-tickets") &&
-    !pathname.startsWith("/api/v1/project-templates")
+    !pathname.startsWith("/api/v1/project-templates") &&
+    !pathname.startsWith("/api/v1/analytics")
   ) {
     return null;
   }
@@ -3069,6 +3116,121 @@ export async function handleCrmApiRequest(
         }
 
         return methodNotAllowed(["GET", "POST"]);
+      }
+
+      return null;
+    }
+
+    // =======================================================================
+    // ANALYTICS & REPORTING ENDPOINTS (B5C)
+    // =======================================================================
+    if (resource === "analytics") {
+      const sub = segments[3];
+      const KNOWN_SUBS = [
+        "dashboard",
+        "funnel",
+        "communications",
+        "finance",
+        "quotations",
+        "projects",
+        "performance",
+        "trends",
+      ];
+
+      if (segments.length === 4 && sub && KNOWN_SUBS.includes(sub)) {
+        if (request.method !== "GET") {
+          return methodNotAllowed(["GET"]);
+        }
+
+        const auth = await requireAuthenticatedOwnerDb(request, env);
+        if (!auth.ok) return auth.response;
+
+        const rawQuery = searchParamsObject(parsedUrl);
+        const query = analyticsQuerySchema.parse(rawQuery);
+        const period = (query.period as AnalyticsPeriod) || undefined;
+
+        if (sub === "dashboard") {
+          const result = await getDashboardOverview(auth.db, auth.userId);
+          return jsonResponse(result, 200);
+        }
+
+        if (sub === "funnel") {
+          const result = await getFunnelAnalytics(
+            auth.db,
+            auth.userId,
+            period,
+            query.from,
+            query.to,
+          );
+          return jsonResponse(result, 200);
+        }
+
+        if (sub === "communications") {
+          const result = await getCommunicationsAnalytics(
+            auth.db,
+            auth.userId,
+            period,
+            query.from,
+            query.to,
+          );
+          return jsonResponse(result, 200);
+        }
+
+        if (sub === "finance") {
+          const result = await getFinanceAnalytics(
+            auth.db,
+            auth.userId,
+            period,
+            query.from,
+            query.to,
+          );
+          return jsonResponse(result, 200);
+        }
+
+        if (sub === "quotations") {
+          const result = await getQuotationsAnalytics(
+            auth.db,
+            auth.userId,
+            period,
+            query.from,
+            query.to,
+          );
+          return jsonResponse(result, 200);
+        }
+
+        if (sub === "projects") {
+          const result = await getProjectsAnalytics(
+            auth.db,
+            auth.userId,
+            period,
+            query.from,
+            query.to,
+          );
+          return jsonResponse(result, 200);
+        }
+
+        if (sub === "performance") {
+          const result = await getPerformanceAnalytics(
+            auth.db,
+            auth.userId,
+            period,
+            query.from,
+            query.to,
+          );
+          return jsonResponse(result, 200);
+        }
+
+        if (sub === "trends") {
+          const result = await getTrendsAnalytics(
+            auth.db,
+            auth.userId,
+            period,
+            query.granularity as Granularity,
+            query.from,
+            query.to,
+          );
+          return jsonResponse(result, 200);
+        }
       }
 
       return null;
