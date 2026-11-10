@@ -44,7 +44,7 @@ To avoid any confusion with generic naming conventions, the actual codebase layo
 | **11** | **Custom Fields, Tags & Saved Views** | Dynamic schema extensions (`text`, `number`, `select`, `date`, `boolean`), entity tags, custom filter presets, pinned views | `CustomFieldDef`, `FieldValues`, `TagDef`, `LeadTags`, `SavedView`, `ViewPrefs` (`customize.ts`) | `localStorage` (`customFields`, `fieldValues`, `tagDefs`, `leadTags`, `savedViews`, `viewPrefs`) | Schema exists (`crm_custom_fields`, `crm_tag_defs`, `crm_lead_field_values`, `crm_lead_tags`) | None | None | Leads (`crm_leads`), Projects (`projects`) | High | Critical (custom field values belong to leads; must migrate without schema loss) | **B5B** |
 | **12** | **Settings & Owner Preferences** | Company branding, owner contact details, GSTIN, currency, India timezone configuration, daily briefing checklist | `Prefs`, `BusinessProfile` (`types.ts`, `studio.ts`) | `localStorage` (prefs/device UI) / MariaDB (Pilot business config) | `crm_owner_settings`, `crm_settings_audit_events` | **B6A** (`/api/v1/settings*`) | **B6B** (`/settings?pilot=1`, `/crm-config?pilot=1`) | System-wide presentation | Low | Low | **B6A/B6B (Pilot Done)** |
 | **13** | **Team CRM & Permissions** | Employee accounts, simulated role previews (Executive, Closer, Support), scoped access rules, lead assignment | `Employee`, `EmployeeAccess`, `Assignment`, `AssignmentEvent`, `AssignmentRule` (`team.ts`, `access.ts`) | `localStorage` (`employees`, `employeeAccess`, `assignments`, `assignmentRules`) | Table exists (`crm_users`), relations pending | None | None | Leads, Deals, Projects, Tasks | High | High (security gate: employee credentials and data filtering must be server-enforced) | **B5C** |
-| **14** | **Data Vault & Backups** | JSON backup/restore audit history, full system snapshot import/export, client attachments | `BackupRecord` (`vault.ts`), IndexedDB (`proofRepo.ts`) | `localStorage` (`backupHistory`) + IndexedDB | Schema exists (`crm_payment_proofs`) | Proofs done (B3B); Vault pending | None | All modules | High | High (large binary payloads and database dump generation) | **B5D** |
+| **14** | **Data Vault & Backups** | JSON backup/restore audit history, full system snapshot import/export, client attachments | `BackupRecord` (`vault.ts`), IndexedDB (`proofRepo.ts`) | `localStorage` (`backupHistory`) + IndexedDB / MariaDB (Backup Engine) | Schema exists (`crm_payment_proofs`, 38 tables) | Foundation Done (B7A) | Pending B7B | All modules | High | High (large binary payloads and database dump generation) | **B7A (Foundation Done) / B7B (UI)** |
 
 ---
 
@@ -137,3 +137,17 @@ Following B4A Quotation Backend completion:
 
 - **B6A Backend (`a84dfd0`):** Implemented MariaDB tables (`crm_owner_settings`, `crm_settings_audit_events`, `crm_sales_goals`, `crm_sales_goal_revisions`) and authenticated Owner Settings & Goals APIs (`/api/v1/settings*`, `/api/v1/goals*`).
 - **B6B Pilot UI:** Connected `/settings?pilot=1`, `/crm-config?pilot=1`, and `/my-performance?pilot=1` Sales Goals to B6A APIs inside the development Pilot while keeping browser-local preferences (`scale-flow-crm-2-demo`, sidebar keys) and custom fields/tags/saved views cleanly separated or deferred. See [docs/crm-b6b-settings-goals-ui-pilot.md](./crm-b6b-settings-goals-ui-pilot.md) for the complete Field-by-Field Compatibility Matrix.
+
+---
+
+## 7. Checkpoint B7A Addendum (10 Nov 2026) — Data Vault, Backup Integrity & Safe Migration Foundation
+
+- **B7A Foundation Implemented (`src/server/backup/`):**
+  - **Complete 11-Column Data Inventory:** Documented all 30 persisted CRM entities across MariaDB (38 tables) and browser-local storage (`scale-flow-crm-2-demo`).
+  - **Deterministic Backup v2 Specification:** Canonical JSON stringification, SHA-256 content hashes, recursive credential/secret scrubbing, and exact integer paise financial summaries.
+  - **Comprehensive Validation Engine:** Defends against zip slips, path traversal, bomb limits (512MB, 5000 entries, 200:1 ratio), file tampering, duplicate IDs, broken foreign keys, and binary attachment checksum mismatches.
+  - **Non-Destructive Dry-Run Engine:** Verifies candidate backups without writing a single row (`mutationsPerformed: 0`, `databaseWritten: false`).
+  - **Migration Mapping & Disposable Restore:** Deterministic legacy ID translation and transactional disposable DB restore with full rollback.
+  - **Storage Durability Audit:** Flagged `ObjectStorageProofStorage` local-fs fallback as a production blocker requiring genuine S3/R2 provisioning prior to production cutover.
+  - **Test Suite:** 113 test files passing, 1,085 automated tests passing (45 new B7A tests across 5 test suites covering 30 mandatory foundation scenarios).
+- **Scope Deferred to B7B:** Production-facing Data Vault UI, live backup download endpoint, interactive restore wizard, and live migration execution. See [docs/crm-b7a-data-vault-backup-foundation.md](./crm-b7a-data-vault-backup-foundation.md).
