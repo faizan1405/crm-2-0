@@ -405,6 +405,7 @@ export const listLeadsQuerySchema = z.object({
     "createdTo must be a valid YYYY-MM-DD calendar date",
   ),
   tagId: optionalTrimmedString(64),
+  viewId: optionalTrimmedString(64),
   sort: z.enum(["recent", "updated", "score", "value", "name"]).default("recent"),
   pinnedFirst: z
     .enum(["true", "false"])
@@ -1007,7 +1008,11 @@ export type QuotationDiscountTypeApi = (typeof QUOTATION_DISCOUNT_TYPES)[number]
 
 export const createQuotationTemplateBodySchema = z
   .object({
-    name: z.string().trim().min(1, "Template name is required.").max(120, "Template name too long."),
+    name: z
+      .string()
+      .trim()
+      .min(1, "Template name is required.")
+      .max(120, "Template name too long."),
     priceType: z.enum(["fixed", "custom"]).default("fixed"),
     priceAmount: z
       .union([z.number(), z.string()])
@@ -1028,7 +1033,9 @@ export const createQuotationTemplateBodySchema = z
     idempotencyKey: optionalTrimmedString(128),
   })
   .strict();
-export type CreateQuotationTemplateInputValidated = z.infer<typeof createQuotationTemplateBodySchema>;
+export type CreateQuotationTemplateInputValidated = z.infer<
+  typeof createQuotationTemplateBodySchema
+>;
 
 export const updateQuotationTemplateBodySchema = z
   .object({
@@ -1050,11 +1057,15 @@ export const updateQuotationTemplateBodySchema = z
     idempotencyKey: optionalTrimmedString(128),
   })
   .strict();
-export type UpdateQuotationTemplateInputValidated = z.infer<typeof updateQuotationTemplateBodySchema>;
+export type UpdateQuotationTemplateInputValidated = z.infer<
+  typeof updateQuotationTemplateBodySchema
+>;
 
 export const reorderQuotationTemplatesBodySchema = z
   .object({
-    templateIds: z.array(z.string().trim().min(1)).min(1, "templateIds must contain at least one ID."),
+    templateIds: z
+      .array(z.string().trim().min(1))
+      .min(1, "templateIds must contain at least one ID."),
     idempotencyKey: optionalTrimmedString(128),
   })
   .strict();
@@ -1076,12 +1087,18 @@ export type ListQuotationTemplatesQuery = z.infer<typeof listQuotationTemplatesQ
 export const quotationLineItemInputSchema = z
   .object({
     id: optionalTrimmedString(64),
-    description: z.string().trim().min(1, "Item description is required.").max(500, "Description max 500 characters."),
+    description: z
+      .string()
+      .trim()
+      .min(1, "Item description is required.")
+      .max(500, "Description max 500 characters."),
     quantity: z.union([z.number(), z.string()]).default(1),
-    unitPrice: z.union([z.number(), z.string()]).refine(
-      (val) => parseStrictInrInputToPaise(val, { allowZero: true }).ok,
-      "Unit price must be a valid non-negative INR amount.",
-    ),
+    unitPrice: z
+      .union([z.number(), z.string()])
+      .refine(
+        (val) => parseStrictInrInputToPaise(val, { allowZero: true }).ok,
+        "Unit price must be a valid non-negative INR amount.",
+      ),
     sortOrder: z.number().int().optional(),
   })
   .strict();
@@ -1089,8 +1106,15 @@ export const quotationLineItemInputSchema = z
 export const quotationMilestoneInputSchema = z
   .object({
     id: optionalTrimmedString(64),
-    label: z.string().trim().min(1, "Milestone label is required.").max(160, "Milestone label max 160 characters."),
-    percentage: z.number().min(0.01, "Milestone percentage must be > 0").max(100, "Milestone percentage cannot exceed 100"),
+    label: z
+      .string()
+      .trim()
+      .min(1, "Milestone label is required.")
+      .max(160, "Milestone label max 160 characters."),
+    percentage: z
+      .number()
+      .min(0.01, "Milestone percentage must be > 0")
+      .max(100, "Milestone percentage cannot exceed 100"),
     dueDate: optionalTrimmedString(10).refine(
       (v) => v === undefined || isValidCalendarDay(v),
       "Due date must be a valid YYYY-MM-DD calendar date",
@@ -1106,8 +1130,16 @@ export const createQuotationBodySchema = z
     templateId: optionalTrimmedString(64),
     legacyId: optionalTrimmedString(64),
     quotationNumber: optionalTrimmedString(64),
-    title: z.string().trim().min(1, "Quotation title is required.").max(200, "Title max 200 characters."),
-    clientName: z.string().trim().min(1, "Client name is required.").max(160, "Client name max 160 characters."),
+    title: z
+      .string()
+      .trim()
+      .min(1, "Quotation title is required.")
+      .max(200, "Title max 200 characters."),
+    clientName: z
+      .string()
+      .trim()
+      .min(1, "Client name is required.")
+      .max(160, "Client name max 160 characters."),
     clientCompany: optionalTrimmedString(160),
     currency: z.literal("INR").default("INR"),
     items: z.array(quotationLineItemInputSchema).optional(),
@@ -1300,8 +1332,14 @@ const projectLinkSchema = z.object({
 const projectSupportSchema = z.object({
   included: z.boolean().nullable().optional(),
   months: z.number().int().min(1).max(120).optional(),
-  start: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "start must be YYYY-MM-DD"),
-  end: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "end must be YYYY-MM-DD"),
+  start: optionalTrimmedString(10).refine(
+    (v) => !v || isValidCalendarDay(v),
+    "start must be YYYY-MM-DD",
+  ),
+  end: optionalTrimmedString(10).refine(
+    (v) => !v || isValidCalendarDay(v),
+    "end must be YYYY-MM-DD",
+  ),
   description: optionalTrimmedString(5000),
 });
 
@@ -1321,12 +1359,18 @@ export const createProjectBodySchema = z
     legacyId: optionalTrimmedString(64),
     type: z.string().trim().min(1).max(160).default("Other Custom Project"),
     scope: optionalTrimmedString(10_000),
-    bookingDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "bookingDate must be YYYY-MM-DD"),
+    bookingDate: optionalTrimmedString(10).refine(
+      (v) => !v || isValidCalendarDay(v),
+      "bookingDate must be YYYY-MM-DD",
+    ),
     plannedStart: optionalTrimmedString(10).refine(
       (v) => !v || isValidCalendarDay(v),
       "plannedStart must be YYYY-MM-DD",
     ),
-    actualStart: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "actualStart must be YYYY-MM-DD"),
+    actualStart: optionalTrimmedString(10).refine(
+      (v) => !v || isValidCalendarDay(v),
+      "actualStart must be YYYY-MM-DD",
+    ),
     targetDelivery: optionalTrimmedString(10).refine(
       (v) => !v || isValidCalendarDay(v),
       "targetDelivery must be YYYY-MM-DD",
@@ -1377,12 +1421,18 @@ export const updateProjectBodySchema = z
   .object({
     name: optionalTrimmedString(255),
     scope: optionalTrimmedString(10_000),
-    bookingDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "bookingDate must be YYYY-MM-DD"),
+    bookingDate: optionalTrimmedString(10).refine(
+      (v) => !v || isValidCalendarDay(v),
+      "bookingDate must be YYYY-MM-DD",
+    ),
     plannedStart: optionalTrimmedString(10).refine(
       (v) => !v || isValidCalendarDay(v),
       "plannedStart must be YYYY-MM-DD",
     ),
-    actualStart: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "actualStart must be YYYY-MM-DD"),
+    actualStart: optionalTrimmedString(10).refine(
+      (v) => !v || isValidCalendarDay(v),
+      "actualStart must be YYYY-MM-DD",
+    ),
     targetDelivery: optionalTrimmedString(10).refine(
       (v) => !v || isValidCalendarDay(v),
       "targetDelivery must be YYYY-MM-DD",
@@ -1443,8 +1493,14 @@ export const configureProjectSupportBodySchema = z
   .object({
     included: z.boolean().nullable(),
     months: z.number().int().min(1).max(120).optional(),
-    start: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "start must be YYYY-MM-DD"),
-    end: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "end must be YYYY-MM-DD"),
+    start: optionalTrimmedString(10).refine(
+      (v) => !v || isValidCalendarDay(v),
+      "start must be YYYY-MM-DD",
+    ),
+    end: optionalTrimmedString(10).refine(
+      (v) => !v || isValidCalendarDay(v),
+      "end must be YYYY-MM-DD",
+    ),
     description: optionalTrimmedString(5000),
     expectedVersion: z.number().int().min(1).optional(),
     idempotencyKey: optionalTrimmedString(128),
@@ -1510,7 +1566,10 @@ export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;
 export const createMilestoneBodySchema = z
   .object({
     title: z.string().trim().min(1, "Milestone name is required.").max(255),
-    dueDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "dueDate must be YYYY-MM-DD"),
+    dueDate: optionalTrimmedString(10).refine(
+      (v) => !v || isValidCalendarDay(v),
+      "dueDate must be YYYY-MM-DD",
+    ),
     sortOrder: z.number().int().min(0).optional(),
     idempotencyKey: optionalTrimmedString(128),
   })
@@ -1520,7 +1579,10 @@ export type CreateMilestoneInput = z.infer<typeof createMilestoneBodySchema>;
 export const updateMilestoneBodySchema = z
   .object({
     title: optionalTrimmedString(255),
-    dueDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "dueDate must be YYYY-MM-DD"),
+    dueDate: optionalTrimmedString(10).refine(
+      (v) => !v || isValidCalendarDay(v),
+      "dueDate must be YYYY-MM-DD",
+    ),
     sortOrder: z.number().int().min(0).optional(),
     status: z.enum(["open", "completed"]).optional(),
     expectedVersion: z.number().int().min(1).optional(),
@@ -1536,7 +1598,10 @@ export const createTaskBodySchema = z
     milestoneId: optionalTrimmedString(64),
     notes: optionalTrimmedString(10_000),
     assigneeId: optionalTrimmedString(64),
-    dueDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "dueDate must be YYYY-MM-DD"),
+    dueDate: optionalTrimmedString(10).refine(
+      (v) => !v || isValidCalendarDay(v),
+      "dueDate must be YYYY-MM-DD",
+    ),
     priority: z.enum(PROJECT_PRIORITIES).default("normal"),
     sortOrder: z.number().int().min(0).optional(),
     idempotencyKey: optionalTrimmedString(128),
@@ -1550,7 +1615,10 @@ export const updateTaskBodySchema = z
     milestoneId: optionalTrimmedString(64),
     notes: optionalTrimmedString(10_000),
     assigneeId: optionalTrimmedString(64),
-    dueDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "dueDate must be YYYY-MM-DD"),
+    dueDate: optionalTrimmedString(10).refine(
+      (v) => !v || isValidCalendarDay(v),
+      "dueDate must be YYYY-MM-DD",
+    ),
     priority: z.enum(PROJECT_PRIORITIES).optional(),
     sortOrder: z.number().int().min(0).optional(),
     expectedVersion: z.number().int().min(1).optional(),
@@ -1592,7 +1660,10 @@ export const createDeliverableBodySchema = z
     description: optionalTrimmedString(5000),
     category: optionalTrimmedString(64).default("general"),
     status: z.enum(DELIVERABLE_STATUSES).default("draft"),
-    dueDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "dueDate must be YYYY-MM-DD"),
+    dueDate: optionalTrimmedString(10).refine(
+      (v) => !v || isValidCalendarDay(v),
+      "dueDate must be YYYY-MM-DD",
+    ),
     idempotencyKey: optionalTrimmedString(128),
   })
   .strict();
@@ -1604,7 +1675,10 @@ export const updateDeliverableBodySchema = z
     description: optionalTrimmedString(5000),
     category: optionalTrimmedString(64),
     status: z.enum(DELIVERABLE_STATUSES).optional(),
-    dueDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "dueDate must be YYYY-MM-DD"),
+    dueDate: optionalTrimmedString(10).refine(
+      (v) => !v || isValidCalendarDay(v),
+      "dueDate must be YYYY-MM-DD",
+    ),
     clientFeedback: optionalTrimmedString(5000),
     expectedVersion: z.number().int().min(1).optional(),
     idempotencyKey: optionalTrimmedString(128),
@@ -1641,7 +1715,10 @@ export const createSupportTicketBodySchema = z
     description: optionalTrimmedString(10_000),
     priority: z.enum(PROJECT_PRIORITIES).default("normal"),
     assigneeId: optionalTrimmedString(64),
-    dueDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "dueDate must be YYYY-MM-DD"),
+    dueDate: optionalTrimmedString(10).refine(
+      (v) => !v || isValidCalendarDay(v),
+      "dueDate must be YYYY-MM-DD",
+    ),
     coverage: z.enum(SUPPORT_COVERAGES).default("undecided"),
     idempotencyKey: optionalTrimmedString(128),
   })
@@ -1655,7 +1732,10 @@ export const updateSupportTicketBodySchema = z
     description: optionalTrimmedString(10_000),
     priority: z.enum(PROJECT_PRIORITIES).optional(),
     assigneeId: optionalTrimmedString(64),
-    dueDate: optionalTrimmedString(10).refine((v) => !v || isValidCalendarDay(v), "dueDate must be YYYY-MM-DD"),
+    dueDate: optionalTrimmedString(10).refine(
+      (v) => !v || isValidCalendarDay(v),
+      "dueDate must be YYYY-MM-DD",
+    ),
     coverage: z.enum(SUPPORT_COVERAGES).optional(),
     status: z.enum(REQUEST_STATUSES).optional(),
     resolution: optionalTrimmedString(5000),
@@ -1726,4 +1806,3 @@ export const listProjectTemplatesQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 export type ListProjectTemplatesQuery = z.infer<typeof listProjectTemplatesQuerySchema>;
-

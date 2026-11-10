@@ -468,6 +468,35 @@ export const crmLeadFieldValues = mysqlTable(
 );
 
 /**
+ * B8A: Saved Lead Views & Filters (mirrors src/lib/crm/customize.ts SavedView).
+ */
+export const crmSavedViews = mysqlTable(
+  "crm_saved_views",
+  {
+    id: crmId("id").primaryKey(),
+    legacyId: crmId("legacy_id"),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    name: varchar("name", { length: 80 }).notNull(),
+    visibility: varchar("visibility", { length: 24 }).notNull().default("company"),
+    filterJson: text("filter_json").notNull(),
+    sort: varchar("sort", { length: 24 }).notNull().default("recent"),
+    columnsJson: text("columns_json"),
+    archived: boolean("archived").notNull().default(false),
+    isDefault: boolean("is_default").notNull().default(false),
+    isPinned: boolean("is_pinned").notNull().default(false),
+    schemaVersion: int("schema_version").notNull().default(1),
+    version: versionCol("version"),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    uniqueIndex("uq_crm_saved_views_owner_legacy").on(table.ownerUserId, table.legacyId),
+    index("idx_crm_saved_views_owner_status").on(table.ownerUserId, table.archived),
+  ],
+);
+
+/**
  * B2A: Transactional request idempotency table preventing duplicate writes across retries.
  */
 export const crmIdempotencyKeys = mysqlTable(
@@ -1400,6 +1429,7 @@ export const crmCoreSchema = {
   crmLeadTags,
   crmCustomFields,
   crmLeadFieldValues,
+  crmSavedViews,
   crmIdempotencyKeys,
   ...crmFinanceSchema,
   ...crmQuotationSchema,

@@ -6,6 +6,7 @@ import {
   eq,
   gte,
   inArray,
+  isNotNull,
   isNull,
   lt,
   lte,
@@ -19,8 +20,10 @@ import {
   crmDeals,
   crmFollowUps,
   crmLeadActivities,
+  crmLeadFieldValues,
   crmLeads,
   crmLeadTags,
+  crmSavedViews,
 } from "../db/schema.server";
 import { paiseToDecimalString, rupeesToPaise } from "../db/money.server";
 import { toMysqlUtcDateTime } from "../db/utc.server";
@@ -398,6 +401,162 @@ export async function listLeadsRecords(
       };
     }
     basePredicates.push(inArray(crmLeads.id, matchingLeadIds));
+  }
+
+  if (query.viewId) {
+    const viewRows = await db
+      .select({
+        id: crmSavedViews.id,
+        filterJson: crmSavedViews.filterJson,
+        sort: crmSavedViews.sort,
+        archived: crmSavedViews.archived,
+      })
+      .from(crmSavedViews)
+      .where(and(eq(crmSavedViews.ownerUserId, ownerUserId), eq(crmSavedViews.id, query.viewId)))
+      .limit(1);
+
+    const view = viewRows[0];
+    if (!view || view.archived) {
+      throw new CrmServiceError(404, "not_found", `Saved view "${query.viewId}" not found.`);
+    }
+
+    try {
+      const viewFilter = JSON.parse(view.filterJson) as {
+        mode?: "and" | "or";
+        conditions?: Array<{ id: string; field: string; op: string; value?: unknown }>;
+      };
+
+      if (viewFilter && Array.isArray(viewFilter.conditions) && viewFilter.conditions.length > 0) {
+        const condPredicates: SQL[] = [];
+        for (const c of viewFilter.conditions) {
+          const vals = Array.isArray(c.value)
+            ? (c.value as unknown[])
+            : c.value !== undefined && c.value !== ""
+              ? [c.value]
+              : [];
+
+          let condSql: SQL | null = null;
+          switch (c.field) {
+            case "search": {
+              const q = String(c.value ?? "").trim();
+              if (c.op === "empty") {
+                condSql = sql`1=1`;
+              } else if (q) {
+                const pattern = `%${escapeSqlLike(q)}%`;
+                condSql =
+                  c.op === "equals"
+                    ? eq(crmLeads.name, q)
+                    : or(
+                        sql`${crmLeads.name} LIKE ${pattern} ESCAPE '!'`,
+                        sql`COALESCE(${crmLeads.company}, '') LIKE ${pattern} ESCAPE '!'`,
+                        sql`${crmLeads.phone} LIKE ${pattern} ESCAPE '!'`,
+                        sql`COALESCE(${crmLeads.email}, '') LIKE ${pattern} ESCAPE '!'`,
+                      )!;
+              }
+              break;
+            }
+            case "stage": {
+              if (c.op === "is" && vals[0]) condSql = eq(crmLeads.status, String(vals[0]));
+              else if (c.op === "is_not" && vals[0]) condSql = ne(crmLeads.status, String(vals[0]));
+              else if (c.op === "any_of" && vals.length > 0)
+                condSql = inArray(crmLeads.status, vals.map(String));
+              break;
+            }
+            case "quick": {
+              if (c.op === "empty") condSql = isNull(crmLeads.quickStatus);
+              else if (c.op === "not_empty") condSql = isNotNull(crmLeads.quickStatus);
+              else if (c.op === "is" && vals[0])
+                condSql = eq(crmLeads.quickStatus, String(vals[0]));
+              else if (c.op === "is_not" && vals[0])
+                condSql = ne(crmLeads.quickStatus, String(vals[0]));
+              else if (c.op === "any_of" && vals.length > 0)
+                condSql = inArray(crmLeads.quickStatus, vals.map(String));
+              break;
+            }
+            case "priority": {
+              if (c.op === "is" && vals[0]) condSql = eq(crmLeads.priority, String(vals[0]));
+              else if (c.op === "is_not" && vals[0])
+                condSql = ne(crmLeads.priority, String(vals[0]));
+              else if (c.op === "any_of" && vals.length > 0)
+                condSql = inArray(crmLeads.priority, vals.map(String));
+              break;
+            }
+            case "source": {
+              if (c.op === "is" && vals[0]) condSql = eq(crmLeads.source, String(vals[0]));
+              else if (c.op === "is_not" && vals[0]) condSql = ne(crmLeads.source, String(vals[0]));
+              else if (c.op === "any_of" && vals.length > 0)
+                condSql = inArray(crmLeads.source, vals.map(String));
+              break;
+            }
+            case "created": {
+              if (c.op === "today") {
+                const bounds = istDayBoundsUtc(toIstParts(now).istDate);
+                condSql = and(
+                  gte(crmLeads.createdAt, bounds.startMysqlUtc),
+                  lt(crmLeads.createdAt, bounds.endExclusiveMysqlUtc),
+                )!;
+              } else if (c.op === "within_days") {
+                const n = Number(c.value);
+                if (n >= 0) {
+                  const startStr = toMysqlUtcDateTime(new Date(now.getTime() - n * DAY_MS));
+                  condSql = gte(crmLeads.createdAt, startStr);
+                }
+              } else if (c.op === "before" && vals[0]) {
+                const bounds = istDayBoundsUtc(String(vals[0]));
+                condSql = lt(crmLeads.createdAt, bounds.startMysqlUtc);
+              } else if (c.op === "after" && vals[0]) {
+                const bounds = istDayBoundsUtc(String(vals[0]));
+                condSql = gte(crmLeads.createdAt, bounds.endExclusiveMysqlUtc);
+              } else if (c.op === "on" && vals[0]) {
+                const bounds = istDayBoundsUtc(String(vals[0]));
+                condSql = and(
+                  gte(crmLeads.createdAt, bounds.startMysqlUtc),
+                  lt(crmLeads.createdAt, bounds.endExclusiveMysqlUtc),
+                )!;
+              }
+              break;
+            }
+            case "tags": {
+              if (c.op === "empty") {
+                condSql = sql`NOT EXISTS (SELECT 1 FROM ${crmLeadTags} WHERE ${crmLeadTags.leadId} = ${crmLeads.id} AND ${crmLeadTags.ownerUserId} = ${ownerUserId})`;
+              } else if (c.op === "not_empty") {
+                condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadTags} WHERE ${crmLeadTags.leadId} = ${crmLeads.id} AND ${crmLeadTags.ownerUserId} = ${ownerUserId})`;
+              } else if ((c.op === "contains_any" || c.op === "any_of") && vals.length > 0) {
+                condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadTags} WHERE ${crmLeadTags.leadId} = ${crmLeads.id} AND ${crmLeadTags.ownerUserId} = ${ownerUserId} AND ${crmLeadTags.tagId} IN ${vals.map(String)})`;
+              }
+              break;
+            }
+            default: {
+              if (c.field.startsWith("cf:")) {
+                const fieldId = c.field.slice(3);
+                if (c.op === "empty") {
+                  condSql = sql`NOT EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId})`;
+                } else if (c.op === "not_empty") {
+                  condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId})`;
+                } else if (c.op === "is" || c.op === "equals") {
+                  const serialized = JSON.stringify(c.value);
+                  condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId} AND ${crmLeadFieldValues.valueJson} = ${serialized})`;
+                }
+              }
+              break;
+            }
+          }
+
+          condPredicates.push(condSql ?? sql`1=0`);
+        }
+
+        if (condPredicates.length > 0) {
+          if (viewFilter.mode === "or") {
+            basePredicates.push(or(...condPredicates)!);
+          } else {
+            basePredicates.push(and(...condPredicates)!);
+          }
+        }
+      }
+    } catch (err) {
+      if (err instanceof CrmServiceError) throw err;
+      throw new CrmServiceError(400, "validation_error", "Failed to parse saved view filter.");
+    }
   }
 
   if (query.q) {

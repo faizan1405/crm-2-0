@@ -230,6 +230,45 @@ import {
   parseArchiveUpload,
 } from "../vault/vaultService.server";
 import {
+  archiveCustomFieldRecord,
+  createCustomFieldRecord,
+  getCustomFieldRecord,
+  getLeadCustomFieldValuesRecord,
+  listCustomFieldsRecord,
+  setLeadCustomFieldValuesRecord,
+  updateCustomFieldRecord,
+} from "../crm/customFieldsService.server";
+import {
+  addTagToLeadRecord,
+  archiveTagRecord,
+  bulkTagLeadsRecord,
+  createTagRecord,
+  getLeadTagsRecord,
+  getTagRecord,
+  listTagsRecord,
+  removeTagFromLeadRecord,
+  updateTagRecord,
+} from "../crm/tagsService.server";
+import {
+  archiveSavedViewRecord,
+  createSavedViewRecord,
+  duplicateSavedViewRecord,
+  getSavedViewRecord,
+  listSavedViewsRecord,
+  updateSavedViewRecord,
+} from "../crm/savedViewsService.server";
+import {
+  addTagToLeadBodySchema,
+  bulkTagLeadsBodySchema,
+  createCustomFieldBodySchema,
+  createSavedViewBodySchema,
+  createTagBodySchema,
+  setLeadCustomFieldValuesBodySchema,
+  updateCustomFieldBodySchema,
+  updateSavedViewBodySchema,
+  updateTagBodySchema,
+} from "../crm/customFieldsValidation.server";
+import {
   archiveGoalBodySchema,
   changeGoalStatusBodySchema,
   goalProgressQuerySchema,
@@ -893,6 +932,9 @@ export async function handleCrmApiRequest(
     !pathname.startsWith("/api/v1/analytics") &&
     !pathname.startsWith("/api/v1/settings") &&
     !pathname.startsWith("/api/v1/goals") &&
+    !pathname.startsWith("/api/v1/custom-fields") &&
+    !pathname.startsWith("/api/v1/tags") &&
+    !pathname.startsWith("/api/v1/saved-views") &&
     !pathname.startsWith("/api/v1/vault")
   ) {
     return null;
@@ -947,6 +989,23 @@ export async function handleCrmApiRequest(
         }
 
         return methodNotAllowed(["GET", "POST"]);
+      }
+
+      // POST /api/v1/leads/bulk-tag
+      if (segments.length === 4 && segments[3] === "bulk-tag") {
+        if (request.method !== "POST") return methodNotAllowed(["POST"]);
+        const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+        if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+        const auth = await requireAuthenticatedOwnerDb(request, env);
+        if (!auth.ok) return auth.response;
+
+        const parsedBody = await parseJsonObject(request);
+        if (!parsedBody.ok) return parsedBody.response;
+
+        const input = bulkTagLeadsBodySchema.parse(parsedBody.data);
+        const result = await bulkTagLeadsRecord(auth.db, auth.userId, input);
+        return jsonResponse(result, 200);
       }
 
       const idSeg = decodeIdSegment(segments[3] ?? "");
@@ -1233,6 +1292,87 @@ export async function handleCrmApiRequest(
             200,
           );
         }
+
+        // GET|PUT /api/v1/leads/:id/custom-fields
+        if (subresource === "custom-fields") {
+          if (request.method === "GET") {
+            const auth = await requireAuthenticatedOwnerDb(request, env);
+            if (!auth.ok) return auth.response;
+
+            const result = await getLeadCustomFieldValuesRecord(auth.db, auth.userId, leadId);
+            return jsonResponse({ ok: true, ...result }, 200);
+          }
+
+          if (request.method === "PUT") {
+            const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+            if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+            const auth = await requireAuthenticatedOwnerDb(request, env);
+            if (!auth.ok) return auth.response;
+
+            const parsedBody = await parseJsonObject(request);
+            if (!parsedBody.ok) return parsedBody.response;
+
+            const input = setLeadCustomFieldValuesBodySchema.parse(parsedBody.data);
+            const result = await setLeadCustomFieldValuesRecord(
+              auth.db,
+              auth.userId,
+              leadId,
+              input.values,
+            );
+            return jsonResponse(result, 200);
+          }
+
+          return methodNotAllowed(["GET", "PUT"]);
+        }
+
+        // GET|POST /api/v1/leads/:id/tags
+        if (subresource === "tags") {
+          if (request.method === "GET") {
+            const auth = await requireAuthenticatedOwnerDb(request, env);
+            if (!auth.ok) return auth.response;
+
+            const result = await getLeadTagsRecord(auth.db, auth.userId, leadId);
+            return jsonResponse({ ok: true, ...result }, 200);
+          }
+
+          if (request.method === "POST") {
+            const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+            if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+            const auth = await requireAuthenticatedOwnerDb(request, env);
+            if (!auth.ok) return auth.response;
+
+            const parsedBody = await parseJsonObject(request);
+            if (!parsedBody.ok) return parsedBody.response;
+
+            const input = addTagToLeadBodySchema.parse(parsedBody.data);
+            const result = await addTagToLeadRecord(auth.db, auth.userId, leadId, input.tagId);
+            return jsonResponse(result, 200);
+          }
+
+          return methodNotAllowed(["GET", "POST"]);
+        }
+      }
+
+      if (segments.length === 6 && segments[4] === "tags") {
+        const idSeg2 = decodeIdSegment(segments[5] ?? "");
+        if (!idSeg2.ok) return idSeg2.response;
+        const tagId = idSeg2.value;
+
+        // DELETE /api/v1/leads/:id/tags/:tagId
+        if (request.method === "DELETE") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const result = await removeTagFromLeadRecord(auth.db, auth.userId, leadId, tagId);
+          return jsonResponse(result, 200);
+        }
+
+        return methodNotAllowed(["DELETE"]);
       }
 
       return null;
@@ -3687,6 +3827,321 @@ export async function handleCrmApiRequest(
           const result = await getGoalProgressRecord(auth.db, auth.userId, goalId, query);
           return jsonResponse(result, 200);
         }
+      }
+
+      return null;
+    }
+
+    if (resource === "custom-fields") {
+      // GET|POST /api/v1/custom-fields
+      if (segments.length === 3) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const entity = (parsedUrl.searchParams.get("entity") as "lead" | "project") || "lead";
+          const fields = await listCustomFieldsRecord(auth.db, auth.userId, entity);
+          return jsonResponse({ ok: true, items: fields, total: fields.length }, 200);
+        }
+
+        if (request.method === "POST") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = createCustomFieldBodySchema.parse(parsedBody.data);
+          const res = await createCustomFieldRecord(auth.db, auth.userId, input);
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        return methodNotAllowed(["GET", "POST"]);
+      }
+
+      const idSeg = decodeIdSegment(segments[3] ?? "");
+      if (!idSeg.ok) return idSeg.response;
+      const fieldId = idSeg.value;
+
+      // GET|PATCH|DELETE /api/v1/custom-fields/:id
+      if (segments.length === 4) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const field = await getCustomFieldRecord(auth.db, auth.userId, fieldId);
+          return jsonResponse({ ok: true, field }, 200);
+        }
+
+        if (request.method === "PATCH") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = updateCustomFieldBodySchema.parse(parsedBody.data);
+          const res = await updateCustomFieldRecord(auth.db, auth.userId, fieldId, input);
+          return jsonResponse(res, 200);
+        }
+
+        if (request.method === "DELETE") {
+          const hasBody = hasRequestBodyHint(request);
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: hasBody });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          let expectedVersion: number | undefined;
+          if (hasBody) {
+            const parsedBody = await parseJsonObject(request, { allowEmpty: true });
+            if (!parsedBody.ok) return parsedBody.response;
+            if (Object.keys(parsedBody.data).length > 0) {
+              const parsed = updateCustomFieldBodySchema
+                .pick({ expectedVersion: true })
+                .parse(parsedBody.data);
+              expectedVersion = parsed.expectedVersion;
+            }
+          }
+          const rawVersionParam =
+            parsedUrl.searchParams.get("expectedVersion") ?? parsedUrl.searchParams.get("version");
+          if (expectedVersion === undefined && rawVersionParam !== null) {
+            const vNum = Number(rawVersionParam);
+            if (Number.isInteger(vNum) && vNum >= 1) expectedVersion = vNum;
+          }
+
+          const res = await archiveCustomFieldRecord(
+            auth.db,
+            auth.userId,
+            fieldId,
+            expectedVersion,
+          );
+          return jsonResponse(res, 200);
+        }
+
+        return methodNotAllowed(["GET", "PATCH", "DELETE"]);
+      }
+
+      return null;
+    }
+
+    if (resource === "tags") {
+      // GET|POST /api/v1/tags
+      if (segments.length === 3) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const scope = parsedUrl.searchParams.get("scope") as "lead" | "project" | "both" | null;
+          const tags = await listTagsRecord(auth.db, auth.userId, scope || undefined);
+          return jsonResponse({ ok: true, items: tags, total: tags.length }, 200);
+        }
+
+        if (request.method === "POST") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = createTagBodySchema.parse(parsedBody.data);
+          const res = await createTagRecord(auth.db, auth.userId, input);
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        return methodNotAllowed(["GET", "POST"]);
+      }
+
+      const idSeg = decodeIdSegment(segments[3] ?? "");
+      if (!idSeg.ok) return idSeg.response;
+      const tagId = idSeg.value;
+
+      // GET|PATCH|DELETE /api/v1/tags/:id
+      if (segments.length === 4) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const tag = await getTagRecord(auth.db, auth.userId, tagId);
+          return jsonResponse({ ok: true, tag }, 200);
+        }
+
+        if (request.method === "PATCH") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = updateTagBodySchema.parse(parsedBody.data);
+          const res = await updateTagRecord(auth.db, auth.userId, tagId, input);
+          return jsonResponse(res, 200);
+        }
+
+        if (request.method === "DELETE") {
+          const hasBody = hasRequestBodyHint(request);
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: hasBody });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          let expectedVersion: number | undefined;
+          if (hasBody) {
+            const parsedBody = await parseJsonObject(request, { allowEmpty: true });
+            if (!parsedBody.ok) return parsedBody.response;
+            if (Object.keys(parsedBody.data).length > 0) {
+              const parsed = updateTagBodySchema
+                .pick({ expectedVersion: true })
+                .parse(parsedBody.data);
+              expectedVersion = parsed.expectedVersion;
+            }
+          }
+          const rawVersionParam =
+            parsedUrl.searchParams.get("expectedVersion") ?? parsedUrl.searchParams.get("version");
+          if (expectedVersion === undefined && rawVersionParam !== null) {
+            const vNum = Number(rawVersionParam);
+            if (Number.isInteger(vNum) && vNum >= 1) expectedVersion = vNum;
+          }
+
+          const res = await archiveTagRecord(auth.db, auth.userId, tagId, expectedVersion);
+          return jsonResponse(res, 200);
+        }
+
+        return methodNotAllowed(["GET", "PATCH", "DELETE"]);
+      }
+
+      return null;
+    }
+
+    if (resource === "saved-views") {
+      // GET|POST /api/v1/saved-views
+      if (segments.length === 3) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const includeArchived = parsedUrl.searchParams.get("includeArchived") === "true";
+          const views = await listSavedViewsRecord(auth.db, auth.userId, includeArchived);
+          return jsonResponse({ ok: true, items: views, total: views.length }, 200);
+        }
+
+        if (request.method === "POST") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = createSavedViewBodySchema.parse(parsedBody.data);
+          const res = await createSavedViewRecord(auth.db, auth.userId, input);
+          return jsonResponse(
+            res.body,
+            res.status,
+            res.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        return methodNotAllowed(["GET", "POST"]);
+      }
+
+      const idSeg = decodeIdSegment(segments[3] ?? "");
+      if (!idSeg.ok) return idSeg.response;
+      const viewId = idSeg.value;
+
+      // GET|PATCH|DELETE /api/v1/saved-views/:id
+      if (segments.length === 4) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const view = await getSavedViewRecord(auth.db, auth.userId, viewId);
+          return jsonResponse({ ok: true, view }, 200);
+        }
+
+        if (request.method === "PATCH") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = updateSavedViewBodySchema.parse(parsedBody.data);
+          const res = await updateSavedViewRecord(auth.db, auth.userId, viewId, input);
+          return jsonResponse(res, 200);
+        }
+
+        if (request.method === "DELETE") {
+          const hasBody = hasRequestBodyHint(request);
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: hasBody });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          let expectedVersion: number | undefined;
+          if (hasBody) {
+            const parsedBody = await parseJsonObject(request, { allowEmpty: true });
+            if (!parsedBody.ok) return parsedBody.response;
+            if (Object.keys(parsedBody.data).length > 0) {
+              const parsed = updateSavedViewBodySchema
+                .pick({ expectedVersion: true })
+                .parse(parsedBody.data);
+              expectedVersion = parsed.expectedVersion;
+            }
+          }
+          const rawVersionParam =
+            parsedUrl.searchParams.get("expectedVersion") ?? parsedUrl.searchParams.get("version");
+          if (expectedVersion === undefined && rawVersionParam !== null) {
+            const vNum = Number(rawVersionParam);
+            if (Number.isInteger(vNum) && vNum >= 1) expectedVersion = vNum;
+          }
+
+          const res = await archiveSavedViewRecord(auth.db, auth.userId, viewId, expectedVersion);
+          return jsonResponse(res, 200);
+        }
+
+        return methodNotAllowed(["GET", "PATCH", "DELETE"]);
+      }
+
+      // POST /api/v1/saved-views/:id/duplicate
+      if (segments.length === 5 && segments[4] === "duplicate") {
+        if (request.method !== "POST") return methodNotAllowed(["POST"]);
+        const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
+        if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+        const auth = await requireAuthenticatedOwnerDb(request, env);
+        if (!auth.ok) return auth.response;
+
+        const res = await duplicateSavedViewRecord(auth.db, auth.userId, viewId);
+        return jsonResponse(res, 201);
       }
 
       return null;
