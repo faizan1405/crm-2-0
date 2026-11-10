@@ -15,7 +15,7 @@ import { buildManifest } from "./backup/manifest.server";
 
 describe("Checkpoint B7B: Server-Side Data Vault Service & Integrity", () => {
   describe("Vault Coverage & Inventory Matrix", () => {
-    it("reports exactly 30 inventoried entities with 9 verified in MariaDB and 5 unsupported", async () => {
+    it("reports exactly 31 inventoried entities with 9 verified in MariaDB and 5 unsupported", async () => {
       // Mock db queries returning 0
       const mockDb = {
         select: () => ({
@@ -30,13 +30,13 @@ describe("Checkpoint B7B: Server-Side Data Vault Service & Integrity", () => {
 
       const coverage = await getVaultCoverage(mockDb, "usr_test_owner_1");
 
-      expect(coverage.totalEntitiesInventoried).toBe(30);
+      expect(coverage.totalEntitiesInventoried).toBe(31);
       expect(coverage.verifiedEntitiesCount).toBe(9);
-      expect(coverage.supportedEntitiesCount).toBe(16);
+      expect(coverage.supportedEntitiesCount).toBe(17);
       expect(coverage.unsupportedEntitiesCount).toBe(5);
       expect(coverage.restoreDisabled).toBe(true);
 
-      expect(coverage.inventory).toHaveLength(30);
+      expect(coverage.inventory).toHaveLength(31);
       const verifiedItems = coverage.inventory.filter((i) => i.status === "verified");
       expect(verifiedItems).toHaveLength(9);
       expect(verifiedItems.map((i) => i.name)).toEqual(

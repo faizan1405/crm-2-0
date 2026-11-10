@@ -69,7 +69,10 @@ describe("Checkpoint B8A — Custom Fields, Tags & Saved Views Schema & Calculat
     });
 
     it("verifies migration file 0010_b8a_saved_views.sql exists and is registered in _journal.json", () => {
-      const migrationFile = path.resolve(process.cwd(), "src/server/db/migrations/0010_b8a_saved_views.sql");
+      const migrationFile = path.resolve(
+        process.cwd(),
+        "src/server/db/migrations/0010_b8a_saved_views.sql",
+      );
       expect(fs.existsSync(migrationFile)).toBe(true);
 
       const sqlContent = fs.readFileSync(migrationFile, "utf8");
@@ -77,7 +80,10 @@ describe("Checkpoint B8A — Custom Fields, Tags & Saved Views Schema & Calculat
       expect(sqlContent).toContain("`filter_json` text NOT NULL");
       expect(sqlContent).toContain("`owner_user_id` varchar(64) NOT NULL");
 
-      const journalFile = path.resolve(process.cwd(), "src/server/db/migrations/meta/_journal.json");
+      const journalFile = path.resolve(
+        process.cwd(),
+        "src/server/db/migrations/meta/_journal.json",
+      );
       expect(fs.existsSync(journalFile)).toBe(true);
 
       const journal = JSON.parse(fs.readFileSync(journalFile, "utf8")) as {
@@ -91,11 +97,17 @@ describe("Checkpoint B8A — Custom Fields, Tags & Saved Views Schema & Calculat
   describe("2. Custom Field Type Validation (All 11 Field Types)", () => {
     it("validates short 'text' (max 200 chars, empty -> undefined)", () => {
       const def = { fieldType: "text" as const, options: [], currency: null };
-      expect(parseCustomFieldValue(def, "  hello world  ")).toEqual({ ok: true, value: "hello world" });
+      expect(parseCustomFieldValue(def, "  hello world  ")).toEqual({
+        ok: true,
+        value: "hello world",
+      });
       expect(parseCustomFieldValue(def, "")).toEqual({ ok: true, value: undefined });
       expect(parseCustomFieldValue(def, null)).toEqual({ ok: true, value: undefined });
       expect(parseCustomFieldValue(def, undefined)).toEqual({ ok: true, value: undefined });
-      expect(parseCustomFieldValue(def, "a".repeat(200))).toEqual({ ok: true, value: "a".repeat(200) });
+      expect(parseCustomFieldValue(def, "a".repeat(200))).toEqual({
+        ok: true,
+        value: "a".repeat(200),
+      });
       expect(parseCustomFieldValue(def, "a".repeat(201))).toEqual({
         ok: false,
         error: "Keep it under 200 characters.",
@@ -105,8 +117,14 @@ describe("Checkpoint B8A — Custom Fields, Tags & Saved Views Schema & Calculat
 
     it("validates 'longtext' (max 5000 chars)", () => {
       const def = { fieldType: "longtext" as const, options: [], currency: null };
-      expect(parseCustomFieldValue(def, "Detailed paragraph")).toEqual({ ok: true, value: "Detailed paragraph" });
-      expect(parseCustomFieldValue(def, "x".repeat(5000))).toEqual({ ok: true, value: "x".repeat(5000) });
+      expect(parseCustomFieldValue(def, "Detailed paragraph")).toEqual({
+        ok: true,
+        value: "Detailed paragraph",
+      });
+      expect(parseCustomFieldValue(def, "x".repeat(5000))).toEqual({
+        ok: true,
+        value: "x".repeat(5000),
+      });
       expect(parseCustomFieldValue(def, "x".repeat(5001))).toEqual({
         ok: false,
         error: "Keep it under 5,000 characters.",
@@ -118,8 +136,14 @@ describe("Checkpoint B8A — Custom Fields, Tags & Saved Views Schema & Calculat
       expect(parseCustomFieldValue(def, 42)).toEqual({ ok: true, value: 42 });
       expect(parseCustomFieldValue(def, -17.5)).toEqual({ ok: true, value: -17.5 });
       expect(parseCustomFieldValue(def, "1,000,500")).toEqual({ ok: true, value: 1000500 });
-      expect(parseCustomFieldValue(def, "invalid_num")).toEqual({ ok: false, error: "Enter a number." });
-      expect(parseCustomFieldValue(def, Number.NaN)).toEqual({ ok: false, error: "Enter a number." });
+      expect(parseCustomFieldValue(def, "invalid_num")).toEqual({
+        ok: false,
+        error: "Enter a number.",
+      });
+      expect(parseCustomFieldValue(def, Number.NaN)).toEqual({
+        ok: false,
+        error: "Enter a number.",
+      });
     });
 
     it("validates 'currency' (non-negative INR / Money structure)", () => {
@@ -150,9 +174,18 @@ describe("Checkpoint B8A — Custom Fields, Tags & Saved Views Schema & Calculat
       const def = { fieldType: "date" as const, options: [], currency: null };
       expect(parseCustomFieldValue(def, "2026-11-10")).toEqual({ ok: true, value: "2026-11-10" });
       expect(parseCustomFieldValue(def, "2024-02-29")).toEqual({ ok: true, value: "2024-02-29" });
-      expect(parseCustomFieldValue(def, "2026-02-29")).toEqual({ ok: false, error: "Pick a valid date." });
-      expect(parseCustomFieldValue(def, "10-11-2026")).toEqual({ ok: false, error: "Pick a valid date." });
-      expect(parseCustomFieldValue(def, "invalid")).toEqual({ ok: false, error: "Pick a valid date." });
+      expect(parseCustomFieldValue(def, "2026-02-29")).toEqual({
+        ok: false,
+        error: "Pick a valid date.",
+      });
+      expect(parseCustomFieldValue(def, "10-11-2026")).toEqual({
+        ok: false,
+        error: "Pick a valid date.",
+      });
+      expect(parseCustomFieldValue(def, "invalid")).toEqual({
+        ok: false,
+        error: "Pick a valid date.",
+      });
     });
 
     it("validates 'checkbox' (strict boolean or empty)", () => {
@@ -470,6 +503,7 @@ describe("Checkpoint B8A — Custom Fields, Tags & Saved Views Schema & Calculat
           {
             id: "c1",
             field: "stage",
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             op: "INVALID_OPERATOR" as any,
           },
         ],
@@ -499,6 +533,7 @@ describe("Checkpoint B8A — Custom Fields, Tags & Saved Views Schema & Calculat
       expect(
         createCustomFieldBodySchema.safeParse({
           label: "Valid",
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           type: "invalid_type" as any,
         }).success,
       ).toBe(false);

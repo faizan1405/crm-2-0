@@ -464,9 +464,6 @@ export async function updateCustomFieldRecord(
       at: now.toISOString(),
       change: changes.join(" · ") || "Edited",
     });
-    if (history.length > 50) {
-      history = history.slice(-50);
-    }
 
     const nowStr = toMysqlUtcDateTime(now);
     const nextVersion = current.version + 1;
@@ -584,9 +581,6 @@ export async function archiveCustomFieldRecord(
       at: now.toISOString(),
       change: "Archived",
     });
-    if (history.length > 50) {
-      history = history.slice(-50);
-    }
 
     const nowStr = toMysqlUtcDateTime(now);
     const nextVersion = current.version + 1;

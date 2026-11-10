@@ -24,6 +24,7 @@ import {
   crmProjects,
   crmQuotations,
   crmSalesGoals,
+  crmSavedViews,
 } from "../db/schema.server";
 
 export interface VaultBlocker {
@@ -58,6 +59,7 @@ export interface VaultLiveDatabaseCounts {
   quotations: number;
   salesGoals: number;
   ownerSettings: number;
+  savedViews?: number;
 }
 
 export interface VaultCoverageResult {
@@ -376,6 +378,19 @@ export const VAULT_ENTITIES_INVENTORY: VaultInventoryItem[] = [
   },
   {
     number: 26,
+    name: "Saved Views",
+    tableName: "crm_saved_views",
+    hasSchema: true,
+    includedInExporter: false,
+    hasBinaryCoverage: false,
+    hasRestoreMapping: false,
+    verifiedByLiveRestore: false,
+    status: "supported",
+    description:
+      "Saved lead view presets, multi-condition filter JSON, column configurations, and sorting.",
+  },
+  {
+    number: 27,
     name: "Quotation Shares",
     tableName: null,
     hasSchema: false,
@@ -387,7 +402,7 @@ export const VAULT_ENTITIES_INVENTORY: VaultInventoryItem[] = [
     description: "Temporary external quote share tokens (LocalStorage only, no MariaDB table).",
   },
   {
-    number: 27,
+    number: 28,
     name: "Sales Studio Demos",
     tableName: null,
     hasSchema: false,
@@ -399,7 +414,7 @@ export const VAULT_ENTITIES_INVENTORY: VaultInventoryItem[] = [
     description: "Sales collateral interactive demo presets (LocalStorage only, deferred to B8).",
   },
   {
-    number: 28,
+    number: 29,
     name: "WhatsApp Templates",
     tableName: null,
     hasSchema: false,
@@ -411,7 +426,7 @@ export const VAULT_ENTITIES_INVENTORY: VaultInventoryItem[] = [
     description: "Saved WhatsApp message drafts (LocalStorage only, deferred to B8).",
   },
   {
-    number: 29,
+    number: 30,
     name: "Automation Rules",
     tableName: null,
     hasSchema: false,
@@ -423,7 +438,7 @@ export const VAULT_ENTITIES_INVENTORY: VaultInventoryItem[] = [
     description: "Browser-side trigger automation rules (LocalStorage only, deferred to B8).",
   },
   {
-    number: 30,
+    number: 31,
     name: "Smart Inbox & Lead Relations",
     tableName: null,
     hasSchema: false,
@@ -579,6 +594,16 @@ export async function getVaultCoverage(
     // Keep 0
   }
 
+  try {
+    const [savedViewsRow] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(crmSavedViews)
+      .where(eq(crmSavedViews.ownerUserId, ownerUserId));
+    liveDatabaseCounts.savedViews = Number(savedViewsRow?.count ?? 0);
+  } catch {
+    // Keep 0
+  }
+
   const inventoryWithCounts = VAULT_ENTITIES_INVENTORY.map((item) => {
     let count: number | undefined;
     if (item.name === "Leads") count = liveDatabaseCounts.leads;
@@ -591,6 +616,7 @@ export async function getVaultCoverage(
     else if (item.name === "Quotations & Items") count = liveDatabaseCounts.quotations;
     else if (item.name === "Sales Goals") count = liveDatabaseCounts.salesGoals;
     else if (item.name === "Owner Settings") count = liveDatabaseCounts.ownerSettings;
+    else if (item.name === "Saved Views") count = liveDatabaseCounts.savedViews;
 
     return {
       ...item,
@@ -598,11 +624,22 @@ export async function getVaultCoverage(
     };
   });
 
+  const totalEntitiesInventoried = VAULT_ENTITIES_INVENTORY.length;
+  const verifiedEntitiesCount = VAULT_ENTITIES_INVENTORY.filter(
+    (i) => i.status === "verified",
+  ).length;
+  const supportedEntitiesCount = VAULT_ENTITIES_INVENTORY.filter(
+    (i) => i.status === "supported",
+  ).length;
+  const unsupportedEntitiesCount = VAULT_ENTITIES_INVENTORY.filter(
+    (i) => i.status === "unsupported",
+  ).length;
+
   return {
-    totalEntitiesInventoried: 30,
-    verifiedEntitiesCount: 9,
-    supportedEntitiesCount: 16,
-    unsupportedEntitiesCount: 5,
+    totalEntitiesInventoried,
+    verifiedEntitiesCount,
+    supportedEntitiesCount,
+    unsupportedEntitiesCount,
     liveDatabaseCounts,
     blockers: VAULT_BLOCKERS,
     inventory: inventoryWithCounts,

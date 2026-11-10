@@ -441,10 +441,12 @@ export async function listLeadsRecords(
               const q = String(c.value ?? "").trim();
               if (c.op === "empty") {
                 condSql = sql`1=1`;
+              } else if (c.op === "not_empty") {
+                condSql = sql`${crmLeads.name} IS NOT NULL`;
               } else if (q) {
                 const pattern = `%${escapeSqlLike(q)}%`;
                 condSql =
-                  c.op === "equals"
+                  c.op === "equals" || c.op === "is"
                     ? eq(crmLeads.name, q)
                     : or(
                         sql`${crmLeads.name} LIKE ${pattern} ESCAPE '!'`,
@@ -456,35 +458,38 @@ export async function listLeadsRecords(
               break;
             }
             case "stage": {
-              if (c.op === "is" && vals[0]) condSql = eq(crmLeads.status, String(vals[0]));
+              if ((c.op === "is" || c.op === "equals") && vals[0])
+                condSql = eq(crmLeads.status, String(vals[0]));
               else if (c.op === "is_not" && vals[0]) condSql = ne(crmLeads.status, String(vals[0]));
-              else if (c.op === "any_of" && vals.length > 0)
+              else if ((c.op === "any_of" || c.op === "contains_any") && vals.length > 0)
                 condSql = inArray(crmLeads.status, vals.map(String));
               break;
             }
             case "quick": {
               if (c.op === "empty") condSql = isNull(crmLeads.quickStatus);
               else if (c.op === "not_empty") condSql = isNotNull(crmLeads.quickStatus);
-              else if (c.op === "is" && vals[0])
+              else if ((c.op === "is" || c.op === "equals") && vals[0])
                 condSql = eq(crmLeads.quickStatus, String(vals[0]));
               else if (c.op === "is_not" && vals[0])
                 condSql = ne(crmLeads.quickStatus, String(vals[0]));
-              else if (c.op === "any_of" && vals.length > 0)
+              else if ((c.op === "any_of" || c.op === "contains_any") && vals.length > 0)
                 condSql = inArray(crmLeads.quickStatus, vals.map(String));
               break;
             }
             case "priority": {
-              if (c.op === "is" && vals[0]) condSql = eq(crmLeads.priority, String(vals[0]));
+              if ((c.op === "is" || c.op === "equals") && vals[0])
+                condSql = eq(crmLeads.priority, String(vals[0]));
               else if (c.op === "is_not" && vals[0])
                 condSql = ne(crmLeads.priority, String(vals[0]));
-              else if (c.op === "any_of" && vals.length > 0)
+              else if ((c.op === "any_of" || c.op === "contains_any") && vals.length > 0)
                 condSql = inArray(crmLeads.priority, vals.map(String));
               break;
             }
             case "source": {
-              if (c.op === "is" && vals[0]) condSql = eq(crmLeads.source, String(vals[0]));
+              if ((c.op === "is" || c.op === "equals") && vals[0])
+                condSql = eq(crmLeads.source, String(vals[0]));
               else if (c.op === "is_not" && vals[0]) condSql = ne(crmLeads.source, String(vals[0]));
-              else if (c.op === "any_of" && vals.length > 0)
+              else if ((c.op === "any_of" || c.op === "contains_any") && vals.length > 0)
                 condSql = inArray(crmLeads.source, vals.map(String));
               break;
             }
@@ -507,12 +512,15 @@ export async function listLeadsRecords(
               } else if (c.op === "after" && vals[0]) {
                 const bounds = istDayBoundsUtc(String(vals[0]));
                 condSql = gte(crmLeads.createdAt, bounds.endExclusiveMysqlUtc);
-              } else if (c.op === "on" && vals[0]) {
+              } else if ((c.op === "on" || c.op === "is" || c.op === "equals") && vals[0]) {
                 const bounds = istDayBoundsUtc(String(vals[0]));
                 condSql = and(
                   gte(crmLeads.createdAt, bounds.startMysqlUtc),
                   lt(crmLeads.createdAt, bounds.endExclusiveMysqlUtc),
                 )!;
+              } else if (c.op === "overdue") {
+                const bounds = istDayBoundsUtc(toIstParts(now).istDate);
+                condSql = lt(crmLeads.createdAt, bounds.startMysqlUtc);
               }
               break;
             }
@@ -521,8 +529,14 @@ export async function listLeadsRecords(
                 condSql = sql`NOT EXISTS (SELECT 1 FROM ${crmLeadTags} WHERE ${crmLeadTags.leadId} = ${crmLeads.id} AND ${crmLeadTags.ownerUserId} = ${ownerUserId})`;
               } else if (c.op === "not_empty") {
                 condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadTags} WHERE ${crmLeadTags.leadId} = ${crmLeads.id} AND ${crmLeadTags.ownerUserId} = ${ownerUserId})`;
+              } else if ((c.op === "is" || c.op === "equals" || c.op === "contains") && vals[0]) {
+                condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadTags} WHERE ${crmLeadTags.leadId} = ${crmLeads.id} AND ${crmLeadTags.ownerUserId} = ${ownerUserId} AND ${crmLeadTags.tagId} = ${String(vals[0])})`;
+              } else if (c.op === "is_not" && vals[0]) {
+                condSql = sql`NOT EXISTS (SELECT 1 FROM ${crmLeadTags} WHERE ${crmLeadTags.leadId} = ${crmLeads.id} AND ${crmLeadTags.ownerUserId} = ${ownerUserId} AND ${crmLeadTags.tagId} = ${String(vals[0])})`;
               } else if ((c.op === "contains_any" || c.op === "any_of") && vals.length > 0) {
-                condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadTags} WHERE ${crmLeadTags.leadId} = ${crmLeads.id} AND ${crmLeadTags.ownerUserId} = ${ownerUserId} AND ${crmLeadTags.tagId} IN ${vals.map(String)})`;
+                condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadTags} WHERE ${crmLeadTags.leadId} = ${crmLeads.id} AND ${crmLeadTags.ownerUserId} = ${ownerUserId} AND ${inArray(crmLeadTags.tagId, vals.map(String))})`;
+              } else if (c.op === "contains_all" && vals.length > 0) {
+                condSql = sql`(SELECT COUNT(DISTINCT ${crmLeadTags.tagId}) FROM ${crmLeadTags} WHERE ${crmLeadTags.leadId} = ${crmLeads.id} AND ${crmLeadTags.ownerUserId} = ${ownerUserId} AND ${inArray(crmLeadTags.tagId, vals.map(String))}) = ${vals.length}`;
               }
               break;
             }
@@ -535,7 +549,49 @@ export async function listLeadsRecords(
                   condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId})`;
                 } else if (c.op === "is" || c.op === "equals") {
                   const serialized = JSON.stringify(c.value);
-                  condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId} AND ${crmLeadFieldValues.valueJson} = ${serialized})`;
+                  condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId} AND (${crmLeadFieldValues.valueJson} = ${serialized} OR ${crmLeadFieldValues.valueJson} = ${String(c.value)}))`;
+                } else if (c.op === "is_not") {
+                  const serialized = JSON.stringify(c.value);
+                  condSql = sql`NOT EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId} AND (${crmLeadFieldValues.valueJson} = ${serialized} OR ${crmLeadFieldValues.valueJson} = ${String(c.value)}))`;
+                } else if (c.op === "contains") {
+                  const pattern = `%${escapeSqlLike(String(c.value ?? ""))}%`;
+                  condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId} AND ${crmLeadFieldValues.valueJson} LIKE ${pattern} ESCAPE '!')`;
+                } else if ((c.op === "any_of" || c.op === "contains_any") && vals.length > 0) {
+                  const subPreds = vals.map(
+                    (v) =>
+                      sql`${crmLeadFieldValues.valueJson} = ${JSON.stringify(v)} OR ${crmLeadFieldValues.valueJson} LIKE ${`%${escapeSqlLike(String(v))}%`} ESCAPE '!'`,
+                  );
+                  condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId} AND (${or(...subPreds)}))`;
+                } else if (c.op === "contains_all" && vals.length > 0) {
+                  const subPreds = vals.map(
+                    (v) =>
+                      sql`${crmLeadFieldValues.valueJson} LIKE ${`%${escapeSqlLike(String(v))}%`} ESCAPE '!'`,
+                  );
+                  condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId} AND (${and(...subPreds)}))`;
+                } else if (c.op === "gt" && c.value !== undefined) {
+                  condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId} AND CAST(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(${crmLeadFieldValues.valueJson}, '$.amount')), ${crmLeadFieldValues.valueJson}) AS DECIMAL(15,2)) > ${Number(c.value)})`;
+                } else if (c.op === "lt" && c.value !== undefined) {
+                  condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId} AND CAST(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(${crmLeadFieldValues.valueJson}, '$.amount')), ${crmLeadFieldValues.valueJson}) AS DECIMAL(15,2)) < ${Number(c.value)})`;
+                } else if (c.op === "between" && Array.isArray(c.value) && c.value.length === 2) {
+                  condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId} AND CAST(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(${crmLeadFieldValues.valueJson}, '$.amount')), ${crmLeadFieldValues.valueJson}) AS DECIMAL(15,2)) BETWEEN ${Number(c.value[0])} AND ${Number(c.value[1])})`;
+                } else if (c.op === "yes") {
+                  condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId} AND (${crmLeadFieldValues.valueJson} = 'true' OR ${crmLeadFieldValues.valueJson} = '1'))`;
+                } else if (c.op === "no") {
+                  condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId} AND (${crmLeadFieldValues.valueJson} = 'false' OR ${crmLeadFieldValues.valueJson} = '0'))`;
+                } else if (c.op === "before" && vals[0]) {
+                  condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId} AND REPLACE(JSON_UNQUOTE(${crmLeadFieldValues.valueJson}), '"', '') < ${String(vals[0])})`;
+                } else if (c.op === "after" && vals[0]) {
+                  condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId} AND REPLACE(JSON_UNQUOTE(${crmLeadFieldValues.valueJson}), '"', '') > ${String(vals[0])})`;
+                } else if ((c.op === "on" || c.op === "is" || c.op === "equals") && vals[0]) {
+                  condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId} AND REPLACE(JSON_UNQUOTE(${crmLeadFieldValues.valueJson}), '"', '') = ${String(vals[0])})`;
+                } else if (c.op === "today") {
+                  condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId} AND REPLACE(JSON_UNQUOTE(${crmLeadFieldValues.valueJson}), '"', '') = ${toIstParts(now).istDate})`;
+                } else if (c.op === "within_days") {
+                  const n = Number(c.value);
+                  const minDate = toIstParts(new Date(now.getTime() - n * DAY_MS)).istDate;
+                  condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId} AND REPLACE(JSON_UNQUOTE(${crmLeadFieldValues.valueJson}), '"', '') >= ${minDate})`;
+                } else if (c.op === "overdue") {
+                  condSql = sql`EXISTS (SELECT 1 FROM ${crmLeadFieldValues} WHERE ${crmLeadFieldValues.leadId} = ${crmLeads.id} AND ${crmLeadFieldValues.ownerUserId} = ${ownerUserId} AND ${crmLeadFieldValues.fieldId} = ${fieldId} AND REPLACE(JSON_UNQUOTE(${crmLeadFieldValues.valueJson}), '"', '') < ${toIstParts(now).istDate})`;
                 }
               }
               break;
