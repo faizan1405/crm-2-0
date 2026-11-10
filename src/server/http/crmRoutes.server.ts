@@ -223,6 +223,13 @@ import {
   updateOwnerSettingsRecord,
 } from "../crm/settingsService.server";
 import {
+  getVaultCoverage,
+  generateSyntheticBackupArchive,
+  inspectUploadedArchive,
+  runUploadedArchiveDryRun,
+  parseArchiveUpload,
+} from "../vault/vaultService.server";
+import {
   archiveGoalBodySchema,
   changeGoalStatusBodySchema,
   goalProgressQuerySchema,
@@ -887,7 +894,8 @@ export async function handleCrmApiRequest(
     !pathname.startsWith("/api/v1/project-templates") &&
     !pathname.startsWith("/api/v1/analytics") &&
     !pathname.startsWith("/api/v1/settings") &&
-    !pathname.startsWith("/api/v1/goals")
+    !pathname.startsWith("/api/v1/goals") &&
+    !pathname.startsWith("/api/v1/vault")
   ) {
     return null;
   }
@@ -3527,6 +3535,109 @@ export async function handleCrmApiRequest(
           const result = await getGoalProgressRecord(auth.db, auth.userId, goalId, query);
           return jsonResponse(result, 200);
         }
+      }
+
+      return null;
+    }
+
+    if (resource === "vault") {
+      const sub = segments[3];
+
+      // GET /api/v1/vault/coverage
+      if (sub === "coverage") {
+        if (request.method !== "GET") return methodNotAllowed(["GET"]);
+        const auth = await requireAuthenticatedOwnerDb(request, env);
+        if (!auth.ok) return auth.response;
+
+        const coverage = await getVaultCoverage(auth.db, auth.userId);
+        return jsonResponse({ ok: true, coverage }, 200);
+      }
+
+      // POST /api/v1/vault/synthetic-backup
+      if (sub === "synthetic-backup") {
+        if (request.method !== "POST") return methodNotAllowed(["POST"]);
+        const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
+        if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+        const auth = await requireAuthenticatedOwnerDb(request, env);
+        if (!auth.ok) return auth.response;
+
+        let scope: "full" | "sales" | "projects" = "full";
+        try {
+          const body = (await request.clone().json()) as { scope?: string };
+          if (body?.scope === "sales" || body?.scope === "projects" || body?.scope === "full") {
+            scope = body.scope;
+          }
+        } catch {
+          const urlScope = parsedUrl.searchParams.get("scope");
+          if (urlScope === "sales" || urlScope === "projects" || urlScope === "full") {
+            scope = urlScope;
+          }
+        }
+
+        const { zipBytes, filename, manifest } = generateSyntheticBackupArchive({
+          scope,
+          ownerUserId: auth.userId,
+          ownerEmail: "owner@joinscaleflow.in",
+        });
+
+        return new Response(Buffer.from(zipBytes) as unknown as BodyInit, {
+          status: 200,
+          headers: {
+            "Content-Type": "application/zip",
+            "Content-Disposition": `attachment; filename="${filename}"`,
+            "Content-Length": String(zipBytes.byteLength),
+            "x-vault-manifest-sha256": manifest.checksumSha256 ?? "",
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+          },
+        });
+      }
+
+      // POST /api/v1/vault/inspect
+      if (sub === "inspect") {
+        if (request.method !== "POST") return methodNotAllowed(["POST"]);
+        const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
+        if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+        const auth = await requireAuthenticatedOwnerDb(request, env);
+        if (!auth.ok) return auth.response;
+
+        const parsedUpload = await parseArchiveUpload(request);
+        if (!parsedUpload.ok) return parsedUpload.response;
+
+        const validation = await inspectUploadedArchive(parsedUpload.bytes);
+        return jsonResponse({ ok: validation.ok, validation }, 200);
+      }
+
+      // POST /api/v1/vault/dry-run
+      if (sub === "dry-run") {
+        if (request.method !== "POST") return methodNotAllowed(["POST"]);
+        const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
+        if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+        const auth = await requireAuthenticatedOwnerDb(request, env);
+        if (!auth.ok) return auth.response;
+
+        const parsedUpload = await parseArchiveUpload(request);
+        if (!parsedUpload.ok) return parsedUpload.response;
+
+        const dryRunReport = await runUploadedArchiveDryRun(auth.db, auth.userId, parsedUpload.bytes);
+        return jsonResponse({ ok: dryRunReport.ok, dryRunReport }, 200);
+      }
+
+      // POST /api/v1/vault/restore -> Strictly 403 Forbidden
+      if (sub === "restore") {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "RESTORE_EXECUTION_DISABLED",
+              message:
+                "Direct database restore execution is disabled in the UI. Restore execution is CLI-only with manual safeguards and isolated transaction rollbacks to prevent accidental production data loss.",
+            },
+          },
+          403,
+        );
       }
 
       return null;
