@@ -10,7 +10,7 @@ import {
   shouldUseSecureCookie,
   verifyCsrfAndOrigin,
 } from "../auth/security.server";
-import type { ServerEnv } from "../config/env.server";
+import { type ServerEnv, isLeadPilotAvailable } from "../config/env.server";
 import { createLeadActivity, listLeadActivities } from "../crm/activitiesService.server";
 import {
   createCallLogRecord,
@@ -837,9 +837,7 @@ function hasRequestBodyHint(request: Request): boolean {
 
 const analyticsQuerySchema = z
   .object({
-    period: z
-      .enum(ANALYTICS_PERIODS as unknown as [string, ...string[]])
-      .optional(),
+    period: z.enum(ANALYTICS_PERIODS as unknown as [string, ...string[]]).optional(),
     from: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid from date (expected YYYY-MM-DD)")
@@ -1733,15 +1731,18 @@ export async function handleCrmApiRequest(
 
           const query = listDealAuditQuerySchema.parse(searchParamsObject(parsedUrl));
           const result = await listDealAuditHistory(auth.db, auth.userId, dealId, query);
-          return jsonResponse({
-            ok: true,
-            dealId,
-            events: result.items,
-            items: result.items,
-            total: result.total,
-            limit: result.limit,
-            offset: result.offset,
-          }, 200);
+          return jsonResponse(
+            {
+              ok: true,
+              dealId,
+              events: result.items,
+              items: result.items,
+              total: result.total,
+              limit: result.limit,
+              offset: result.offset,
+            },
+            200,
+          );
         }
 
         // GET|POST /api/v1/deals/:id/payments
@@ -2131,13 +2132,15 @@ export async function handleCrmApiRequest(
         const query = financeSummaryQuerySchema.parse(searchParamsObject(parsedUrl));
         const summary = await getOwnerFinanceSummary(auth.db, auth.userId, query);
 
-        const totalBookedPaise = summary.totals.totalValuePaise + summary.exclusions.cancelledBookedValuePaise;
-        const cashCollectedPaise = summary.totals.collectedPaise + summary.exclusions.cancelledDealPaymentsExcludedPaise;
+        const totalBookedPaise =
+          summary.totals.totalValuePaise + summary.exclusions.cancelledBookedValuePaise;
+        const cashCollectedPaise =
+          summary.totals.collectedPaise + summary.exclusions.cancelledDealPaymentsExcludedPaise;
 
         const payload = {
           ...summary,
           todayIstDate: summary.todayIstDate,
-          period: (query as Record<string, unknown>)["period"] as string ?? "all_time",
+          period: ((query as Record<string, unknown>)["period"] as string) ?? "all_time",
           fromIstDate: query.from ?? null,
           toIstDate: query.to ?? null,
           totalBooked: totalBookedPaise / 100,
@@ -2167,9 +2170,14 @@ export async function handleCrmApiRequest(
           voidedAmount: summary.exclusions.voidedAmount,
           voidedDecimal: summary.exclusions.voidedAmountDecimal,
           voidedPaise: summary.exclusions.voidedAmountPaise,
-          activeDealCount: (summary.counts.byDealStatus.active ?? 0) + (summary.counts.byDealStatus.completed ?? 0) + (summary.counts.byDealStatus.on_hold ?? 0),
+          activeDealCount:
+            (summary.counts.byDealStatus.active ?? 0) +
+            (summary.counts.byDealStatus.completed ?? 0) +
+            (summary.counts.byDealStatus.on_hold ?? 0),
           cancelledDealCount: summary.exclusions.cancelledDealCount,
-          activePaymentCount: (summary.counts.byPaymentStatus.paid ?? 0) + (summary.counts.byPaymentStatus.partial ?? 0),
+          activePaymentCount:
+            (summary.counts.byPaymentStatus.paid ?? 0) +
+            (summary.counts.byPaymentStatus.partial ?? 0),
           voidedPaymentCount: summary.exclusions.voidedPaymentCount,
           collectionRate: summary.totals.collectionRate,
         };
@@ -2226,7 +2234,11 @@ export async function handleCrmApiRequest(
           if (!parsedBody.ok) return parsedBody.response;
 
           const input = reorderQuotationTemplatesBodySchema.parse(parsedBody.data);
-          const result = await reorderQuotationTemplatesRecord(auth.db, auth.userId, input.templateIds);
+          const result = await reorderQuotationTemplatesRecord(
+            auth.db,
+            auth.userId,
+            input.templateIds,
+          );
           return jsonResponse({ ok: true, reorderedCount: result.reorderedCount }, 200);
         }
 
@@ -2259,7 +2271,12 @@ export async function handleCrmApiRequest(
           if (!parsedBody.ok) return parsedBody.response;
 
           const input = updateQuotationTemplateBodySchema.parse(parsedBody.data);
-          const template = await updateQuotationTemplateRecord(auth.db, auth.userId, templateId, input);
+          const template = await updateQuotationTemplateRecord(
+            auth.db,
+            auth.userId,
+            templateId,
+            input,
+          );
           return jsonResponse({ ok: true, template }, 200);
         }
 
@@ -2376,9 +2393,16 @@ export async function handleCrmApiRequest(
             bodyKey: input.idempotencyKey,
           });
 
-          const res = await updateQuotationRecord(auth.db, auth.userId, auth.userId, quotationId, input, {
-            idempotencyKey: idemKey,
-          });
+          const res = await updateQuotationRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            quotationId,
+            input,
+            {
+              idempotencyKey: idemKey,
+            },
+          );
           return jsonResponse(
             res.body,
             res.status,
@@ -2412,9 +2436,16 @@ export async function handleCrmApiRequest(
             bodyKey: bodyIdemKey,
           });
 
-          const res = await archiveQuotationRecord(auth.db, auth.userId, auth.userId, quotationId, reason, {
-            idempotencyKey: idemKey,
-          });
+          const res = await archiveQuotationRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            quotationId,
+            reason,
+            {
+              idempotencyKey: idemKey,
+            },
+          );
           return jsonResponse(
             res.body,
             res.status,
@@ -2516,13 +2547,9 @@ export async function handleCrmApiRequest(
             bodyKey: input.idempotencyKey,
           });
 
-          const res = await restoreQuotationRecord(
-            auth.db,
-            auth.userId,
-            auth.userId,
-            quotationId,
-            { idempotencyKey: idemKey },
-          );
+          const res = await restoreQuotationRecord(auth.db, auth.userId, auth.userId, quotationId, {
+            idempotencyKey: idemKey,
+          });
           return jsonResponse(
             res.body,
             res.status,
@@ -2538,7 +2565,12 @@ export async function handleCrmApiRequest(
           if (!auth.ok) return auth.response;
 
           const query = listQuotationRevisionsQuerySchema.parse(searchParamsObject(parsedUrl));
-          const result = await listQuotationRevisionsRecord(auth.db, auth.userId, quotationId, query);
+          const result = await listQuotationRevisionsRecord(
+            auth.db,
+            auth.userId,
+            quotationId,
+            query,
+          );
           return jsonResponse({ ok: true, quotationId, ...result }, 200);
         }
 
@@ -2550,7 +2582,12 @@ export async function handleCrmApiRequest(
           if (!auth.ok) return auth.response;
 
           const query = listQuotationAuditQuerySchema.parse(searchParamsObject(parsedUrl));
-          const result = await listQuotationAuditEventsRecord(auth.db, auth.userId, quotationId, query);
+          const result = await listQuotationAuditEventsRecord(
+            auth.db,
+            auth.userId,
+            quotationId,
+            query,
+          );
           return jsonResponse({ ok: true, quotationId, ...result }, 200);
         }
       }
@@ -2646,7 +2683,13 @@ export async function handleCrmApiRequest(
             if (!parsedBody.ok) return parsedBody.response;
 
             const input = updateProjectBodySchema.parse(parsedBody.data);
-            const project = await updateProjectRecord(auth.db, auth.userId, auth.userId, projectId, input);
+            const project = await updateProjectRecord(
+              auth.db,
+              auth.userId,
+              auth.userId,
+              projectId,
+              input,
+            );
             return jsonResponse({ ok: true, project }, 200);
           }
 
@@ -2669,7 +2712,13 @@ export async function handleCrmApiRequest(
           if (!parsedBody.ok) return parsedBody.response;
 
           const input = setProjectStatusBodySchema.parse(parsedBody.data);
-          const project = await setProjectStatusRecord(auth.db, auth.userId, auth.userId, projectId, input);
+          const project = await setProjectStatusRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            projectId,
+            input,
+          );
           return jsonResponse({ ok: true, project }, 200);
         }
 
@@ -2687,7 +2736,13 @@ export async function handleCrmApiRequest(
           if (!parsedBody.ok) return parsedBody.response;
 
           const input = moveProjectStageBodySchema.parse(parsedBody.data);
-          const result = await moveProjectStageRecord(auth.db, auth.userId, auth.userId, projectId, input);
+          const result = await moveProjectStageRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            projectId,
+            input,
+          );
           return jsonResponse({ ok: true, ...result }, 200);
         }
 
@@ -2705,7 +2760,13 @@ export async function handleCrmApiRequest(
           if (!parsedBody.ok) return parsedBody.response;
 
           const input = undoProjectStageBodySchema.parse(parsedBody.data);
-          const project = await undoProjectStageRecord(auth.db, auth.userId, auth.userId, projectId, input);
+          const project = await undoProjectStageRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            projectId,
+            input,
+          );
           return jsonResponse({ ok: true, project }, 200);
         }
 
@@ -2723,7 +2784,13 @@ export async function handleCrmApiRequest(
           if (!parsedBody.ok) return parsedBody.response;
 
           const input = deliverProjectBodySchema.parse(parsedBody.data);
-          const project = await deliverProjectRecord(auth.db, auth.userId, auth.userId, projectId, input);
+          const project = await deliverProjectRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            projectId,
+            input,
+          );
           return jsonResponse({ ok: true, project }, 200);
         }
 
@@ -2741,7 +2808,13 @@ export async function handleCrmApiRequest(
           if (!parsedBody.ok) return parsedBody.response;
 
           const input = configureProjectSupportBodySchema.parse(parsedBody.data);
-          const project = await configureProjectSupportRecord(auth.db, auth.userId, auth.userId, projectId, input);
+          const project = await configureProjectSupportRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            projectId,
+            input,
+          );
           return jsonResponse({ ok: true, project }, 200);
         }
 
@@ -2759,7 +2832,13 @@ export async function handleCrmApiRequest(
           if (!parsedBody.ok) return parsedBody.response;
 
           const input = archiveProjectBodySchema.parse(parsedBody.data);
-          const result = await archiveProjectRecord(auth.db, auth.userId, auth.userId, projectId, input);
+          const result = await archiveProjectRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            projectId,
+            input,
+          );
           return jsonResponse({ ok: true, ...result }, 200);
         }
 
@@ -2777,7 +2856,13 @@ export async function handleCrmApiRequest(
           if (!parsedBody.ok) return parsedBody.response;
 
           const input = addProjectNoteBodySchema.parse(parsedBody.data);
-          const event = await addProjectNoteRecord(auth.db, auth.userId, auth.userId, projectId, input.text);
+          const event = await addProjectNoteRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            projectId,
+            input.text,
+          );
           return jsonResponse({ ok: true, event }, 201);
         }
 
@@ -2787,7 +2872,13 @@ export async function handleCrmApiRequest(
 
           const listName = segments[5];
           if (listName !== "requirements" && listName !== "qa" && listName !== "handover") {
-            return jsonResponse({ ok: false, error: { code: "validation_error", message: "Invalid checklist name." } }, 400);
+            return jsonResponse(
+              {
+                ok: false,
+                error: { code: "validation_error", message: "Invalid checklist name." },
+              },
+              400,
+            );
           }
 
           const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
@@ -2851,7 +2942,13 @@ export async function handleCrmApiRequest(
           if (!parsedBody.ok) return parsedBody.response;
 
           const input = createMilestoneBodySchema.parse(parsedBody.data);
-          const milestone = await createMilestoneRecord(auth.db, auth.userId, auth.userId, projectId, input);
+          const milestone = await createMilestoneRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            projectId,
+            input,
+          );
           return jsonResponse({ ok: true, milestone }, 201);
         }
 
@@ -2905,10 +3002,16 @@ export async function handleCrmApiRequest(
             bodyKey: input.idempotencyKey,
           });
 
-          const result = await createDeliverableRecord(auth.db, auth.userId, auth.userId, projectId, {
-            ...input,
-            idempotencyKey: idempotencyKey ?? undefined,
-          });
+          const result = await createDeliverableRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            projectId,
+            {
+              ...input,
+              idempotencyKey: idempotencyKey ?? undefined,
+            },
+          );
 
           return jsonResponse(
             result.body,
@@ -2936,10 +3039,16 @@ export async function handleCrmApiRequest(
             bodyKey: input.idempotencyKey,
           });
 
-          const result = await createSupportTicketRecord(auth.db, auth.userId, auth.userId, projectId, {
-            ...input,
-            idempotencyKey: idempotencyKey ?? undefined,
-          });
+          const result = await createSupportTicketRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            projectId,
+            {
+              ...input,
+              idempotencyKey: idempotencyKey ?? undefined,
+            },
+          );
 
           return jsonResponse(
             result.body,
@@ -2969,7 +3078,13 @@ export async function handleCrmApiRequest(
           if (!parsedBody.ok) return parsedBody.response;
 
           const input = updateMilestoneBodySchema.parse(parsedBody.data);
-          const milestone = await updateMilestoneRecord(auth.db, auth.userId, auth.userId, milestoneId, input);
+          const milestone = await updateMilestoneRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            milestoneId,
+            input,
+          );
           return jsonResponse({ ok: true, milestone }, 200);
         }
 
@@ -3022,7 +3137,14 @@ export async function handleCrmApiRequest(
           if (!parsedBody.ok) return parsedBody.response;
 
           const input = completeTaskBodySchema.parse(parsedBody.data);
-          const task = await setTaskDoneRecord(auth.db, auth.userId, auth.userId, taskId, input.done, input.expectedVersion);
+          const task = await setTaskDoneRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            taskId,
+            input.done,
+            input.expectedVersion,
+          );
           return jsonResponse({ ok: true, task }, 200);
         }
       }
@@ -3048,7 +3170,13 @@ export async function handleCrmApiRequest(
         if (!parsedBody.ok) return parsedBody.response;
 
         const input = addDeliverableRevisionBodySchema.parse(parsedBody.data);
-        const result = await addDeliverableRevisionRecord(auth.db, auth.userId, auth.userId, deliverableId, input);
+        const result = await addDeliverableRevisionRecord(
+          auth.db,
+          auth.userId,
+          auth.userId,
+          deliverableId,
+          input,
+        );
         return jsonResponse({ ok: true, ...result }, 201);
       }
 
@@ -3075,7 +3203,13 @@ export async function handleCrmApiRequest(
             if (!parsedBody.ok) return parsedBody.response;
 
             const input = updateSupportTicketBodySchema.parse(parsedBody.data);
-            const ticket = await updateSupportTicketRecord(auth.db, auth.userId, auth.userId, ticketId, input);
+            const ticket = await updateSupportTicketRecord(
+              auth.db,
+              auth.userId,
+              auth.userId,
+              ticketId,
+              input,
+            );
             return jsonResponse({ ok: true, ticket }, 200);
           }
 
@@ -3098,7 +3232,14 @@ export async function handleCrmApiRequest(
           if (!parsedBody.ok) return parsedBody.response;
 
           const input = resolveSupportTicketBodySchema.parse(parsedBody.data);
-          const ticket = await resolveSupportTicketRecord(auth.db, auth.userId, auth.userId, ticketId, input.resolution, input.expectedVersion);
+          const ticket = await resolveSupportTicketRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            ticketId,
+            input.resolution,
+            input.expectedVersion,
+          );
           return jsonResponse({ ok: true, ticket }, 200);
         }
 
@@ -3116,7 +3257,14 @@ export async function handleCrmApiRequest(
           if (!parsedBody.ok) return parsedBody.response;
 
           const input = reopenSupportTicketBodySchema.parse(parsedBody.data ?? {});
-          const ticket = await reopenSupportTicketRecord(auth.db, auth.userId, auth.userId, ticketId, input.reason, input.expectedVersion);
+          const ticket = await reopenSupportTicketRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            ticketId,
+            input.reason,
+            input.expectedVersion,
+          );
           return jsonResponse({ ok: true, ticket }, 200);
         }
       }
@@ -3134,7 +3282,11 @@ export async function handleCrmApiRequest(
           if (!auth.ok) return auth.response;
 
           const query = listProjectTemplatesQuerySchema.parse(searchParamsObject(parsedUrl));
-          const templates = await listProjectTemplatesRecord(auth.db, auth.userId, query.includeArchived);
+          const templates = await listProjectTemplatesRecord(
+            auth.db,
+            auth.userId,
+            query.includeArchived,
+          );
           return jsonResponse({ ok: true, items: templates }, 200);
         }
 
@@ -3541,6 +3693,18 @@ export async function handleCrmApiRequest(
     }
 
     if (resource === "vault") {
+      if (!isLeadPilotAvailable(env)) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "PILOT_DISABLED",
+              message: "Development Data Vault Pilot is disabled in production environments.",
+            },
+          },
+          404,
+        );
+      }
       const sub = segments[3];
 
       // GET /api/v1/vault/coverage
@@ -3621,7 +3785,11 @@ export async function handleCrmApiRequest(
         const parsedUpload = await parseArchiveUpload(request);
         if (!parsedUpload.ok) return parsedUpload.response;
 
-        const dryRunReport = await runUploadedArchiveDryRun(auth.db, auth.userId, parsedUpload.bytes);
+        const dryRunReport = await runUploadedArchiveDryRun(
+          auth.db,
+          auth.userId,
+          parsedUpload.bytes,
+        );
         return jsonResponse({ ok: dryRunReport.ok, dryRunReport }, 200);
       }
 

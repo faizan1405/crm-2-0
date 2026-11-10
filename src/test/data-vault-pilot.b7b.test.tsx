@@ -95,6 +95,11 @@ const MOCK_COVERAGE: vaultApi.VaultCoverageResponse = {
         number: 1,
         name: "Leads",
         tableName: "crm_leads",
+        hasSchema: true,
+        includedInExporter: true,
+        hasBinaryCoverage: false,
+        hasRestoreMapping: true,
+        verifiedByLiveRestore: true,
         status: "verified",
         count: 3,
         description: "Customer records",
@@ -103,6 +108,11 @@ const MOCK_COVERAGE: vaultApi.VaultCoverageResponse = {
         number: 6,
         name: "Deals",
         tableName: "crm_deals",
+        hasSchema: true,
+        includedInExporter: true,
+        hasBinaryCoverage: false,
+        hasRestoreMapping: true,
+        verifiedByLiveRestore: true,
         status: "verified",
         count: 2,
         description: "Sales opportunities",
@@ -111,6 +121,11 @@ const MOCK_COVERAGE: vaultApi.VaultCoverageResponse = {
         number: 8,
         name: "Payments",
         tableName: "crm_payments",
+        hasSchema: true,
+        includedInExporter: true,
+        hasBinaryCoverage: false,
+        hasRestoreMapping: true,
+        verifiedByLiveRestore: true,
         status: "verified",
         count: 2,
         description: "Cash ledger",
@@ -119,6 +134,11 @@ const MOCK_COVERAGE: vaultApi.VaultCoverageResponse = {
         number: 10,
         name: "Payment Proof Meta",
         tableName: "crm_payment_proofs",
+        hasSchema: true,
+        includedInExporter: true,
+        hasBinaryCoverage: false,
+        hasRestoreMapping: true,
+        verifiedByLiveRestore: true,
         status: "verified",
         count: 2,
         description: "Receipt metadata",
@@ -127,6 +147,11 @@ const MOCK_COVERAGE: vaultApi.VaultCoverageResponse = {
         number: 11,
         name: "Payment Proof Binaries",
         tableName: "filesystem/proofs",
+        hasSchema: false,
+        includedInExporter: true,
+        hasBinaryCoverage: true,
+        hasRestoreMapping: true,
+        verifiedByLiveRestore: true,
         status: "supported",
         count: 2,
         description: "Binary proof files",
@@ -135,6 +160,11 @@ const MOCK_COVERAGE: vaultApi.VaultCoverageResponse = {
         number: 13,
         name: "Quotations & Items",
         tableName: "crm_quotations",
+        hasSchema: true,
+        includedInExporter: true,
+        hasBinaryCoverage: false,
+        hasRestoreMapping: true,
+        verifiedByLiveRestore: true,
         status: "verified",
         count: 1,
         description: "Quotations",
@@ -143,6 +173,11 @@ const MOCK_COVERAGE: vaultApi.VaultCoverageResponse = {
         number: 15,
         name: "Projects",
         tableName: "crm_projects",
+        hasSchema: true,
+        includedInExporter: true,
+        hasBinaryCoverage: false,
+        hasRestoreMapping: true,
+        verifiedByLiveRestore: true,
         status: "verified",
         count: 1,
         description: "Delivery workspaces",
@@ -151,6 +186,11 @@ const MOCK_COVERAGE: vaultApi.VaultCoverageResponse = {
         number: 16,
         name: "Project Tasks",
         tableName: "crm_project_tasks",
+        hasSchema: true,
+        includedInExporter: true,
+        hasBinaryCoverage: false,
+        hasRestoreMapping: true,
+        verifiedByLiveRestore: true,
         status: "verified",
         count: 2,
         description: "Checklists",
@@ -159,6 +199,11 @@ const MOCK_COVERAGE: vaultApi.VaultCoverageResponse = {
         number: 20,
         name: "Owner Settings",
         tableName: "crm_owner_settings",
+        hasSchema: true,
+        includedInExporter: true,
+        hasBinaryCoverage: false,
+        hasRestoreMapping: true,
+        verifiedByLiveRestore: true,
         status: "verified",
         count: 1,
         description: "Business settings",
@@ -167,6 +212,11 @@ const MOCK_COVERAGE: vaultApi.VaultCoverageResponse = {
         number: 22,
         name: "Sales Goals",
         tableName: "crm_sales_goals",
+        hasSchema: true,
+        includedInExporter: true,
+        hasBinaryCoverage: false,
+        hasRestoreMapping: true,
+        verifiedByLiveRestore: true,
         status: "verified",
         count: 1,
         description: "Revenue targets",
@@ -175,6 +225,11 @@ const MOCK_COVERAGE: vaultApi.VaultCoverageResponse = {
         number: 26,
         name: "Quotation Shares",
         tableName: null,
+        hasSchema: false,
+        includedInExporter: false,
+        hasBinaryCoverage: false,
+        hasRestoreMapping: false,
+        verifiedByLiveRestore: false,
         status: "unsupported",
         description: "LocalStorage only",
       },
@@ -182,6 +237,11 @@ const MOCK_COVERAGE: vaultApi.VaultCoverageResponse = {
         number: 27,
         name: "Sales Studio Demos",
         tableName: null,
+        hasSchema: false,
+        includedInExporter: false,
+        hasBinaryCoverage: false,
+        hasRestoreMapping: false,
+        verifiedByLiveRestore: false,
         status: "unsupported",
         description: "LocalStorage only",
       },
@@ -189,6 +249,11 @@ const MOCK_COVERAGE: vaultApi.VaultCoverageResponse = {
         number: 28,
         name: "WhatsApp Templates",
         tableName: null,
+        hasSchema: false,
+        includedInExporter: false,
+        hasBinaryCoverage: false,
+        hasRestoreMapping: false,
+        verifiedByLiveRestore: false,
         status: "unsupported",
         description: "LocalStorage only",
       },
@@ -196,6 +261,11 @@ const MOCK_COVERAGE: vaultApi.VaultCoverageResponse = {
         number: 29,
         name: "Automation Rules",
         tableName: null,
+        hasSchema: false,
+        includedInExporter: false,
+        hasBinaryCoverage: false,
+        hasRestoreMapping: false,
+        verifiedByLiveRestore: false,
         status: "unsupported",
         description: "LocalStorage only",
       },
@@ -203,6 +273,11 @@ const MOCK_COVERAGE: vaultApi.VaultCoverageResponse = {
         number: 30,
         name: "Smart Inbox & Lead Relations",
         tableName: null,
+        hasSchema: false,
+        includedInExporter: false,
+        hasBinaryCoverage: false,
+        hasRestoreMapping: false,
+        verifiedByLiveRestore: false,
         status: "unsupported",
         description: "LocalStorage only",
       },
@@ -292,9 +367,11 @@ describe("Checkpoint B7B: Data Vault Pilot Frontend UI Component", () => {
     fireEvent.click(synthTab);
 
     expect(screen.getByText("Synthetic Test Backup Generator")).toBeInTheDocument();
-    expect(screen.getByText("Full Pilot (9 Tables)")).toBeInTheDocument();
-    expect(screen.getByText("Sales & Finance Only")).toBeInTheDocument();
-    expect(screen.getByText("Projects & Quotations")).toBeInTheDocument();
+    expect(screen.getByText("All Supported Synthetic Test Data")).toBeInTheDocument();
+    expect(screen.getByText("Sales Synthetic Test Data")).toBeInTheDocument();
+    expect(screen.getByText("Projects Synthetic Test Data")).toBeInTheDocument();
+    expect(screen.getByText("Included Fixtures (FULL Scope):")).toBeInTheDocument();
+    expect(screen.getByText("Excluded Datasets (Omitted from Package):")).toBeInTheDocument();
 
     const generateBtn = screen.getByRole("button", { name: /Generate & Download Synthetic ZIP/i });
     expect(generateBtn).toBeInTheDocument();
@@ -328,21 +405,15 @@ describe("Checkpoint B7B: Data Vault Pilot Frontend UI Component", () => {
     expect(screen.getByText(/ZERO database writes or mutations occur/i)).toBeInTheDocument();
   });
 
-  it("tests restore prevention button and asserts HTTP 403 Forbidden enforcement dialog", async () => {
-    const forbiddenSpy = vi.spyOn(vaultApi, "verifyRestoreExecutionDisabled").mockResolvedValue({
-      ok: false,
-      error: {
-        code: "RESTORE_EXECUTION_DISABLED",
-        message:
-          "Direct database restore execution is disabled in the UI. Restore execution is CLI-only with manual safeguards.",
-      },
-    });
+  it("displays permanent restore execution disabled safety enforcement and verifies HTTP 403 API contract", async () => {
+    const forbiddenRes = await vaultApi.verifyRestoreExecutionDisabled();
+    expect(forbiddenRes.ok).toBe(false);
+    expect(forbiddenRes.error.code).toBe("RESTORE_EXECUTION_DISABLED");
 
-    // Directly set mock dry-run result to display the test button
     render(wrap(<PilotDataVaultPage search={{ tab: "dryrun", pilot: 1 }} />));
 
-    // Upload mock dry-run file to reveal the breakdown and prevention button
-    const mockDryRunSpy = vi.spyOn(vaultApi, "runRestoreDryRun").mockResolvedValue({
+    // Upload mock dry-run file to reveal simulation results and safety notice
+    vi.spyOn(vaultApi, "runRestoreDryRun").mockResolvedValue({
       ok: true,
       dryRunReport: {
         ok: true,
@@ -385,14 +456,9 @@ describe("Checkpoint B7B: Data Vault Pilot Frontend UI Component", () => {
       expect(
         screen.getByText("Zero Mutations Performed — Simulation Complete"),
       ).toBeInTheDocument();
-    });
-
-    const testBtn = screen.getByRole("button", { name: /Test Restore Prevention \(Verify 403\)/i });
-    fireEvent.click(testBtn);
-
-    await waitFor(() => {
-      expect(forbiddenSpy).toHaveBeenCalled();
-      expect(screen.getByText("Direct Restore Execution Blocked (HTTP 403)")).toBeInTheDocument();
+      expect(
+        screen.getByText("Restore execution is disabled in this development Pilot."),
+      ).toBeInTheDocument();
     });
   });
 

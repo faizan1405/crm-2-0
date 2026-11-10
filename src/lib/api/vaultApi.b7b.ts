@@ -1,21 +1,27 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useResolvedAuthState } from "@/lib/auth/authClient";
 import type {
+  ArchiveIntegrityStatus,
   BackupClassification,
   BackupFinancialSummary,
   BackupManifest,
+  CrmDataCoverageStatus,
   DryRunActionSummary,
   DryRunReport,
+  RestoreReadinessStatus,
   ValidationReport,
 } from "@/server/backup/types.server";
 import { type VaultBlocker, type VaultInventoryItem } from "@/server/vault/vaultService.server";
 
 export type {
+  ArchiveIntegrityStatus,
   BackupClassification,
   BackupFinancialSummary,
   BackupManifest,
+  CrmDataCoverageStatus,
   DryRunActionSummary,
   DryRunReport,
+  RestoreReadinessStatus,
   ValidationReport,
   VaultBlocker,
   VaultInventoryItem,

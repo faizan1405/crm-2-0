@@ -6,8 +6,11 @@ import {
   BACKUP_APP_NAME,
   BACKUP_FORMAT_VERSION,
   CURRENT_CRM_SCHEMA_VERSION,
+  type ArchiveIntegrityStatus,
   type BackupClassification,
   type BackupManifest,
+  type CrmDataCoverageStatus,
+  type RestoreReadinessStatus,
   type ValidationReport,
 } from "./types.server";
 
@@ -57,11 +60,16 @@ export async function validateBackupArchive(
       return {
         ok: false,
         classification: "damaged",
+        integrityStatus: "damaged",
+        coverageStatus: "missing_entities",
+        readinessStatus: "not_production_ready",
+        statusLabel: "Archive Damaged — Oversized Archive",
         errors: [
           `Archive exceeds maximum allowable size (${ARCHIVE_LIMITS.maxArchiveBytes} bytes).`,
         ],
         warnings: [],
         restoreAvailable: false,
+        dryRunAvailable: false,
         entityCounts: {},
         financialReconciliation: { verified: false, discrepancies: ["Archive too large"] },
         attachmentIntegrity: { expected: 0, found: 0, missing: [], corrupted: [] },
@@ -119,12 +127,17 @@ export async function validateBackupArchive(
       return {
         ok: false,
         classification: "damaged",
+        integrityStatus: "damaged",
+        coverageStatus: "missing_entities",
+        readinessStatus: "not_production_ready",
+        statusLabel: "Archive Damaged — Fatal Corruption",
         errors: [
           decompressionError ??
             "Archive is not a readable or valid ZIP file (damaged, truncated, or corrupt).",
         ],
         warnings: [],
         restoreAvailable: false,
+        dryRunAvailable: false,
         entityCounts: {},
         financialReconciliation: { verified: false, discrepancies: ["Corrupted ZIP"] },
         attachmentIntegrity: { expected: 0, found: 0, missing: [], corrupted: [] },
@@ -142,9 +155,14 @@ export async function validateBackupArchive(
     return {
       ok: false,
       classification: "damaged",
+      integrityStatus: "damaged",
+      coverageStatus: "missing_entities",
+      readinessStatus: "not_production_ready",
+      statusLabel: "Archive Damaged — Missing Manifest",
       errors,
       warnings,
       restoreAvailable: false,
+      dryRunAvailable: false,
       entityCounts,
       financialReconciliation: { verified: false, discrepancies: ["Missing manifest"] },
       attachmentIntegrity: { expected: 0, found: 0, missing: [], corrupted: [] },
@@ -159,9 +177,14 @@ export async function validateBackupArchive(
     return {
       ok: false,
       classification: "damaged",
+      integrityStatus: "damaged",
+      coverageStatus: "missing_entities",
+      readinessStatus: "not_production_ready",
+      statusLabel: "Archive Damaged — Unreadable Manifest JSON",
       errors,
       warnings,
       restoreAvailable: false,
+      dryRunAvailable: false,
       entityCounts,
       financialReconciliation: { verified: false, discrepancies: ["Unreadable manifest"] },
       attachmentIntegrity: { expected: 0, found: 0, missing: [], corrupted: [] },
@@ -465,9 +488,91 @@ export async function validateBackupArchive(
   }
 
   const ok = errors.length === 0;
+
+  const isSynthetic = Boolean(
+    manifest.synthetic ||
+    manifest.isSynthetic ||
+    manifest.warnings?.some((w) => w.toLowerCase().includes("synthetic")),
+  );
+
+  const hasFormatError = errors.some(
+    (e) =>
+      e.includes("Manifest declares app") ||
+      e.includes("format version") ||
+      e.includes("not supported"),
+  );
+
+  const hasFileMismatch = errors.some(
+    (e) =>
+      e.includes("checksum mismatch") ||
+      e.includes("size mismatch") ||
+      e.includes("Missing file") ||
+      e.includes("unlisted file") ||
+      e.includes("Duplicate archive entry") ||
+      e.includes("traversal") ||
+      e.includes("Corrupt JSON"),
+  );
+
+  let integrityStatus: ArchiveIntegrityStatus = "verified";
+  if (!ok) {
+    if (hasFormatError) {
+      integrityStatus = "unsupported_format";
+    } else if (hasFileMismatch) {
+      integrityStatus = "file_mismatch";
+    } else {
+      integrityStatus = "damaged";
+    }
+  }
+
+  let coverageStatus: CrmDataCoverageStatus;
+  if (isSynthetic) {
+    coverageStatus = "synthetic_test_data";
+  } else if (
+    manifest.type === "employee" ||
+    manifest.type === "custom" ||
+    (manifest.omittedEntities && manifest.omittedEntities.length > 0) ||
+    Object.keys(entityCounts).length < 25
+  ) {
+    coverageStatus = "partial_coverage";
+  } else if (errors.some((e) => e.includes("Missing file listed in manifest"))) {
+    coverageStatus = "missing_entities";
+  } else {
+    coverageStatus = "complete_coverage";
+  }
+
+  let readinessStatus: RestoreReadinessStatus;
+  if (integrityStatus !== "verified") {
+    readinessStatus = "not_production_ready";
+  } else if (isSynthetic) {
+    readinessStatus = "preview_available";
+  } else if (coverageStatus === "partial_coverage") {
+    readinessStatus = "partially_verified";
+  } else {
+    readinessStatus = "not_production_ready";
+  }
+
+  let statusLabel: string;
+  if (integrityStatus === "verified") {
+    if (isSynthetic) {
+      statusLabel = "Integrity Verified — Synthetic Backup, Partial CRM Coverage";
+    } else if (coverageStatus === "partial_coverage") {
+      statusLabel = "Integrity Verified — Partial CRM Coverage (Not Production-Ready)";
+    } else {
+      statusLabel = "Integrity Verified — Full CRM Coverage";
+    }
+  } else if (integrityStatus === "file_mismatch") {
+    statusLabel = "File Mismatch — Checksum or Entry Discrepancy";
+  } else if (integrityStatus === "unsupported_format") {
+    statusLabel = "Unsupported Format — Incompatible App or Version";
+  } else {
+    statusLabel = "Archive Damaged — Fatal Integrity Errors";
+  }
+
   let classification: BackupClassification = "complete";
   if (!ok) {
     classification = "damaged";
+  } else if (isSynthetic) {
+    classification = "synthetic";
   } else if (manifest.type === "employee") {
     classification = "employee";
   } else if (manifest.type === "custom") {
@@ -476,13 +581,23 @@ export async function validateBackupArchive(
     classification = "incomplete-full";
   }
 
+  // Restore execution is permanently disabled in this development pilot.
+  // Synthetic and partial backups can NEVER be restored as complete production recoveries.
+  const restoreAvailable = false;
+  const dryRunAvailable = ok && integrityStatus === "verified";
+
   return {
     ok,
     classification,
+    integrityStatus,
+    coverageStatus,
+    readinessStatus,
+    statusLabel,
     errors,
     warnings,
     manifest,
-    restoreAvailable: ok && classification === "complete",
+    restoreAvailable,
+    dryRunAvailable,
     entityCounts,
     financialReconciliation: {
       verified: verifiedFinancials && ok,

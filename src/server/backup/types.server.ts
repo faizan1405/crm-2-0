@@ -8,7 +8,16 @@ export const BUSINESS_TIMEZONE = "Asia/Kolkata";
 export type BackupScopeType = "full" | "custom" | "employee" | "mariadb-snapshot";
 
 export type BackupClassification =
-  "complete" | "selective" | "employee" | "incomplete-full" | "damaged";
+  "complete" | "selective" | "employee" | "incomplete-full" | "damaged" | "synthetic";
+
+export type ArchiveIntegrityStatus =
+  "verified" | "damaged" | "unsupported_format" | "file_mismatch";
+
+export type CrmDataCoverageStatus =
+  "synthetic_test_data" | "partial_coverage" | "missing_entities" | "complete_coverage";
+
+export type RestoreReadinessStatus =
+  "preview_available" | "partially_verified" | "not_production_ready" | "fully_verified";
 
 export interface BackupManifestFile {
   path: string;
@@ -68,15 +77,22 @@ export interface BackupManifest {
   warnings: string[];
   files: BackupManifestFile[];
   checksumSha256?: string;
+  synthetic?: boolean;
+  isSynthetic?: boolean;
 }
 
 export interface ValidationReport {
   ok: boolean;
   classification: BackupClassification;
+  integrityStatus: ArchiveIntegrityStatus;
+  coverageStatus: CrmDataCoverageStatus;
+  readinessStatus: RestoreReadinessStatus;
+  statusLabel: string;
   errors: string[];
   warnings: string[];
   manifest?: BackupManifest;
   restoreAvailable: boolean;
+  dryRunAvailable: boolean;
   entityCounts: Record<string, number>;
   financialReconciliation: {
     verified: boolean;

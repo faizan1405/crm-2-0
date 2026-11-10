@@ -106,8 +106,10 @@ describe("Checkpoint B7B: Server-Side Data Vault Service & Integrity", () => {
       expect(res.zipBytes).toBeInstanceOf(Uint8Array);
       expect(res.zipBytes.byteLength).toBeGreaterThan(1000);
       expect(res.filename).toMatch(/^ScaleFlow_Synthetic_Test_Backup_full_.+\.zip$/);
-      expect(res.manifest.complete).toBe(true);
-      expect(res.manifest.classification).toBe("complete");
+      expect(res.manifest.complete).toBe(false);
+      expect(res.manifest.classification).toBe("synthetic");
+      expect(res.manifest.synthetic).toBe(true);
+      expect(res.manifest.omittedEntities.length).toBeGreaterThan(0);
       expect(res.manifest.counts["leads"]).toBe(3);
       expect(res.manifest.counts["deals"]).toBe(2);
       expect(res.manifest.counts["payments"]).toBe(2);
@@ -158,12 +160,30 @@ describe("Checkpoint B7B: Server-Side Data Vault Service & Integrity", () => {
       const report = await inspectUploadedArchive(zipBytes);
 
       expect(report.ok).toBe(true);
-      expect(report.classification).toBe("complete");
+      expect(report.classification).toBe("synthetic");
+      expect(report.integrityStatus).toBe("verified");
+      expect(report.coverageStatus).toBe("synthetic_test_data");
+      expect(report.readinessStatus).toBe("preview_available");
+      expect(report.statusLabel).toBe(
+        "Integrity Verified — Synthetic Backup, Partial CRM Coverage",
+      );
+      expect(report.restoreAvailable).toBe(false);
+      expect(report.dryRunAvailable).toBe(true);
       expect(report.errors).toHaveLength(0);
       expect(report.financialReconciliation.verified).toBe(true);
       expect(report.attachmentIntegrity.missing).toHaveLength(0);
       expect(report.attachmentIntegrity.corrupted).toHaveLength(0);
       expect(report.attachmentIntegrity.found).toBe(2);
+    });
+
+    it("ensures a valid partial synthetic ZIP can never be classified as a complete production recovery archive", async () => {
+      const { zipBytes } = generateSyntheticBackupArchive({ scope: "full" });
+      const report = await inspectUploadedArchive(zipBytes);
+
+      expect(report.coverageStatus).not.toBe("complete_coverage");
+      expect(report.readinessStatus).not.toBe("fully_verified");
+      expect(report.classification).not.toBe("complete");
+      expect(report.restoreAvailable).toBe(false);
     });
 
     it("rejects corrupted/damaged archive bytes with explicit error report", async () => {
@@ -284,6 +304,56 @@ describe("Checkpoint B7B: Server-Side Data Vault Service & Integrity", () => {
       if (parsed.ok) {
         expect(parsed.bytes).toEqual(raw);
       }
+    });
+  });
+
+  describe("Security, Multi-Tenancy & Authorization Gates", () => {
+    it("ensures Owner Alpha cannot see Owner Beta data and Owner Beta sees 0 rows", async () => {
+      const mockDbA = {
+        select: () => ({
+          from: () => ({
+            where: () => Promise.resolve([{ count: 5 }]),
+            innerJoin: () => ({
+              where: () => Promise.resolve([{ count: 0 }]),
+            }),
+          }),
+        }),
+      } as unknown as CrmDatabase;
+
+      const coverageA = await getVaultCoverage(mockDbA, "usr_owner_alpha");
+      expect(coverageA.liveDatabaseCounts.leads).toBe(5);
+
+      const mockDbB = {
+        select: () => ({
+          from: () => ({
+            where: () => Promise.resolve([{ count: 0 }]),
+            innerJoin: () => ({
+              where: () => Promise.resolve([{ count: 0 }]),
+            }),
+          }),
+        }),
+      } as unknown as CrmDatabase;
+
+      const coverageB = await getVaultCoverage(mockDbB, "usr_owner_beta");
+      expect(coverageB.liveDatabaseCounts.leads).toBe(0);
+    });
+
+    it("ensures dry-run isolation: Owner B cannot resolve or mutate Owner A record IDs", async () => {
+      const mockDb = {
+        select: () => ({
+          from: () => ({
+            where: () => Promise.resolve([]), // Owner B has no existing IDs
+          }),
+        }),
+      } as unknown as CrmDatabase;
+
+      const { zipBytes } = generateSyntheticBackupArchive({ scope: "full" });
+      const dryRun = await runUploadedArchiveDryRun(mockDb, "usr_owner_beta", zipBytes);
+
+      expect(dryRun.ok).toBe(true);
+      expect(dryRun.mutationsPerformed).toBe(0);
+      expect(dryRun.databaseWritten).toBe(false);
+      expect(dryRun.totalRecordsToSkip).toBe(0);
     });
   });
 });

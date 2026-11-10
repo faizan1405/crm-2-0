@@ -30,19 +30,10 @@ import { PilotShell } from "./PilotShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   useVaultCoverageQuery,
   downloadSyntheticBackup,
   inspectBackupArchive,
   runRestoreDryRun,
-  verifyRestoreExecutionDisabled,
   type ValidationReport,
   type DryRunReport,
   type VaultInventoryItem,
@@ -97,11 +88,6 @@ export function PilotDataVaultPage({
   const [isDryRunning, setIsDryRunning] = useState(false);
   const [dryRunReport, setDryRunReport] = useState<DryRunReport | null>(null);
 
-  // Restore enforcement modal state
-  const [restoreModalOpen, setRestoreModalOpen] = useState(false);
-  const [restoreForbiddenMessage, setRestoreForbiddenMessage] = useState<string | null>(null);
-  const [isTestingForbidden, setIsTestingForbidden] = useState(false);
-
   const coverage = coverageData?.coverage;
 
   const handleDownloadSynthetic = async () => {
@@ -131,9 +117,9 @@ export function PilotDataVaultPage({
       const res = await inspectBackupArchive(file);
       setInspectionResult(res.validation);
       if (res.validation.ok) {
-        toast.success(`Archive validated: ${res.validation.classification.toUpperCase()}`);
+        toast.success(res.validation.statusLabel);
       } else {
-        toast.warning(`Archive inspection completed with ${res.validation.errors.length} issue(s)`);
+        toast.warning(res.validation.statusLabel);
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to inspect archive");
@@ -160,19 +146,6 @@ export function PilotDataVaultPage({
       toast.error(err instanceof Error ? err.message : "Failed to run dry-run simulation");
     } finally {
       setIsDryRunning(false);
-    }
-  };
-
-  const handleTestRestoreForbidden = async () => {
-    try {
-      setIsTestingForbidden(true);
-      const res = await verifyRestoreExecutionDisabled();
-      setRestoreForbiddenMessage(res.error.message);
-      setRestoreModalOpen(true);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Restore check failed");
-    } finally {
-      setIsTestingForbidden(false);
     }
   };
 
@@ -362,18 +335,35 @@ export function PilotDataVaultPage({
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-border/60 bg-muted/40 font-medium text-muted-foreground">
-                    <th className="py-2.5 px-3 w-10">#</th>
+                    <th className="py-2.5 px-3 w-8">#</th>
                     <th className="py-2.5 px-3">Entity Name</th>
-                    <th className="py-2.5 px-3">Target Storage / Table</th>
-                    <th className="py-2.5 px-3">Migration Status</th>
+                    <th className="py-2.5 px-3">Target Storage</th>
+                    <th className="py-2.5 px-2 text-center" title="Has SQL Database Schema">
+                      Schema
+                    </th>
+                    <th className="py-2.5 px-2 text-center" title="Exportable by Backup Engine">
+                      Export
+                    </th>
+                    <th className="py-2.5 px-2 text-center" title="Includes Binary Files">
+                      Binaries
+                    </th>
+                    <th className="py-2.5 px-2 text-center" title="Has Database Restore Mapping">
+                      Restore Map
+                    </th>
+                    <th
+                      className="py-2.5 px-2 text-center"
+                      title="Verified by Live MariaDB Restore"
+                    >
+                      Live Restore
+                    </th>
                     <th className="py-2.5 px-3 text-right">Live Rows (Owner)</th>
-                    <th className="py-2.5 px-3">Description</th>
+                    <th className="py-2.5 px-3">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40">
                   {isCoverageLoading ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                      <td colSpan={10} className="py-8 text-center text-muted-foreground">
                         Loading database inventory...
                       </td>
                     </tr>
@@ -395,22 +385,49 @@ export function PilotDataVaultPage({
                             </span>
                           )}
                         </td>
-                        <td className="py-2.5 px-3">
-                          {item.status === "verified" ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:text-emerald-300">
-                              <CheckCircle2 className="size-3" />
-                              Verified in MariaDB
-                            </span>
-                          ) : item.status === "supported" ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-800 dark:text-sky-300">
-                              <Check className="size-3" />
-                              Supported in Schema
+                        <td className="py-2.5 px-2 text-center">
+                          {item.hasSchema ? (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                              ✓
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-300">
-                              <AlertTriangle className="size-3" />
-                              Unsupported / Deferred
+                            <span className="text-muted-foreground/40">—</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-2 text-center">
+                          {item.includedInExporter ? (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                              ✓
                             </span>
+                          ) : (
+                            <span className="text-muted-foreground/40">—</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-2 text-center">
+                          {item.hasBinaryCoverage ? (
+                            <span className="rounded bg-sky-500/20 text-sky-800 dark:text-sky-300 px-1.5 py-0.5 font-bold text-[10px]">
+                              BIN
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground/40">—</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-2 text-center">
+                          {item.hasRestoreMapping ? (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                              ✓
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground/40">—</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-2 text-center">
+                          {item.verifiedByLiveRestore ? (
+                            <span className="rounded bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.5 font-bold text-[10px]">
+                              YES
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground/40">—</span>
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono font-medium">
@@ -420,8 +437,23 @@ export function PilotDataVaultPage({
                             <span className="text-muted-foreground/50">—</span>
                           )}
                         </td>
-                        <td className="py-2.5 px-3 text-muted-foreground max-w-xs truncate">
-                          {item.description}
+                        <td className="py-2.5 px-3">
+                          {item.status === "verified" ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:text-emerald-300">
+                              <CheckCircle2 className="size-3" />
+                              Verified
+                            </span>
+                          ) : item.status === "supported" ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-800 dark:text-sky-300">
+                              <Check className="size-3" />
+                              Supported
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-300">
+                              <AlertTriangle className="size-3" />
+                              Unsupported
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))
@@ -465,13 +497,13 @@ export function PilotDataVaultPage({
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-foreground">
-                        Full Pilot (9 Tables)
+                        All Supported Synthetic Test Data
                       </span>
                       {syntheticScope === "full" && <Check className="size-4 text-primary" />}
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-1">
-                      Leads, deals, payments, proofs, projects, tasks, quotations, sales goals, and
-                      owner settings.
+                      All 9 verified MariaDB entities: leads, deals, payments, proofs, projects,
+                      tasks, quotations, goals, settings.
                     </p>
                   </button>
 
@@ -487,7 +519,7 @@ export function PilotDataVaultPage({
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-foreground">
-                        Sales & Finance Only
+                        Sales Synthetic Test Data
                       </span>
                       {syntheticScope === "sales" && <Check className="size-4 text-primary" />}
                     </div>
@@ -509,7 +541,7 @@ export function PilotDataVaultPage({
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-foreground">
-                        Projects & Quotations
+                        Projects Synthetic Test Data
                       </span>
                       {syntheticScope === "projects" && <Check className="size-4 text-primary" />}
                     </div>
@@ -520,66 +552,115 @@ export function PilotDataVaultPage({
                 </div>
               </div>
 
-              {/* Scope Contents Preview */}
-              <div className="rounded-md border border-border/50 bg-muted/30 p-3 text-xs space-y-1.5">
-                <div className="font-medium text-foreground flex items-center gap-1.5">
-                  <Layers className="size-3.5 text-muted-foreground" />
-                  <span>Archive Structure ({syntheticScope.toUpperCase()} scope):</span>
+              {/* Scope Contents Preview: Included vs Excluded */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3.5 text-xs space-y-1.5">
+                  <div className="font-semibold text-emerald-950 dark:text-emerald-200 flex items-center gap-1.5">
+                    <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>Included Fixtures ({syntheticScope.toUpperCase()} Scope):</span>
+                  </div>
+                  <ul className="list-disc list-inside text-muted-foreground space-y-1 pl-1 text-[11px]">
+                    <li>
+                      <span className="font-mono text-foreground font-medium">manifest.json</span> —
+                      SHA-256 hashes, byte sizes, financial ledger
+                    </li>
+                    {syntheticScope !== "projects" && (
+                      <>
+                        <li>
+                          <span className="font-mono text-foreground font-medium">
+                            data/leads.json
+                          </span>{" "}
+                          — 3 synthetic leads
+                        </li>
+                        <li>
+                          <span className="font-mono text-foreground font-medium">
+                            data/deals.json
+                          </span>{" "}
+                          — 2 commercial deals (₹15L won, ₹8.5L pipeline)
+                        </li>
+                        <li>
+                          <span className="font-mono text-foreground font-medium">
+                            data/payments.json
+                          </span>{" "}
+                          — 2 cleared payments (₹5L NEFT, ₹5L RTGS)
+                        </li>
+                        <li>
+                          <span className="font-mono text-foreground font-medium">
+                            files/payment-proofs/*
+                          </span>{" "}
+                          — 1 receipt PDF & 1 advice PNG
+                        </li>
+                      </>
+                    )}
+                    {syntheticScope !== "sales" && (
+                      <>
+                        <li>
+                          <span className="font-mono text-foreground font-medium">
+                            data/projects.json
+                          </span>{" "}
+                          — 1 EPC project with 2 checklist tasks
+                        </li>
+                        <li>
+                          <span className="font-mono text-foreground font-medium">
+                            data/quotations.json
+                          </span>{" "}
+                          — 1 accepted quote (₹17.70L total)
+                        </li>
+                      </>
+                    )}
+                    {syntheticScope === "full" && (
+                      <>
+                        <li>
+                          <span className="font-mono text-foreground font-medium">
+                            data/sales-goals.json
+                          </span>{" "}
+                          — 1 cash collection goal (₹50L quota)
+                        </li>
+                        <li>
+                          <span className="font-mono text-foreground font-medium">
+                            data/settings.json
+                          </span>{" "}
+                          — Business profile & timezone presets
+                        </li>
+                      </>
+                    )}
+                    <li>
+                      <span className="font-mono text-foreground font-medium">
+                        backup-summary.html
+                      </span>{" "}
+                      — Offline HTML summary report
+                    </li>
+                  </ul>
                 </div>
-                <ul className="list-disc list-inside text-muted-foreground space-y-0.5 pl-1">
-                  <li>
-                    <span className="font-mono text-foreground">manifest.json</span> — Canonical
-                    manifest with SHA-256 checksums and financial summary
-                  </li>
-                  {syntheticScope !== "projects" && (
-                    <>
-                      <li>
-                        <span className="font-mono text-foreground">data/leads.json</span> — 3
-                        synthetic leads (Sharma Solar, Gujarat Renewables, Malhotra Cold Storage)
-                      </li>
-                      <li>
-                        <span className="font-mono text-foreground">data/deals.json</span> — 2
-                        commercial deals (₹15,00,000 won, ₹8,50,000 negotiation)
-                      </li>
-                      <li>
-                        <span className="font-mono text-foreground">data/payments.json</span> — 2
-                        cleared payments (₹5,00,000 NEFT, ₹5,00,000 RTGS)
-                      </li>
-                      <li>
-                        <span className="font-mono text-foreground">files/payment-proofs/*</span> —
-                        Synthetic NEFT receipt PDF and RTGS advice PNG
-                      </li>
-                    </>
-                  )}
-                  {syntheticScope !== "sales" && (
-                    <>
-                      <li>
-                        <span className="font-mono text-foreground">data/projects.json</span> — 1
-                        active EPC project with 2 operational tasks
-                      </li>
-                      <li>
-                        <span className="font-mono text-foreground">data/quotations.json</span> — 1
-                        accepted quotation with line items (₹17,70,000)
-                      </li>
-                    </>
-                  )}
-                  {syntheticScope === "full" && (
-                    <>
-                      <li>
-                        <span className="font-mono text-foreground">data/sales-goals.json</span> — 1
-                        active sales target (₹50,00,000.00 cash collected)
-                      </li>
-                      <li>
-                        <span className="font-mono text-foreground">data/settings.json</span> —
-                        Authoritative business profile & INR presets
-                      </li>
-                    </>
-                  )}
-                  <li>
-                    <span className="font-mono text-foreground">backup-summary.html</span> — Offline
-                    human-readable HTML summary document
-                  </li>
-                </ul>
+
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3.5 text-xs space-y-1.5">
+                  <div className="font-semibold text-amber-950 dark:text-amber-200 flex items-center gap-1.5">
+                    <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" />
+                    <span>Excluded Datasets (Omitted from Package):</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    The following <b>21 entities</b> are omitted from this synthetic test archive:
+                  </p>
+                  <ul className="list-disc list-inside text-muted-foreground space-y-0.5 pl-1 text-[11px]">
+                    <li>
+                      <b>Sales & Comms:</b> Activities, Follow-ups, Call Logs, WhatsApp Logs
+                    </li>
+                    <li>
+                      <b>Finance & Quotes:</b> Finance Events, Deal Milestones, Quote Templates,
+                      Quote Revisions
+                    </li>
+                    <li>
+                      <b>Projects & Support:</b> Milestones, Deliverables, Support Tickets
+                    </li>
+                    <li>
+                      <b>Settings & Meta:</b> Audit Events, Goal Revisions, Custom Fields, Tags
+                    </li>
+                    <li>
+                      <b>Browser Only (Deferred):</b> Quote Shares, Demos, WA Templates, Automation
+                      Rules, Smart Inbox
+                    </li>
+                  </ul>
+                </div>
               </div>
 
               {/* Action */}
@@ -678,26 +759,49 @@ export function PilotDataVaultPage({
                       {inspectionResult.ok ? (
                         <>
                           <CheckCircle2 className="size-5 text-emerald-600 dark:text-emerald-400" />
-                          <span>
-                            Archive Validation Passed:{" "}
-                            {inspectionResult.classification.toUpperCase()}
-                          </span>
+                          <span>{inspectionResult.statusLabel}</span>
                         </>
                       ) : (
                         <>
                           <XCircle className="size-5 text-red-600 dark:text-red-400" />
-                          <span>
-                            Archive Validation Failed (
-                            {inspectionResult.classification.toUpperCase()})
-                          </span>
+                          <span>{inspectionResult.statusLabel}</span>
                         </>
                       )}
                     </div>
                     <p className="mt-1 leading-relaxed">
                       {inspectionResult.ok
-                        ? "The archive structure is valid. Manifest matches entry checksums, financial ledger is balanced, and all attachment binaries are verified."
+                        ? "The archive structure is valid. Manifest matches entry checksums, financial ledger is balanced, and all attachment binaries are verified. Note: This archive contains partial synthetic data and cannot be used for production recovery."
                         : `The archive has ${inspectionResult.errors.length} fatal error(s) preventing restoration.`}
                     </p>
+
+                    {/* Granular Classification Sub-Badges */}
+                    <div className="mt-3 flex flex-wrap items-center gap-2 pt-2 border-t border-border/40 text-[11px]">
+                      <span className="font-semibold text-muted-foreground">Classifications:</span>
+                      <span
+                        className={cn(
+                          "rounded px-2 py-0.5 font-bold uppercase tracking-wider text-[10px]",
+                          inspectionResult.integrityStatus === "verified"
+                            ? "bg-emerald-500/20 text-emerald-800 dark:text-emerald-300"
+                            : "bg-red-500/20 text-red-800 dark:text-red-300",
+                        )}
+                      >
+                        Integrity: {inspectionResult.integrityStatus.toUpperCase()}
+                      </span>
+                      <span className="rounded bg-sky-500/20 text-sky-800 dark:text-sky-300 px-2 py-0.5 font-bold uppercase tracking-wider text-[10px]">
+                        Coverage: {inspectionResult.coverageStatus.replace(/_/g, " ").toUpperCase()}
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded px-2 py-0.5 font-bold uppercase tracking-wider text-[10px]",
+                          inspectionResult.readinessStatus === "fully_verified"
+                            ? "bg-emerald-500/20 text-emerald-800 dark:text-emerald-300"
+                            : "bg-amber-500/20 text-amber-800 dark:text-amber-300",
+                        )}
+                      >
+                        Readiness:{" "}
+                        {inspectionResult.readinessStatus.replace(/_/g, " ").toUpperCase()}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Errors if any */}
@@ -1014,22 +1118,22 @@ export function PilotDataVaultPage({
                     </div>
                   </div>
 
-                  {/* Safety Enforcement & Disabled Restore Button */}
-                  <div className="pt-2 flex flex-wrap items-center justify-between gap-3 border-t border-border/50">
-                    <div className="text-xs text-muted-foreground max-w-md">
-                      <b>Safety Enforcement:</b> UI restore execution is permanently disabled. You
-                      can test this constraint by clicking the button to the right.
+                  {/* Safety Enforcement Notice */}
+                  <div className="pt-2 rounded-lg border border-sky-500/30 bg-sky-500/10 p-4 text-xs text-sky-950 dark:text-sky-200">
+                    <div className="flex items-start gap-3">
+                      <Lock className="size-5 shrink-0 text-sky-600 dark:text-sky-400 mt-0.5" />
+                      <div className="space-y-1">
+                        <div className="font-semibold text-sm">
+                          Restore execution is disabled in this development Pilot.
+                        </div>
+                        <p className="leading-relaxed text-muted-foreground">
+                          This interface is for non-destructive inspection and dry-run preview
+                          simulation only. Database restore execution is strictly CLI-only with
+                          automated pre-restore snapshots and transactional rollback safeguards to
+                          prevent accidental data loss.
+                        </p>
+                      </div>
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleTestRestoreForbidden}
-                      disabled={isTestingForbidden}
-                      className="rounded-full gap-1.5 text-xs"
-                    >
-                      <Lock className="size-3.5" />
-                      Test Restore Prevention (Verify 403)
-                    </Button>
                   </div>
                 </div>
               )}
@@ -1096,39 +1200,6 @@ export function PilotDataVaultPage({
           </div>
         </div>
       )}
-
-      {/* Safety Enforcement Dialog (Modal) */}
-      <Dialog open={restoreModalOpen} onOpenChange={setRestoreModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
-              <ShieldAlert className="size-5" />
-              <span>Direct Restore Execution Blocked (HTTP 403)</span>
-            </DialogTitle>
-            <DialogDescription className="text-xs pt-1">
-              Safety rule enforced by authoritative server backend.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="rounded-md border border-red-500/30 bg-red-500/5 p-3.5 text-xs text-red-950 dark:text-red-200">
-            <p className="font-mono text-[11px] leading-relaxed">
-              {restoreForbiddenMessage ??
-                "Direct database restore execution is disabled in the UI. Restore execution is CLI-only with manual safeguards and isolated transaction rollbacks to prevent accidental production data loss."}
-            </p>
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setRestoreModalOpen(false)}
-              className="rounded-full text-xs"
-            >
-              Acknowledge & Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </PilotShell>
   );
 }

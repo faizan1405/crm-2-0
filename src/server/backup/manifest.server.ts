@@ -215,6 +215,7 @@ export function buildManifest(params: {
   schemaVersion?: number;
   formatVersion?: number;
   createdAt?: string;
+  synthetic?: boolean;
   includedEntities: string[];
   omittedEntities?: string[];
   counts: Record<string, number>;
@@ -235,10 +236,16 @@ export function buildManifest(params: {
   const includedAttCount = attMeta.filter((a) => a.status === "verified" && a.path).length;
 
   const omitted = params.omittedEntities ?? [];
-  const isComplete = params.type === "full" && omitted.length === 0 && missingAtts.length === 0;
+  const isSynthetic = Boolean(
+    params.synthetic || params.warnings?.some((w) => w.toLowerCase().includes("synthetic")),
+  );
+  const isComplete =
+    !isSynthetic && params.type === "full" && omitted.length === 0 && missingAtts.length === 0;
 
   let classification: BackupClassification = "complete";
-  if (params.type === "employee") {
+  if (isSynthetic) {
+    classification = "synthetic";
+  } else if (params.type === "employee") {
     classification = "employee";
   } else if (params.type === "custom") {
     classification = "selective";
@@ -255,6 +262,8 @@ export function buildManifest(params: {
     type: params.type,
     complete: isComplete,
     classification,
+    synthetic: isSynthetic,
+    isSynthetic,
     ...(params.ownerUserId ? { ownerUserId: params.ownerUserId } : {}),
     ...(params.ownerEmail ? { ownerEmail: params.ownerEmail } : {}),
     includedEntities: params.includedEntities,
