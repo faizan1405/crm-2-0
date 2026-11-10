@@ -1,5 +1,6 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Users,
@@ -17,6 +18,8 @@ import {
   Trash2,
   CalendarClock,
   FileText,
+  BarChart3,
+  Target,
 } from "lucide-react";
 import { logoutOwner, useResolvedAuthState } from "@/lib/auth/authClient";
 import { setLeadPilotSessionOptIn } from "@/lib/api/pilotGate";
@@ -29,17 +32,21 @@ import { clearPilotCallPending } from "./pilotCallLauncher";
 import { clearPilotWhatsAppPending } from "./pilotWhatsAppLauncher";
 
 const PILOT_LINKS = [
+  { to: "/" as const, label: "Dashboard (Pilot)", icon: LayoutDashboard, pilot: true },
   { to: "/leads" as const, label: "Leads (Pilot)", icon: Users, pilot: true },
   { to: "/deals" as const, label: "Finance (Pilot)", icon: Wallet, pilot: true },
   { to: "/sales-studio" as const, label: "Sales Studio (Pilot)", icon: FileText, pilot: true },
   { to: "/follow-ups" as const, label: "Follow-ups (Pilot)", icon: CalendarClock, pilot: true },
   { to: "/projects" as const, label: "Projects (Pilot)", icon: FolderKanban, pilot: true },
+  { to: "/analytics" as const, label: "Analytics (Pilot)", icon: BarChart3, pilot: true },
+  { to: "/my-performance" as const, label: "My Performance (Pilot)", icon: Target, pilot: true },
   { to: "/leads/bin" as const, label: "Waste & deleted", icon: Trash2, pilot: true },
 ];
 
 const LOCAL_LINKS = [
   { to: "/" as const, label: "Dashboard", icon: LayoutDashboard },
-  { to: "/projects" as const, label: "Project Desk", icon: FolderKanban },
+  { to: "/analytics" as const, label: "Analytics", icon: BarChart3 },
+  { to: "/my-performance" as const, label: "My Performance", icon: Target },
   { to: "/data-vault" as const, label: "Data Vault", icon: Archive },
 ];
 
@@ -57,6 +64,7 @@ export function PilotShell({
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { status: authStatus, user: authUser } = useResolvedAuthState();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [mounted, setMounted] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -81,6 +89,7 @@ export function PilotShell({
     clearPilotCallPending();
     clearPilotWhatsAppPending();
     setLeadPilotSessionOptIn(false);
+    queryClient.clear();
     void navigate({ to: "/leads", search: {} });
   };
 
@@ -89,6 +98,7 @@ export function PilotShell({
     setSigningOut(true);
     clearPilotCallPending();
     clearPilotWhatsAppPending();
+    queryClient.clear();
     void logoutOwner({ allSessions: false });
   };
 
@@ -103,21 +113,29 @@ export function PilotShell({
     <nav aria-label="Lead Pilot navigation" className="sb-nav">
       <div className="sb-group">
         <div className="sb-group-label">
-          <span>B2B4 Server Pilot</span>
+          <span>Sales OS Server Pilot</span>
         </div>
         <div>
           {PILOT_LINKS.map((item) => {
             const active =
-              item.to === "/leads/bin"
-                ? path.startsWith("/leads/bin")
-                : item.to === "/follow-ups"
-                  ? path === "/follow-ups" || path.startsWith("/follow-ups/")
-                  : item.to === "/deals"
-                    ? path === "/deals" || path.startsWith("/deals/")
-                    : item.to === "/sales-studio"
-                      ? path === "/sales-studio" || path.startsWith("/sales-studio/")
-                      : path === "/leads" ||
-                        (path.startsWith("/leads/") && !path.startsWith("/leads/bin"));
+              item.to === "/"
+                ? path === "/"
+                : item.to === "/analytics"
+                  ? path === "/analytics" || path.startsWith("/analytics/")
+                  : item.to === "/my-performance"
+                    ? path === "/my-performance" || path.startsWith("/my-performance/")
+                    : item.to === "/leads/bin"
+                      ? path.startsWith("/leads/bin")
+                      : item.to === "/follow-ups"
+                        ? path === "/follow-ups" || path.startsWith("/follow-ups/")
+                        : item.to === "/deals"
+                          ? path === "/deals" || path.startsWith("/deals/")
+                          : item.to === "/sales-studio"
+                            ? path === "/sales-studio" || path.startsWith("/sales-studio/")
+                            : item.to === "/projects"
+                              ? path === "/projects" || path.startsWith("/projects/")
+                              : path === "/leads" ||
+                                (path.startsWith("/leads/") && !path.startsWith("/leads/bin"));
             return (
               <Link
                 key={item.to}
@@ -129,7 +147,7 @@ export function PilotShell({
                 className="sb-link"
               >
                 <item.icon className="sb-icon" />
-                <span className="sb-label">{item.label}</span>
+                <span className="sb-label min-w-0 flex-1 truncate">{item.label}</span>
               </Link>
             );
           })}
@@ -141,17 +159,22 @@ export function PilotShell({
         </div>
         <div>
           {LOCAL_LINKS.map((item) => (
-            <Link
+            <button
               key={item.to}
-              to={item.to}
-              onClick={onNav}
+              type="button"
+              onClick={() => {
+                onNav?.();
+                setLeadPilotSessionOptIn(false);
+                queryClient.clear();
+                void navigate({ to: item.to, search: {} });
+              }}
               title={collapsed ? `${item.label} (Local browser store)` : undefined}
-              className="sb-link"
+              className="sb-link w-full text-left"
             >
               <item.icon className="sb-icon" />
-              <span className="sb-label">{item.label}</span>
-              {!collapsed && <span className="sb-badge text-[10px]">Local</span>}
-            </Link>
+              <span className="sb-label min-w-0 flex-1 truncate">{item.label}</span>
+              {!collapsed && <span className="sb-badge shrink-0 text-[10px]">Local</span>}
+            </button>
           ))}
         </div>
       </div>
@@ -263,14 +286,26 @@ export function PilotShell({
               </span>
             </Link>
             <div className="crumb hidden min-w-0 items-center gap-1.5 text-[13px] sm:flex">
-              <span className="text-muted-foreground">B2B4 Pilot</span>
+              <span className="text-muted-foreground">Sales OS Pilot</span>
               <ChevronRight className="size-3.5 text-muted-foreground" />
               <span className="truncate font-medium">
-                {path.startsWith("/follow-ups")
-                  ? "Follow-ups"
-                  : path.startsWith("/leads/bin")
-                    ? "Waste & Recently Deleted"
-                    : "Leads"}
+                {path === "/"
+                  ? "Dashboard"
+                  : path.startsWith("/analytics")
+                    ? "Analytics"
+                    : path.startsWith("/my-performance")
+                      ? "My Performance"
+                      : path.startsWith("/deals")
+                        ? "Finance"
+                        : path.startsWith("/sales-studio")
+                          ? "Sales Studio"
+                          : path.startsWith("/projects")
+                            ? "Projects"
+                            : path.startsWith("/follow-ups")
+                              ? "Follow-ups"
+                              : path.startsWith("/leads/bin")
+                                ? "Waste & Recently Deleted"
+                                : "Leads"}
               </span>
             </div>
             <button
@@ -321,10 +356,19 @@ export function PilotShell({
         className="os-mobile-bar fixed inset-x-3 bottom-3 z-40 flex items-center justify-around rounded-[22px] px-1.5 py-1.5 shadow-[var(--shadow-pop)] md:hidden"
       >
         <Link
+          to="/"
+          search={{ pilot: 1 }}
+          aria-current={path === "/" ? "page" : undefined}
+          className="flex min-h-12 min-w-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl text-[10px] font-medium"
+        >
+          <LayoutDashboard className="size-5" />
+          Home
+        </Link>
+        <Link
           to="/leads"
           search={{ pilot: 1 }}
           aria-current={
-            !path.startsWith("/leads/bin") && !path.startsWith("/follow-ups") ? "page" : undefined
+            path.startsWith("/leads") && !path.startsWith("/leads/bin") ? "page" : undefined
           }
           className="flex min-h-12 min-w-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl text-[10px] font-medium"
         >
@@ -332,30 +376,30 @@ export function PilotShell({
           Leads
         </Link>
         <Link
-          to="/follow-ups"
+          to="/deals"
           search={{ pilot: 1 }}
-          aria-current={path.startsWith("/follow-ups") ? "page" : undefined}
+          aria-current={path.startsWith("/deals") ? "page" : undefined}
           className="flex min-h-12 min-w-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl text-[10px] font-medium"
         >
-          <CalendarClock className="size-5" />
-          Follow-ups
+          <Wallet className="size-5" />
+          Finance
         </Link>
         <Link
-          to="/leads/bin"
+          to="/analytics"
           search={{ pilot: 1 }}
-          aria-current={path.startsWith("/leads/bin") ? "page" : undefined}
+          aria-current={path.startsWith("/analytics") ? "page" : undefined}
           className="flex min-h-12 min-w-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl text-[10px] font-medium"
         >
-          <Trash2 className="size-5" />
-          Bin
+          <BarChart3 className="size-5" />
+          Analytics
         </Link>
         <button
           type="button"
-          onClick={exitPilot}
+          onClick={() => setDrawer(true)}
           className="flex min-h-12 min-w-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl text-[10px] font-medium"
         >
-          <Archive className="size-5" />
-          Exit Pilot
+          <Menu className="size-5" />
+          More
         </button>
       </nav>
 

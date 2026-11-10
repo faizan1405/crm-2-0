@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, createIdempotencyKey } from "./client";
 import { activityKeys } from "./activitiesApi";
+import { analyticsKeys } from "./analyticsApi";
 import { leadKeys } from "./leadsApi";
 import {
   leadWaMessagesListResponseSchema,
@@ -173,6 +174,7 @@ export function useCreateWhatsAppMessageMutation() {
       void queryClient.invalidateQueries({ queryKey: waKeys.byLead(res.lead.id) });
       void queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
       void queryClient.invalidateQueries({ queryKey: activityKeys.byLead(res.lead.id) });
+      void queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
     },
   });
 }

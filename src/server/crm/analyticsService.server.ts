@@ -29,7 +29,10 @@ import {
   defaultGranularity,
   getIstDay,
   getIstUtcRange,
+  isBusyCallOutcome,
+  isCountedWonDealStatus,
   isDayInWindow,
+  isNoAnswerCallOutcome,
   median,
   rate,
   resolveAnalyticsWindow,
@@ -684,8 +687,8 @@ export async function getCommunicationsAnalytics(
     );
 
   const connectedCount = calls.filter((c) => c.connected).length;
-  const noAnswerCount = calls.filter((c) => c.outcome === "not_picked").length;
-  const busyCount = calls.filter((c) => c.outcome === "busy").length;
+  const noAnswerCount = calls.filter((c) => isNoAnswerCallOutcome(c.outcome)).length;
+  const busyCount = calls.filter((c) => isBusyCallOutcome(c.outcome)).length;
 
   const outcomeCounts = new Map<string, number>();
   for (const c of calls) {
@@ -1635,10 +1638,11 @@ export async function getPerformanceAnalytics(
       ),
     );
 
-  // Deals won in window
-  const wonDeals = await db
+  // Deals won in window (exclude cancelled deals consistently with Finance & Trends analytics)
+  const wonDealsRaw = await db
     .select({
       id: crmDeals.id,
+      status: crmDeals.status,
       finalAmount: crmDeals.finalAmount,
       wonIstDate: crmDeals.wonIstDate,
     })
@@ -1646,26 +1650,30 @@ export async function getPerformanceAnalytics(
     .where(
       and(
         eq(crmDeals.ownerUserId, ownerUserId),
+        sql`${crmDeals.status} != 'cancelled'`,
         gte(crmDeals.wonIstDate, window.start),
         lte(crmDeals.wonIstDate, window.end),
       ),
     );
+  const wonDeals = wonDealsRaw.filter((d) => isCountedWonDealStatus(d.status));
 
   const wonDealValuePaise = sumPaise(
     wonDeals.map((d) => decimalStringToPaise(d.finalAmount)),
   );
 
   // Unknown won dates count
-  const unknownWonDeals = await db
-    .select({ id: crmDeals.id })
-    .from(crmDeals)
-    .where(
-      and(
-        eq(crmDeals.ownerUserId, ownerUserId),
-        eq(crmDeals.status, "won"),
-        isNull(crmDeals.wonIstDate),
-      ),
-    );
+  const unknownWonDeals = (
+    await db
+      .select({ id: crmDeals.id, status: crmDeals.status })
+      .from(crmDeals)
+      .where(
+        and(
+          eq(crmDeals.ownerUserId, ownerUserId),
+          sql`${crmDeals.status} != 'cancelled'`,
+          isNull(crmDeals.wonIstDate),
+        ),
+      )
+  ).filter((d) => isCountedWonDealStatus(d.status));
 
   // Unattributed events in window (events performed by someone else or automation)
   const otherActivities = await db

@@ -5,7 +5,10 @@ import {
   defaultGranularity,
   getIstDay,
   getIstUtcRange,
+  isBusyCallOutcome,
+  isCountedWonDealStatus,
   isDayInWindow,
+  isNoAnswerCallOutcome,
   median,
   monthEnd,
   monthStart,
@@ -163,5 +166,24 @@ describe("B5C Analytics Calculations & IST Date Rules", () => {
     expect(isDayInWindow("2026-10-31", win)).toBe(false);
     expect(isDayInWindow("2026-11-11", win)).toBe(false);
     expect(isDayInWindow(null, win)).toBe(false);
+  });
+
+  it("normalizes both Title-Case UI call outcomes and snake_case DB fixtures (B5D)", () => {
+    expect(isNoAnswerCallOutcome("Not picked")).toBe(true);
+    expect(isNoAnswerCallOutcome("not_picked")).toBe(true);
+    expect(isNoAnswerCallOutcome("No answer")).toBe(true);
+    expect(isNoAnswerCallOutcome("no_answer")).toBe(true);
+    expect(isNoAnswerCallOutcome("Connected")).toBe(false);
+
+    expect(isBusyCallOutcome("Busy")).toBe(true);
+    expect(isBusyCallOutcome("busy")).toBe(true);
+    expect(isBusyCallOutcome("Not picked")).toBe(false);
+  });
+
+  it("excludes cancelled deals from Owner Performance won deal counting (B5D)", () => {
+    expect(isCountedWonDealStatus("active")).toBe(true);
+    expect(isCountedWonDealStatus("completed")).toBe(true);
+    expect(isCountedWonDealStatus("on_hold")).toBe(true);
+    expect(isCountedWonDealStatus("cancelled")).toBe(false);
   });
 });

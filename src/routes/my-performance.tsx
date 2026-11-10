@@ -1,7 +1,12 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Target, AlertTriangle, Info, Gauge } from "lucide-react";
+import { Target, AlertTriangle, Info, Gauge, Database } from "lucide-react";
 import { Shell, Empty } from "@/components/crm/Shell";
+import { useResolvedAuthState } from "@/lib/auth/authClient";
+import { setLeadPilotSessionOptIn } from "@/lib/api/pilotGate";
+import { parsePilotSearch, useLeadPilotState } from "@/lib/api/pilotHook";
+import { AppShellSkeleton } from "@/components/crm/ShellPrimitives";
+import { PilotMyPerformancePage } from "@/components/pilot/PilotMyPerformancePage";
 import { ATTRIBUTION_NOTE, GoalProgressCard, Stat, TrendChart, fmtRate } from "@/components/crm/Performance";
 import { useCRM } from "@/lib/crm/store";
 import { useAccess } from "@/lib/crm/session";
@@ -15,14 +20,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-type S = { period?: string | undefined; from?: string | undefined; to?: string | undefined };
+type S = { period?: string | undefined; from?: string | undefined; to?: string | undefined; pilot?: 1 | 0 | undefined };
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
 const OWNER_PERIODS: { id: PeriodKey; label: string }[] = [
   { id: "today", label: "Today" }, { id: "thisWeek", label: "This week" }, { id: "thisMonth", label: "This month" }, { id: "custom", label: "Custom range" },
 ];
 
 export const Route = createFileRoute("/my-performance")({
-  validateSearch: (s: Record<string, unknown>): S => Object.fromEntries(["period", "from", "to"].map((k) => [k, str(s[k])]).filter(([, v]) => v)) as S,
+  validateSearch: (s: Record<string, unknown>): S => {
+    const pilotObj = parsePilotSearch(s);
+    const out = Object.fromEntries(["period", "from", "to"].map((k) => [k, str(s[k])]).filter(([, v]) => v)) as S;
+    if (pilotObj.pilot !== undefined) out.pilot = pilotObj.pilot;
+    return out;
+  },
   head: () => ({
     meta: [
       { title: "My Performance · Scale Flow Sales OS" },
@@ -33,8 +43,21 @@ export const Route = createFileRoute("/my-performance")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: MyPerformance,
+  component: MyPerformanceEntry,
 });
+
+function MyPerformanceEntry() {
+  const search = Route.useSearch();
+  const { pilotActive, pilotResolved } = useLeadPilotState(search.pilot);
+
+  if (pilotActive) {
+    return <PilotMyPerformancePage search={search as Record<string, unknown>} />;
+  }
+  if (!pilotResolved) {
+    return <AppShellSkeleton />;
+  }
+  return <MyPerformance />;
+}
 
 function MyPerformance() {
   const { preview } = useAccess();
@@ -46,6 +69,8 @@ function OwnerPerformance() {
   const st = useCRM();
   const search = Route.useSearch();
   const navigate = useNavigate({ from: "/my-performance" });
+  const auth = useResolvedAuthState();
+  const leadPilotAvailable = auth.status === "authenticated" && auth.leadPilotAvailable;
   const set = (p: Partial<S>) => void navigate({ search: (s: S) => Object.fromEntries(Object.entries({ ...s, ...p }).filter(([, v]) => v)) as S, replace: true });
   const now = useMemo(() => new Date(), []);
   const today = dayKey(now);
@@ -69,7 +94,7 @@ function OwnerPerformance() {
   const ctx = { employees: st.employees, payments: st.payments };
   const empty = m.calls === 0 && m.followUpsCompleted === 0 && m.leadsCreated === 0 && m.dealsWon === 0;
 
-  return <TooltipProvider delayDuration={150}><Shell title="My Performance" subtitle="Your sales activity and results">
+  return <TooltipProvider delayDuration={150}><Shell title="My Performance" subtitle="Your sales activity and results" actions={leadPilotAvailable ? <Button type="button" variant="outline" className="rounded-lg gap-1.5" onClick={() => { setLeadPilotSessionOptIn(true); void navigate({ search: (s: S) => ({ ...s, pilot: 1 }) }); }}><Database className="size-4" />Dev Performance Pilot</Button> : undefined}>
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Period">
       {OWNER_PERIODS.map((p) => <Button key={p.id} size="sm" variant={period === p.id ? "default" : "outline"} onClick={() => set({ period: p.id === "custom" ? "custom" : p.id, from: undefined, to: undefined })}>{p.label}</Button>)}
       {period === "custom" && <span className="flex items-center gap-2">

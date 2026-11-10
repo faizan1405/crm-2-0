@@ -29,7 +29,7 @@ export const ANALYTICS_PERIODS: readonly AnalyticsPeriod[] = [
 
 export interface DateWindow {
   start: string; // YYYY-MM-DD (IST business day)
-  end: string;   // YYYY-MM-DD (IST business day)
+  end: string; // YYYY-MM-DD (IST business day)
 }
 
 export type Granularity = "day" | "week" | "month";
@@ -195,4 +195,32 @@ export function buckets(w: DateWindow, g: Granularity): string[] {
 export function isDayInWindow(day: string | null | undefined, w: DateWindow): boolean {
   if (!day) return false;
   return day >= w.start && day <= w.end;
+}
+
+/**
+ * Normalizes UI Title-Case call outcomes ("Not picked", "Busy") and legacy
+ * snake_case fixture strings ("not_picked", "no_answer", "busy") for reporting.
+ */
+export function normalizeCallOutcomeKey(outcome: string): string {
+  return outcome
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "_");
+}
+
+export function isNoAnswerCallOutcome(outcome: string): boolean {
+  const key = normalizeCallOutcomeKey(outcome);
+  return key === "not_picked" || key === "no_answer";
+}
+
+export function isBusyCallOutcome(outcome: string): boolean {
+  return normalizeCallOutcomeKey(outcome) === "busy";
+}
+
+/**
+ * Won deal metrics exclude explicitly cancelled deals while counting active,
+ * completed, and on_hold won agreements consistently across Finance & Owner Performance.
+ */
+export function isCountedWonDealStatus(status: string | null | undefined): boolean {
+  return status !== "cancelled";
 }

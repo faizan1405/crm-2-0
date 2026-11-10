@@ -1598,6 +1598,24 @@ export type ProjectTemplateSaveResponse = z.infer<typeof projectTemplateSaveResp
 // B5C Server-Side Analytics & Reporting Schemas
 // ============================================================================
 
+export const ANALYTICS_PERIODS = [
+  "today",
+  "yesterday",
+  "7d",
+  "30d",
+  "thisWeek",
+  "lastWeek",
+  "thisMonth",
+  "lastMonth",
+  "thisQuarter",
+  "thisYear",
+  "custom",
+] as const;
+export type AnalyticsPeriod = (typeof ANALYTICS_PERIODS)[number];
+
+export const ANALYTICS_GRANULARITIES = ["day", "week", "month"] as const;
+export type AnalyticsGranularity = (typeof ANALYTICS_GRANULARITIES)[number];
+
 export const inrDecimalStringSchema = z.string();
 
 export const analyticsDateWindowSchema = z.object({

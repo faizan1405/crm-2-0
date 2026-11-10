@@ -15,6 +15,7 @@ import {
   type LeadLifecycleApi,
 } from "./schemas";
 import { activityKeys } from "./activitiesApi";
+import { analyticsKeys } from "./analyticsApi";
 import { leadKeys } from "./leadsApi";
 import { ApiError } from "./errors";
 
@@ -244,6 +245,7 @@ export function useCreateFollowUpMutation() {
       void queryClient.invalidateQueries({ queryKey: leadKeys.detail(res.followUp.leadId) });
       void queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
       void queryClient.invalidateQueries({ queryKey: activityKeys.byLead(res.followUp.leadId) });
+      void queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
     },
   });
 }
@@ -267,6 +269,7 @@ export function useRescheduleFollowUpMutation() {
       void queryClient.invalidateQueries({ queryKey: leadKeys.detail(res.followUp.leadId) });
       void queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
       void queryClient.invalidateQueries({ queryKey: activityKeys.byLead(res.followUp.leadId) });
+      void queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
     },
   });
 }
@@ -290,6 +293,7 @@ export function useCompleteFollowUpMutation() {
       void queryClient.invalidateQueries({ queryKey: leadKeys.detail(res.followUp.leadId) });
       void queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
       void queryClient.invalidateQueries({ queryKey: activityKeys.byLead(res.followUp.leadId) });
+      void queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
     },
   });
 }
@@ -313,6 +317,7 @@ export function useCancelFollowUpMutation() {
       void queryClient.invalidateQueries({ queryKey: leadKeys.detail(res.followUp.leadId) });
       void queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
       void queryClient.invalidateQueries({ queryKey: activityKeys.byLead(res.followUp.leadId) });
+      void queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
     },
   });
 }

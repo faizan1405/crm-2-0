@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, createIdempotencyKey } from "./client";
+import { analyticsKeys } from "./analyticsApi";
 export { createIdempotencyKey } from "./client";
 import {
   clientSupportTicketDtoSchema,
@@ -700,6 +701,7 @@ export function useCreateProjectMutation() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: projectKeys.lists() });
       queryClient.invalidateQueries({ queryKey: projectKeys.overview() });
+      queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
       queryClient.setQueryData(projectKeys.detail(data.project.id), (old: ProjectDetailsResponse | undefined) => {
         if (!old) {
           return {
@@ -726,6 +728,7 @@ export function useUpdateProjectMutation() {
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: projectKeys.lists() });
       queryClient.invalidateQueries({ queryKey: projectKeys.overview() });
+      queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
       queryClient.setQueryData(projectKeys.detail(variables.id), (old: ProjectDetailsResponse | undefined) => {
         if (!old) return old;
         return { ...old, project: data.project };
@@ -742,6 +745,7 @@ export function useSetProjectStatusMutation() {
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: projectKeys.lists() });
       queryClient.invalidateQueries({ queryKey: projectKeys.overview() });
+      queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
       queryClient.setQueryData(projectKeys.detail(variables.id), (old: ProjectDetailsResponse | undefined) => {
         if (!old) return old;
         return { ...old, project: data.project };
@@ -758,6 +762,7 @@ export function useMoveProjectStageMutation() {
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: projectKeys.lists() });
       queryClient.invalidateQueries({ queryKey: projectKeys.overview() });
+      queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
       queryClient.setQueryData(projectKeys.detail(variables.id), (old: ProjectDetailsResponse | undefined) => {
         if (!old) return old;
         return { ...old, project: data.project };
@@ -774,6 +779,7 @@ export function useUndoProjectStageMutation() {
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: projectKeys.lists() });
       queryClient.invalidateQueries({ queryKey: projectKeys.overview() });
+      queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
       queryClient.setQueryData(projectKeys.detail(variables.id), (old: ProjectDetailsResponse | undefined) => {
         if (!old) return old;
         return { ...old, project: data.project };
@@ -790,6 +796,7 @@ export function useDeliverProjectMutation() {
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: projectKeys.lists() });
       queryClient.invalidateQueries({ queryKey: projectKeys.overview() });
+      queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
       queryClient.setQueryData(projectKeys.detail(variables.id), (old: ProjectDetailsResponse | undefined) => {
         if (!old) return old;
         return { ...old, project: data.project };
@@ -806,6 +813,7 @@ export function useConfigureProjectSupportMutation() {
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: projectKeys.lists() });
       queryClient.invalidateQueries({ queryKey: projectKeys.overview() });
+      queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
       queryClient.setQueryData(projectKeys.detail(variables.id), (old: ProjectDetailsResponse | undefined) => {
         if (!old) return old;
         return { ...old, project: data.project };
@@ -822,6 +830,7 @@ export function useArchiveProjectMutation() {
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: projectKeys.lists() });
       queryClient.invalidateQueries({ queryKey: projectKeys.overview() });
+      queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
       queryClient.setQueryData(projectKeys.detail(variables.id), (old: ProjectDetailsResponse | undefined) => {
         if (!old) return old;
         return { ...old, project: data.project };
@@ -914,6 +923,7 @@ export function useCreateTaskMutation() {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: projectKeys.lists() });
       queryClient.invalidateQueries({ queryKey: projectKeys.overview() });
+      queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
       queryClient.invalidateQueries({ queryKey: projectKeys.detail(variables.projectId) });
     },
   });
@@ -946,6 +956,7 @@ export function useSetTaskDoneMutation() {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: projectKeys.lists() });
       queryClient.invalidateQueries({ queryKey: projectKeys.overview() });
+      queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
       queryClient.invalidateQueries({ queryKey: projectKeys.detail(variables.projectId) });
     },
   });
@@ -986,6 +997,7 @@ export function useCreateSupportTicketMutation() {
       createSupportTicket(projectId, payload),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: projectKeys.overview() });
+      queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
       queryClient.invalidateQueries({ queryKey: projectKeys.detail(variables.projectId) });
     },
   });
@@ -1004,6 +1016,7 @@ export function useUpdateSupportTicketMutation() {
     }) => updateSupportTicket(ticketId, payload),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: projectKeys.overview() });
+      queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
       queryClient.invalidateQueries({ queryKey: projectKeys.detail(variables.projectId) });
     },
   });
@@ -1024,6 +1037,7 @@ export function useResolveSupportTicketMutation() {
     }) => resolveSupportTicket(ticketId, resolution, expectedVersion),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: projectKeys.overview() });
+      queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
       queryClient.invalidateQueries({ queryKey: projectKeys.detail(variables.projectId) });
     },
   });
@@ -1044,6 +1058,7 @@ export function useReopenSupportTicketMutation() {
     }) => reopenSupportTicket(ticketId, reason, expectedVersion),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: projectKeys.overview() });
+      queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
       queryClient.invalidateQueries({ queryKey: projectKeys.detail(variables.projectId) });
     },
   });

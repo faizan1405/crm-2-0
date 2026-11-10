@@ -46,6 +46,7 @@ import {
 } from "./schemas";
 import { leadKeys } from "./leadsApi";
 import { activityKeys } from "./activitiesApi";
+import { analyticsKeys } from "./analyticsApi";
 
 export interface DealsListFilters {
   q?: string | undefined;
@@ -624,6 +625,7 @@ export function useCreateDealMutation() {
     onSuccess: (res) => {
       void queryClient.invalidateQueries({ queryKey: financeKeys.deals() });
       void queryClient.invalidateQueries({ queryKey: financeKeys.ownerSummary() });
+      void queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
       if (res.deal.leadId) {
         void queryClient.invalidateQueries({ queryKey: leadKeys.detail(res.deal.leadId) });
         void queryClient.invalidateQueries({ queryKey: activityKeys.byLead(res.deal.leadId) });
@@ -642,6 +644,7 @@ export function useUpdateDealMutation() {
       void queryClient.invalidateQueries({ queryKey: financeKeys.deal(deal.id) });
       void queryClient.invalidateQueries({ queryKey: financeKeys.dealSummary(deal.id) });
       void queryClient.invalidateQueries({ queryKey: financeKeys.ownerSummary() });
+      void queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
     },
   });
 }
@@ -656,6 +659,7 @@ export function useChangeDealStatusMutation() {
       void queryClient.invalidateQueries({ queryKey: financeKeys.deal(deal.id) });
       void queryClient.invalidateQueries({ queryKey: financeKeys.dealSummary(deal.id) });
       void queryClient.invalidateQueries({ queryKey: financeKeys.ownerSummary() });
+      void queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
     },
   });
 }
@@ -670,6 +674,7 @@ export function useCancelDealMutation() {
       void queryClient.invalidateQueries({ queryKey: financeKeys.deal(deal.id) });
       void queryClient.invalidateQueries({ queryKey: financeKeys.dealSummary(deal.id) });
       void queryClient.invalidateQueries({ queryKey: financeKeys.ownerSummary() });
+      void queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
     },
   });
 }
@@ -684,6 +689,7 @@ export function useVerifyDealWonDateMutation() {
       void queryClient.invalidateQueries({ queryKey: financeKeys.deal(deal.id) });
       void queryClient.invalidateQueries({ queryKey: financeKeys.dealSummary(deal.id) });
       void queryClient.invalidateQueries({ queryKey: financeKeys.ownerSummary() });
+      void queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
     },
   });
 }
@@ -698,6 +704,7 @@ export function useCreatePaymentMutation() {
       void queryClient.invalidateQueries({ queryKey: financeKeys.deal(res.payment.dealId) });
       void queryClient.invalidateQueries({ queryKey: financeKeys.dealSummary(res.payment.dealId) });
       void queryClient.invalidateQueries({ queryKey: financeKeys.ownerSummary() });
+      void queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
       void queryClient.invalidateQueries({ queryKey: financeKeys.dealAudit(res.payment.dealId) });
     },
   });
@@ -715,6 +722,7 @@ export function useVoidPaymentMutation() {
       void queryClient.invalidateQueries({ queryKey: financeKeys.deal(res.payment.dealId) });
       void queryClient.invalidateQueries({ queryKey: financeKeys.dealSummary(res.payment.dealId) });
       void queryClient.invalidateQueries({ queryKey: financeKeys.ownerSummary() });
+      void queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
       void queryClient.invalidateQueries({ queryKey: financeKeys.dealAudit(res.payment.dealId) });
     },
   });

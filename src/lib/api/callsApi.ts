@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, createIdempotencyKey } from "./client";
 import { activityKeys } from "./activitiesApi";
+import { analyticsKeys } from "./analyticsApi";
 import { followupKeys } from "./followupsApi";
 import { leadKeys } from "./leadsApi";
 import {
@@ -176,6 +177,7 @@ export function useCreateCallMutation() {
       void queryClient.invalidateQueries({ queryKey: activityKeys.byLead(res.lead.id) });
       void queryClient.invalidateQueries({ queryKey: followupKeys.byLead(res.lead.id) });
       void queryClient.invalidateQueries({ queryKey: followupKeys.lists() });
+      void queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
     },
   });
 }

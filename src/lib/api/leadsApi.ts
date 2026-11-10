@@ -16,6 +16,7 @@ import {
   type QuickStatusApi,
 } from "./schemas";
 import { activityKeys } from "./activitiesApi";
+import { analyticsKeys } from "./analyticsApi";
 
 export type LeadSortOption = "recent" | "updated" | "score" | "value" | "name";
 export type LeadFollowUpFilter = "all" | "overdue" | "today" | "week" | "none";
@@ -223,6 +224,7 @@ export function useCreateLeadMutation() {
       queryClient.setQueryData(leadKeys.detail(res.lead.id), res.lead);
       void queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
       void queryClient.invalidateQueries({ queryKey: activityKeys.byLead(res.lead.id) });
+      void queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
     },
   });
 }
@@ -243,6 +245,7 @@ export function useUpdateLeadMutation() {
       queryClient.setQueryData(leadKeys.detail(res.lead.id), res.lead);
       void queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
       void queryClient.invalidateQueries({ queryKey: activityKeys.byLead(res.lead.id) });
+      void queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
     },
   });
 }
@@ -263,6 +266,7 @@ export function useArchiveLeadMutation() {
       queryClient.setQueryData(leadKeys.detail(res.lead.id), res.lead);
       void queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
       void queryClient.invalidateQueries({ queryKey: activityKeys.byLead(res.lead.id) });
+      void queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
     },
   });
 }
@@ -283,6 +287,7 @@ export function useRestoreLeadMutation() {
       queryClient.setQueryData(leadKeys.detail(res.lead.id), res.lead);
       void queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
       void queryClient.invalidateQueries({ queryKey: activityKeys.byLead(res.lead.id) });
+      void queryClient.invalidateQueries({ queryKey: analyticsKeys.all });
     },
   });
 }

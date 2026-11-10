@@ -2,9 +2,14 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState, type ReactNode } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
-import { Archive, BarChart3, Copy, Pencil, Pin, Plus, RotateCcw, Star, X, ShieldCheck, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Archive, BarChart3, Copy, Database, Pencil, Pin, Plus, RotateCcw, Star, X, ShieldCheck, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Shell } from "@/components/crm/Shell";
 import { useCRM, viewCtxOf } from "@/lib/crm/store";
+import { useResolvedAuthState } from "@/lib/auth/authClient";
+import { setLeadPilotSessionOptIn } from "@/lib/api/pilotGate";
+import { parsePilotSearch, useLeadPilotState } from "@/lib/api/pilotHook";
+import { AppShellSkeleton } from "@/components/crm/ShellPrimitives";
+import { PilotAnalyticsPage } from "@/components/pilot/PilotAnalyticsPage";
 import { dayKey as formatDayKey, formatDate, formatINR, formatINRCompact, formatPct } from "@/lib/crm/format";
 import { cardSignals as cardSignalsS } from "@/lib/crm/pipeline";
 import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, type LeadStatus } from "@/lib/crm/types";
@@ -32,12 +37,13 @@ const SECTIONS = [
   { id: "forecast", label: "Opportunity forecast" }, { id: "reports", label: "Custom reports" },
 ] as const;
 type Section = (typeof SECTIONS)[number]["id"];
-interface Search { section?: Section; period?: AnalyticsPeriod; from?: string; to?: string; source?: string; stage?: LeadStatus; priority?: string; assignee?: string; tag?: string; view?: string; compare?: boolean }
+interface Search { section?: Section; period?: AnalyticsPeriod; from?: string; to?: string; source?: string; stage?: LeadStatus; priority?: string; assignee?: string; tag?: string; view?: string; compare?: boolean; pilot?: 1 | 0 }
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
 
 export const Route = createFileRoute("/analytics")({
   validateSearch: (s: Record<string, unknown>): Search => {
-    const out: Search = {};
+    const pilotObj = parsePilotSearch(s);
+    const out: Search = { ...(pilotObj.pilot !== undefined ? { pilot: pilotObj.pilot } : {}) };
     const sec = str(s["section"]); if (sec && SECTIONS.some((x) => x.id === sec)) out.section = sec as Section;
     const p = str(s["period"]); if (p && ANALYTICS_PERIODS.some((x) => x.id === p)) out.period = p as AnalyticsPeriod;
     for (const k of ["from", "to", "source", "priority", "assignee", "tag", "view"] as const) { const v = str(s[k]); if (v) out[k] = v; }
@@ -55,8 +61,21 @@ export const Route = createFileRoute("/analytics")({
       { property: "og:description", content: "Owner analytics: lead sources, funnel, calls, collections, projects and an explainable pipeline forecast." },
     ],
   }),
-  component: Analytics,
+  component: AnalyticsEntry,
 });
+
+function AnalyticsEntry() {
+  const search = Route.useSearch();
+  const { pilotActive, pilotResolved } = useLeadPilotState(search.pilot);
+
+  if (pilotActive) {
+    return <PilotAnalyticsPage search={search as Record<string, unknown>} />;
+  }
+  if (!pilotResolved) {
+    return <AppShellSkeleton />;
+  }
+  return <Analytics />;
+}
 
 const fmtDay = (d: string) => formatDate(`${d}T12:00:00Z`, { day: "numeric", month: "short", year: "numeric" });
 const bucketLabel = (b: string) => (b.length === 7 ? formatDate(`${b}-01T12:00:00Z`, { month: "short", year: "2-digit" }) : formatDate(`${b}T12:00:00Z`));
@@ -82,11 +101,32 @@ function Analytics() {
   const search = Route.useSearch();
   const nav = Route.useNavigate();
   const st = useStudio(search);
+  const auth = useResolvedAuthState();
+  const leadPilotAvailable = auth.status === "authenticated" && auth.leadPilotAvailable;
   const [drill, setDrill] = useState<Drill | null>(null);
   const section = search.section ?? "overview";
   const set = (patch: Patch) => nav({ search: (p) => Object.fromEntries(Object.entries({ ...p, ...patch }).filter(([, v]) => v !== undefined)) as Search, replace: true });
   return (
-    <Shell title="Analytics Studio" subtitle={`${fmtDay(st.w.start)} – ${fmtDay(st.w.end)} · India time${st.compare ? ` · compared with ${fmtDay(st.prev.start)} – ${fmtDay(st.prev.end)}` : ""}`}>
+    <Shell
+      title="Analytics Studio"
+      subtitle={`${fmtDay(st.w.start)} – ${fmtDay(st.w.end)} · India time${st.compare ? ` · compared with ${fmtDay(st.prev.start)} – ${fmtDay(st.prev.end)}` : ""}`}
+      actions={
+        leadPilotAvailable ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-lg gap-1.5"
+            onClick={() => {
+              setLeadPilotSessionOptIn(true);
+              void nav({ to: "/analytics", search: { pilot: 1 } });
+            }}
+          >
+            <Database className="size-4" />
+            Dev Analytics Pilot
+          </Button>
+        ) : undefined
+      }
+    >
       <div className="as-notice mb-4"><ShieldCheck className="size-4 shrink-0" /><span><b>Owner only.</b> Every number is rebuilt from the records in this browser. Nothing here is connected to Meta Ads, Google Ads or a bank — ad cost, ROAS and CAC are not shown.</span></div>
       <nav className="seg as-tabs mb-4" aria-label="Analytics sections">
         {SECTIONS.map((x) => <button key={x.id} type="button" aria-pressed={section === x.id} onClick={() => set({ section: x.id })}>{x.label}</button>)}

@@ -4,10 +4,10 @@ import { isPending, followUpBucket } from "@/lib/crm/followups";
 import { CallButton } from "@/components/crm/CallButton";
 import { openCallLog } from "@/components/crm/PostCallDialog";
 import { FollowUpDialog } from "@/components/crm/Dialogs";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ArrowUpRight, Plus, Check, Sunrise, AlarmClock, CalendarClock, Flame, Wallet, MessageCircle, NotebookPen, CalendarSync, Hourglass } from "lucide-react";
+import { ArrowUpRight, Plus, Check, Sunrise, AlarmClock, CalendarClock, Flame, Wallet, MessageCircle, NotebookPen, CalendarSync, Hourglass, Database } from "lucide-react";
 import { Shell, Empty, PriorityBadge } from "@/components/crm/Shell";
 import { AddLeadDialog } from "@/components/crm/AddLeadDialog";
 import { Button } from "@/components/ui/button";
@@ -17,15 +17,34 @@ import { financeSummary, dealOutstanding, dealPaymentStatus } from "@/lib/crm/fi
 import { formatINRCompact, formatINR, formatPct, formatTime, greeting, dayKey, formatDate, relative, digits } from "@/lib/crm/format";
 import { FOLLOWUP_LABEL, LEAD_STATUSES, STATUS_LABEL } from "@/lib/crm/types";
 import { cn } from "@/lib/utils";
+import { useResolvedAuthState } from "@/lib/auth/authClient";
+import { setLeadPilotSessionOptIn } from "@/lib/api/pilotGate";
+import { parsePilotSearch, useLeadPilotState } from "@/lib/api/pilotHook";
+import { AppShellSkeleton } from "@/components/crm/ShellPrimitives";
+import { PilotDashboardPage } from "@/components/pilot/PilotDashboardPage";
 
 const DESC = "Today's calls, priority leads, pipeline and collections in one actionable sales command center.";
 export const Route = createFileRoute("/")({
+  validateSearch: parsePilotSearch,
   head: () => ({ meta: [
     { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary_large_image" },
     { title: "Command Center · Scale Flow Sales OS" }, { name: "description", content: DESC },
     { property: "og:title", content: "Command Center · Scale Flow Sales OS" }, { property: "og:description", content: DESC },
-  ] }), component: Dashboard,
+  ] }), component: DashboardEntry,
 });
+
+function DashboardEntry() {
+  const search = Route.useSearch();
+  const { pilotActive, pilotResolved } = useLeadPilotState(search.pilot);
+
+  if (pilotActive) {
+    return <PilotDashboardPage search={search} />;
+  }
+  if (!pilotResolved) {
+    return <AppShellSkeleton />;
+  }
+  return <Dashboard />;
+}
 
 /** Animates a number toward its target; instant when the user prefers reduced motion. */
 function useCountUp(target: number, ms = 600) {
@@ -51,6 +70,9 @@ const KIND_ICON = { overdue: AlarmClock, today: CalendarClock, hot: Flame, money
 function Dashboard() {
   const { leads, deals, payments, followUps, owner, activities, completeFollowUp } = useCRM();
   const { can, preview } = useAccess();
+  const auth = useResolvedAuthState();
+  const leadPilotAvailable = auth.status === "authenticated" && auth.leadPilotAvailable;
+  const navigate = useNavigate();
   const [add, setAdd] = useState(false), [tab, setTab] = useState<(typeof TABS)[number][0]>("all");
   const [resched, setResched] = useState<{ leadId: string; id: string } | null>(null);
   const now = Date.now(), today = dayKey(new Date());
@@ -87,7 +109,7 @@ function Dashboard() {
   const segs = [["Received", fin.collected, "var(--success)"], ["Outstanding (not yet due)", Math.max(fin.outstanding - fin.overdue, 0), "var(--chart-2)"], ["Overdue", fin.overdue, "var(--destructive)"]] as const;
   const segTotal = Math.max(1, segs.reduce((a, s) => a + s[1], 0));
 
-  return <Shell title="Command center" subtitle={formatDate(new Date().toISOString(), { weekday: "long", day: "numeric", month: "long", year: "numeric" })} actions={<div className="flex gap-2">{can("briefing.view") && <Button variant="outline" asChild className="rounded-lg"><Link to="/daily-briefing"><Sunrise />Daily briefing</Link></Button>}{can("leads.create") && <Button onClick={() => setAdd(true)} className="rounded-lg"><Plus />Add lead</Button>}</div>}>
+  return <Shell title="Command center" subtitle={formatDate(new Date().toISOString(), { weekday: "long", day: "numeric", month: "long", year: "numeric" })} actions={<div className="flex flex-wrap gap-2">{leadPilotAvailable && <Button type="button" variant="outline" className="rounded-lg gap-1.5" onClick={() => { setLeadPilotSessionOptIn(true); void navigate({ to: "/", search: { pilot: 1 } }); }}><Database className="size-4" />Dev Dashboard Pilot</Button>}{can("briefing.view") && <Button variant="outline" asChild className="rounded-lg"><Link to="/daily-briefing"><Sunrise />Daily briefing</Link></Button>}{can("leads.create") && <Button onClick={() => setAdd(true)} className="rounded-lg"><Plus />Add lead</Button>}</div>}>
     <section className="cc-welcome p-6 sm:p-7">
       <div className="relative z-10 grid gap-6 lg:grid-cols-[1.4fr_1fr] lg:items-end">
         <div>

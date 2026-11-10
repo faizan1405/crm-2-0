@@ -44,6 +44,7 @@ import {
   type QuotationUpdateResponse,
 } from "./schemas";
 import { leadKeys } from "./leadsApi";
+import { analyticsKeys } from "./analyticsApi";
 
 // ---------------------------------------------------------------------------
 // Query Keys
@@ -450,6 +451,7 @@ export function useCreateQuotationMutation() {
     mutationFn: (payload: CreateQuotationPayload) => createQuotation(payload),
     onSuccess: (data) => {
       void qc.invalidateQueries({ queryKey: quotationKeys.lists() });
+      void qc.invalidateQueries({ queryKey: analyticsKeys.all });
       if (data.quotation.leadId) {
         void qc.invalidateQueries({ queryKey: quotationKeys.leadQuotations(data.quotation.leadId) });
         void qc.invalidateQueries({ queryKey: leadKeys.detail(data.quotation.leadId) });
@@ -468,6 +470,7 @@ export function useUpdateQuotationMutation() {
       void qc.invalidateQueries({ queryKey: quotationKeys.revisions(vars.id) });
       void qc.invalidateQueries({ queryKey: quotationKeys.audit(vars.id) });
       void qc.invalidateQueries({ queryKey: quotationKeys.lists() });
+      void qc.invalidateQueries({ queryKey: analyticsKeys.all });
       if (data.quotation.leadId) {
         void qc.invalidateQueries({ queryKey: quotationKeys.leadQuotations(data.quotation.leadId) });
       }
@@ -485,6 +488,7 @@ export function useChangeQuotationStatusMutation() {
       void qc.invalidateQueries({ queryKey: quotationKeys.revisions(vars.id) });
       void qc.invalidateQueries({ queryKey: quotationKeys.audit(vars.id) });
       void qc.invalidateQueries({ queryKey: quotationKeys.lists() });
+      void qc.invalidateQueries({ queryKey: analyticsKeys.all });
       if (data.quotation.leadId) {
         void qc.invalidateQueries({ queryKey: quotationKeys.leadQuotations(data.quotation.leadId) });
       }
@@ -499,6 +503,7 @@ export function useArchiveQuotationMutation() {
     onSuccess: (data, vars) => {
       void qc.invalidateQueries({ queryKey: quotationKeys.detail(vars.id) });
       void qc.invalidateQueries({ queryKey: quotationKeys.lists() });
+      void qc.invalidateQueries({ queryKey: analyticsKeys.all });
       if (data.quotation.leadId) {
         void qc.invalidateQueries({ queryKey: quotationKeys.leadQuotations(data.quotation.leadId) });
       }
@@ -513,6 +518,7 @@ export function useRestoreQuotationMutation() {
     onSuccess: (data, id) => {
       void qc.invalidateQueries({ queryKey: quotationKeys.detail(id) });
       void qc.invalidateQueries({ queryKey: quotationKeys.lists() });
+      void qc.invalidateQueries({ queryKey: analyticsKeys.all });
       if (data.quotation.leadId) {
         void qc.invalidateQueries({ queryKey: quotationKeys.leadQuotations(data.quotation.leadId) });
       }
