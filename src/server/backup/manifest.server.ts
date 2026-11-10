@@ -13,10 +13,51 @@ import {
   type BackupScopeType,
 } from "./types.server";
 
-const FORBIDDEN_KEY_PATTERN = /pass(word)?|hash|token|secret|session|cookie|api.?key|auth_secret/i;
+import { parseLegacyRupeesToPaise, FinancialValidationError } from "./migrationMapping.server";
+
+/**
+ * Disallowed sensitive credential keys.
+ * Explicitly preserves integrity checksums, file hashes, references, and IDs.
+ */
+const PRESERVED_INTEGRITY_KEY_PATTERN =
+  /^(sha256|sha256_?hash|file_?hash|proof_?hash|tx_?hash|transaction_?hash|checksum|reference|id)$/i;
+
+export function isSensitiveKey(key: string): boolean {
+  if (PRESERVED_INTEGRITY_KEY_PATTERN.test(key)) {
+    return false;
+  }
+  const lower = key.toLowerCase();
+  if (
+    lower.includes("password") ||
+    lower.includes("passwd") ||
+    lower.includes("secret") ||
+    lower.includes("apikey") ||
+    lower.includes("api_key") ||
+    lower.includes("authtoken") ||
+    lower.includes("auth_token") ||
+    lower.includes("sessiontoken") ||
+    lower.includes("session_token") ||
+    lower.includes("privatekey") ||
+    lower.includes("private_key") ||
+    lower.includes("encryptionkey") ||
+    lower.includes("encryption_key") ||
+    lower.includes("token") ||
+    lower.includes("cookie") ||
+    lower.includes("session") ||
+    lower.includes("hash")
+  ) {
+    return true;
+  }
+  return false;
+}
 
 /**
  * Recursively deep-copies an object, stripping any credential-like or auth-token keys.
+ * Integrity hashes (sha256, fileHash, etc.), references, and customer notes are preserved.
+ *
+ * NOTE: Customer-entered free text (in notes, descriptions) is preserved as entered.
+ * It cannot be reliably cleaned with regex without corrupting legitimate business content.
+ * Residual privacy risk remains if an owner pastes credentials into CRM notes.
  */
 export function scrubSensitiveFields<T>(val: T): T {
   if (Array.isArray(val)) {
@@ -24,7 +65,7 @@ export function scrubSensitiveFields<T>(val: T): T {
   }
   if (val !== null && typeof val === "object" && !(val instanceof Date)) {
     const entries = Object.entries(val as Record<string, unknown>).filter(
-      ([key]) => !FORBIDDEN_KEY_PATTERN.test(key),
+      ([key]) => !isSensitiveKey(key),
     );
     return Object.fromEntries(
       entries.map(([k, v]) => [k, scrubSensitiveFields(v)]),
@@ -86,10 +127,22 @@ export function buildFinancialSummary(params: {
 
   for (const pay of params.payments) {
     const isVoided = Boolean(pay.voided || pay.status === "voided");
-    const paise =
-      typeof pay.amountPaise === "number"
-        ? Math.round(pay.amountPaise)
-        : Math.round(Number(pay.amount ?? 0) * 100);
+    let paise = 0;
+    if (
+      typeof pay.amountPaise === "number" &&
+      Number.isSafeInteger(pay.amountPaise) &&
+      pay.amountPaise >= 0
+    ) {
+      paise = pay.amountPaise;
+    } else {
+      const parsed = parseLegacyRupeesToPaise(pay.amount ?? 0, { allowZero: true });
+      if (!parsed.ok) {
+        throw new FinancialValidationError(
+          `Payment '${pay.id}' has invalid monetary amount: ${parsed.error}`,
+        );
+      }
+      paise = parsed.paise;
+    }
 
     totalPaymentsPaise += paise;
     if (isVoided) {
@@ -107,10 +160,22 @@ export function buildFinancialSummary(params: {
   let dealsActiveCount = 0;
 
   for (const deal of params.deals) {
-    const paise =
-      typeof deal.valuePaise === "number"
-        ? Math.round(deal.valuePaise)
-        : Math.round(Number(deal.value ?? 0) * 100);
+    let paise = 0;
+    if (
+      typeof deal.valuePaise === "number" &&
+      Number.isSafeInteger(deal.valuePaise) &&
+      deal.valuePaise >= 0
+    ) {
+      paise = deal.valuePaise;
+    } else {
+      const parsed = parseLegacyRupeesToPaise(deal.value ?? 0, { allowZero: true });
+      if (!parsed.ok) {
+        throw new FinancialValidationError(
+          `Deal '${deal.id}' has invalid monetary value: ${parsed.error}`,
+        );
+      }
+      paise = parsed.paise;
+    }
 
     totalBookedDealsPaise += paise;
     const st = (deal.status ?? "active").toLowerCase();

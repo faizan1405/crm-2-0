@@ -1,6 +1,7 @@
 import "@tanstack/react-start/server-only";
 import { unzipSync, strFromU8 } from "fflate";
 import { computeSha256 } from "./manifest.server";
+import { parseLegacyRupeesToPaise } from "./migrationMapping.server";
 import {
   BACKUP_APP_NAME,
   BACKUP_FORMAT_VERSION,
@@ -424,10 +425,22 @@ export async function validateBackupArchive(
   let calculatedVoidedPaise = 0;
   for (const pay of payments) {
     const isVoided = Boolean(pay.voided || pay.status === "voided");
-    const paise =
-      typeof pay.amountPaise === "number"
-        ? Math.round(pay.amountPaise)
-        : Math.round(Number(pay.amount ?? 0) * 100);
+    let paise = 0;
+    if (
+      typeof pay.amountPaise === "number" &&
+      Number.isSafeInteger(pay.amountPaise) &&
+      pay.amountPaise >= 0
+    ) {
+      paise = pay.amountPaise;
+    } else {
+      const parsed = parseLegacyRupeesToPaise(pay.amount ?? 0, { allowZero: true });
+      if (parsed.ok) {
+        paise = parsed.paise;
+      } else {
+        errors.push(`Payment '${pay.id}' has invalid financial amount: ${parsed.error}`);
+        continue;
+      }
+    }
 
     if (isVoided) {
       calculatedVoidedPaise += paise;

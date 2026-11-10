@@ -1,6 +1,7 @@
 import "@tanstack/react-start/server-only";
 import { strFromU8 } from "fflate";
 import { validateBackupArchive } from "./validation.server";
+import { parseLegacyRupeesToPaise } from "./migrationMapping.server";
 import { type BackupManifest, type DryRunActionSummary, type DryRunReport } from "./types.server";
 
 export interface DryRunTargetContext {
@@ -181,10 +182,22 @@ export async function executeRestoreDryRun(
 
   for (const pay of payments) {
     const isVoided = Boolean(pay.voided || pay.status === "voided");
-    const paise =
-      typeof pay.amountPaise === "number"
-        ? Math.round(pay.amountPaise)
-        : Math.round(Number(pay.amount ?? 0) * 100);
+    let paise = 0;
+    if (
+      typeof pay.amountPaise === "number" &&
+      Number.isSafeInteger(pay.amountPaise) &&
+      pay.amountPaise >= 0
+    ) {
+      paise = pay.amountPaise;
+    } else {
+      const parsed = parseLegacyRupeesToPaise(pay.amount ?? 0, { allowZero: true });
+      if (parsed.ok) {
+        paise = parsed.paise;
+      } else {
+        validation.errors.push(`Payment '${pay.id}' has invalid financial amount: ${parsed.error}`);
+        continue;
+      }
+    }
 
     if (isVoided) derivedVoidedPaise += paise;
     else derivedActivePaise += paise;
