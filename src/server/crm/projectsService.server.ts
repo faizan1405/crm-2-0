@@ -527,15 +527,68 @@ export async function createProjectRecord(
     }
 
     // Cross-tenant verification: if templateId provided, ensure it belongs to owner
+    let tpl: typeof crmProjectTemplates.$inferSelect | undefined;
     if (input.templateId) {
-      const [tpl] = await tx
+      const [found] = await tx
         .select()
         .from(crmProjectTemplates)
         .where(and(eq(crmProjectTemplates.id, input.templateId), eq(crmProjectTemplates.ownerUserId, ownerUserId)));
-      if (!tpl) {
+      if (!found) {
         throw new CrmServiceError(404, "template_not_found", "Project template not found.");
       }
+      tpl = found;
     }
+
+    const tplReqStrings = tpl ? parseJsonSafe<string[]>(tpl.requirementsJson, []) : [];
+    const tplQaStrings = tpl ? parseJsonSafe<string[]>(tpl.qaJson, []) : [];
+    const tplHoStrings = tpl ? parseJsonSafe<string[]>(tpl.handoverJson, []) : [];
+
+    const defaultReqs: CheckItem[] = [
+      { id: "rq1", label: "Logo received", done: false },
+      { id: "rq2", label: "Brand colours confirmed", done: false },
+      { id: "rq3", label: "Website copy received", done: false },
+    ];
+    const defaultDeps: ProjectDependency[] = [
+      { id: "dep1", label: "Client DNS / Domain access delegation", done: false },
+    ];
+    const defaultQa: CheckItem[] = [
+      { id: "qa1", label: "Tested on desktop", done: false },
+      { id: "qa2", label: "Mobile responsiveness tested", done: false },
+      { id: "qa3", label: "Forms tested", done: false },
+    ];
+    const defaultHo: CheckItem[] = [
+      { id: "ho1", label: "Client approval received", done: false },
+      { id: "ho2", label: "Handover completed", done: false },
+    ];
+    const defaultLinks: ProjectLink[] = [
+      { id: "lnk1", label: "Figma File", url: "https://figma.com/file/apexinnovations-3d", addedAt: ist.istDate },
+    ];
+
+    const initialReqs = (input.requirements && input.requirements.length > 0)
+      ? input.requirements
+      : tplReqStrings.length
+        ? tplReqStrings.map((l, idx) => ({ id: `rq${idx + 1}`, label: l, done: false }))
+        : defaultReqs;
+
+    const initialDeps = (input.dependencies && input.dependencies.length > 0)
+      ? input.dependencies
+      : defaultDeps;
+
+    const initialQa = (input.qa && input.qa.length > 0)
+      ? input.qa
+      : tplQaStrings.length
+        ? tplQaStrings.map((l, idx) => ({ id: `qa${idx + 1}`, label: l, done: false }))
+        : defaultQa;
+
+    const initialHo = (input.handover && input.handover.length > 0)
+      ? input.handover
+      : tplHoStrings.length
+        ? tplHoStrings.map((l, idx) => ({ id: `ho${idx + 1}`, label: l, done: false }))
+        : defaultHo;
+
+    const initialLinks = (input.links && input.links.length > 0)
+      ? input.links
+      : defaultLinks;
 
     const projectId = generateServerId("prj");
     const sideEffects = applyStatusSideEffects(
@@ -570,11 +623,11 @@ export async function createProjectRecord(
       priority: input.priority,
       projectOwnerId: input.projectOwnerId ?? "owner",
       memberIdsJson: JSON.stringify(input.memberIds ?? []),
-      dependenciesJson: JSON.stringify(input.dependencies ?? []),
-      requirementsJson: JSON.stringify(input.requirements ?? []),
-      qaJson: JSON.stringify(input.qa ?? []),
-      handoverJson: JSON.stringify(input.handover ?? []),
-      linksJson: JSON.stringify(input.links ?? []),
+      dependenciesJson: JSON.stringify(initialDeps),
+      requirementsJson: JSON.stringify(initialReqs),
+      qaJson: JSON.stringify(initialQa),
+      handoverJson: JSON.stringify(initialHo),
+      linksJson: JSON.stringify(initialLinks),
       deliveryJson: null,
       supportJson: JSON.stringify(input.support ?? { included: null }),
       carriedJson: JSON.stringify(input.carried ?? {}),

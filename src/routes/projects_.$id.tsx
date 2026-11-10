@@ -26,13 +26,22 @@ import { useProjectTaskDraft } from "@/lib/ai/projectTaskDraft";
 import { Sparkles } from "lucide-react";
 import { SupportAssistPanel } from "@/components/ai/SupportAssistPanel";
 import { ProjectDraftGuard } from "@/components/projects/ProjectDraftGuard";
+import { parsePilotSearch, useLeadPilotState } from "@/lib/api/pilotHook";
+import { AppShellSkeleton } from "@/components/crm/ShellPrimitives";
+import { PilotProjectDetailPage } from "@/components/pilot/PilotProjectDetailPage";
 
 type Tab = "overview" | "tasks" | "requirements" | "finance" | "activity" | "delivery";
 const TABS: Tab[] = ["overview", "tasks", "requirements", "finance", "activity", "delivery"];
 const TAB_TEXT: Record<Tab, string> = { overview: "Overview", tasks: "Tasks & milestones", requirements: "Client requirements", finance: "Finance", activity: "Activity", delivery: "Delivery & support" };
 
 export const Route = createFileRoute("/projects_/$id")({
-  validateSearch: (s: Record<string, unknown>): { tab?: Tab } => (TABS.includes(s["tab"] as Tab) ? { tab: s["tab"] as Tab } : {}),
+  validateSearch: (s: Record<string, unknown>): { tab?: Tab; pilot?: 1 | 0 } => {
+    const pilotObj = parsePilotSearch(s);
+    return {
+      ...(TABS.includes(s["tab"] as Tab) ? { tab: s["tab"] as Tab } : {}),
+      ...(pilotObj.pilot !== undefined ? { pilot: pilotObj.pilot } : {}),
+    };
+  },
   head: () => ({ meta: [
     { title: "Project details — Scale Flow Sales OS" },
     { name: "description", content: "Project workspace: tasks, client requirements, finance, delivery and support." },
@@ -40,8 +49,22 @@ export const Route = createFileRoute("/projects_/$id")({
     { property: "og:description", content: "One project's tasks, requirements, payments, delivery and support." },
     { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }, { name: "robots", content: "noindex" },
   ] }),
-  component: ProjectPage,
+  component: ProjectDetailEntry,
 });
+
+function ProjectDetailEntry() {
+  const { id } = Route.useParams();
+  const search = Route.useSearch();
+  const { pilotActive, pilotResolved } = useLeadPilotState(search.pilot);
+
+  if (pilotActive) {
+    return <PilotProjectDetailPage projectId={id} search={search} />;
+  }
+  if (!pilotResolved) {
+    return <AppShellSkeleton />;
+  }
+  return <ProjectPage />;
+}
 
 function ProjectPage() {
   const { id } = Route.useParams();

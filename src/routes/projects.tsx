@@ -24,12 +24,22 @@ import {
 import { CreateProjectDialog, ProgressBar, StagePill, StatusPill, useCanProject, usePeople, useProjectViewer } from "@/components/projects/ProjectParts";
 import type { Deal } from "@/lib/crm/types";
 import { cn } from "@/lib/utils";
+import { parsePilotSearch, useLeadPilotState } from "@/lib/api/pilotHook";
+import { AppShellSkeleton } from "@/components/crm/ShellPrimitives";
+import { PilotProjectsPage } from "@/components/pilot/PilotProjectsPage";
 
 type Tab = "overview" | "all" | "board" | "templates";
 const TABS: Tab[] = ["overview", "all", "board", "templates"];
 
 export const Route = createFileRoute("/projects")({
-  validateSearch: (s: Record<string, unknown>): { tab?: Tab; tag?: string } => ({ ...(TABS.includes(s["tab"] as Tab) ? { tab: s["tab"] as Tab } : {}), ...(typeof s["tag"] === "string" && s["tag"] ? { tag: s["tag"] } : {}) }),
+  validateSearch: (s: Record<string, unknown>): { tab?: Tab; tag?: string; pilot?: 1 | 0 } => {
+    const pilotObj = parsePilotSearch(s);
+    return {
+      ...(TABS.includes(s["tab"] as Tab) ? { tab: s["tab"] as Tab } : {}),
+      ...(typeof s["tag"] === "string" && s["tag"] ? { tag: s["tag"] } : {}),
+      ...(pilotObj.pilot !== undefined ? { pilot: pilotObj.pilot } : {}),
+    };
+  },
   head: () => ({ meta: [
     { title: "Project Desk — Scale Flow Sales OS" },
     { name: "description", content: "Track won deals through booking, tasks, delivery, payment collection and technical support." },
@@ -37,8 +47,21 @@ export const Route = createFileRoute("/projects")({
     { property: "og:description", content: "From won deal to delivered project and support, in one connected workspace." },
     { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" },
   ] }),
-  component: ProjectDesk,
+  component: ProjectsEntry,
 });
+
+function ProjectsEntry() {
+  const search = Route.useSearch();
+  const { pilotActive, pilotResolved } = useLeadPilotState(search.pilot);
+
+  if (pilotActive) {
+    return <PilotProjectsPage search={search} />;
+  }
+  if (!pilotResolved) {
+    return <AppShellSkeleton />;
+  }
+  return <ProjectDesk />;
+}
 
 function useVisibleProjects() {
   const projects = useCRM((s) => s.projects), deals = useCRM((s) => s.deals), leads = useCRM((s) => s.leads);

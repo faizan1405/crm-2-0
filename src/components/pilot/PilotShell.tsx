@@ -33,6 +33,7 @@ const PILOT_LINKS = [
   { to: "/deals" as const, label: "Finance (Pilot)", icon: Wallet, pilot: true },
   { to: "/sales-studio" as const, label: "Sales Studio (Pilot)", icon: FileText, pilot: true },
   { to: "/follow-ups" as const, label: "Follow-ups (Pilot)", icon: CalendarClock, pilot: true },
+  { to: "/projects" as const, label: "Projects (Pilot)", icon: FolderKanban, pilot: true },
   { to: "/leads/bin" as const, label: "Waste & deleted", icon: Trash2, pilot: true },
 ];
 

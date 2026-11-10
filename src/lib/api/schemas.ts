@@ -1200,3 +1200,396 @@ export const apiErrorEnvelopeSchema = z.object({
     conflict: z.record(z.string(), z.unknown()).optional(),
   }),
 });
+
+
+// ============================================================================
+// B5A / B5B PROJECTS, MILESTONES, TASKS, DELIVERABLES, SUPPORT SCHEMAS
+// ============================================================================
+
+export const PROJECT_STATUSES_API = [
+  "accepted",
+  "booked",
+  "awaiting_client",
+  "ready",
+  "in_progress",
+  "on_hold",
+  "completed",
+  "cancelled",
+] as const;
+export type ProjectStatusApi = (typeof PROJECT_STATUSES_API)[number];
+
+export const PROJECT_STAGES_API = [
+  "discovery",
+  "awaiting_content",
+  "design",
+  "development",
+  "testing",
+  "client_review",
+  "ready_to_launch",
+  "delivered",
+  "support",
+] as const;
+export type ProjectStageApi = (typeof PROJECT_STAGES_API)[number];
+
+export const PROJECT_PRIORITIES_API = ["high", "normal", "low"] as const;
+export type ProjectPriorityApi = (typeof PROJECT_PRIORITIES_API)[number];
+
+export const SUPPORT_STATUSES_API = ["not_set", "not_included", "scheduled", "active", "ended"] as const;
+export type SupportStatusApi = (typeof SUPPORT_STATUSES_API)[number];
+
+export const SUPPORT_KINDS_API = ["bug", "technical", "content", "integration", "general"] as const;
+export type SupportKindApi = (typeof SUPPORT_KINDS_API)[number];
+
+export const REQUEST_STATUSES_API = ["open", "in_progress", "resolved", "closed"] as const;
+export type RequestStatusApi = (typeof REQUEST_STATUSES_API)[number];
+
+export const SUPPORT_COVERAGES_API = ["undecided", "included", "billable"] as const;
+export type SupportCoverageApi = (typeof SUPPORT_COVERAGES_API)[number];
+
+export const DELIVERABLE_STATUSES_API = ["draft", "review", "approved", "rejected", "delivered"] as const;
+export type DeliverableStatusApi = (typeof DELIVERABLE_STATUSES_API)[number];
+
+export const DELIVERABLE_REVISION_STATUSES_API = ["submitted", "in_review", "changes_requested", "approved"] as const;
+export type DeliverableRevisionStatusApi = (typeof DELIVERABLE_REVISION_STATUSES_API)[number];
+
+export const checkItemSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  done: z.boolean(),
+  doneAt: z.string().optional(),
+  note: z.string().optional(),
+});
+export type CheckItemDto = z.infer<typeof checkItemSchema>;
+
+export const projectDependencySchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  done: z.boolean(),
+  doneAt: z.string().optional(),
+});
+export type ProjectDependencyDto = z.infer<typeof projectDependencySchema>;
+
+export const projectLinkSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  url: z.string(),
+  addedAt: z.string(),
+});
+export type ProjectLinkDto = z.infer<typeof projectLinkSchema>;
+
+export const projectDeliverySchema = z.object({
+  date: z.string(),
+  url: z.string().optional(),
+  notes: z.string().optional(),
+  deliveredBy: z.string(),
+  approval: z.enum(["pending", "approved", "not_required"]),
+  override: z.string().optional(),
+  incomplete: z.array(z.string()),
+});
+export type ProjectDeliveryDto = z.infer<typeof projectDeliverySchema>;
+
+export const projectSupportSchema = z.object({
+  included: z.boolean().nullable(),
+  months: z.number().optional(),
+  start: z.string().optional(),
+  end: z.string().optional(),
+  description: z.string().optional(),
+});
+export type ProjectSupportDto = z.infer<typeof projectSupportSchema>;
+
+export const projectDtoSchema = z.object({
+  id: z.string(),
+  ownerUserId: z.string(),
+  name: z.string(),
+  clientName: z.string(),
+  company: z.string().nullable(),
+  phone: z.string().nullable(),
+  email: z.string().nullable(),
+  leadId: z.string().nullable(),
+  dealId: z.string().nullable(),
+  templateId: z.string().nullable(),
+  legacyId: z.string().nullable(),
+  type: z.string(),
+  scope: z.string().nullable(),
+  bookingDate: z.string().nullable(),
+  plannedStart: z.string().nullable(),
+  actualStart: z.string().nullable(),
+  targetDelivery: z.string().nullable(),
+  status: z.enum(PROJECT_STATUSES_API),
+  stage: z.enum(PROJECT_STAGES_API),
+  priority: z.enum(PROJECT_PRIORITIES_API),
+  projectOwnerId: z.string().nullable(),
+  memberIds: z.array(z.string()),
+  dependencies: z.array(projectDependencySchema),
+  requirements: z.array(checkItemSchema),
+  qa: z.array(checkItemSchema),
+  handover: z.array(checkItemSchema),
+  links: z.array(projectLinkSchema),
+  delivery: projectDeliverySchema.nullable(),
+  support: projectSupportSchema,
+  carried: z.record(z.string(), z.unknown()),
+  notes: z.string().nullable(),
+  reviewFlag: z.string().nullable(),
+  attention: z
+    .object({
+      reason: z.string(),
+      at: z.string(),
+      ruleId: z.string().optional(),
+    })
+    .nullable(),
+  archived: z.boolean(),
+  archivedAt: z.string().nullable(),
+  version: z.number().int(),
+  progress: z.object({
+    total: z.number().int(),
+    done: z.number().int(),
+    pct: z.number().int().nullable(),
+    text: z.string(),
+  }),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type ProjectDto = z.infer<typeof projectDtoSchema>;
+
+export const projectMilestoneDtoSchema = z.object({
+  id: z.string(),
+  ownerUserId: z.string(),
+  projectId: z.string(),
+  title: z.string(),
+  dueDate: z.string().nullable(),
+  sortOrder: z.number().int(),
+  status: z.enum(["open", "completed"]),
+  completedAt: z.string().nullable(),
+  version: z.number().int(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type ProjectMilestoneDto = z.infer<typeof projectMilestoneDtoSchema>;
+
+export const projectTaskDtoSchema = z.object({
+  id: z.string(),
+  ownerUserId: z.string(),
+  projectId: z.string(),
+  milestoneId: z.string().nullable(),
+  title: z.string(),
+  notes: z.string().nullable(),
+  assigneeId: z.string().nullable(),
+  dueDate: z.string().nullable(),
+  priority: z.enum(PROJECT_PRIORITIES_API),
+  status: z.enum(["open", "done"]),
+  completedAt: z.string().nullable(),
+  completedBy: z.string().nullable(),
+  sortOrder: z.number().int(),
+  version: z.number().int(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type ProjectTaskDto = z.infer<typeof projectTaskDtoSchema>;
+
+export const projectDeliverableDtoSchema = z.object({
+  id: z.string(),
+  ownerUserId: z.string(),
+  projectId: z.string(),
+  title: z.string(),
+  description: z.string().nullable(),
+  category: z.string(),
+  status: z.enum(DELIVERABLE_STATUSES_API),
+  dueDate: z.string().nullable(),
+  deliveredAt: z.string().nullable(),
+  revisionCount: z.number().int(),
+  latestRevisionNotes: z.string().nullable(),
+  clientFeedback: z.string().nullable(),
+  version: z.number().int(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type ProjectDeliverableDto = z.infer<typeof projectDeliverableDtoSchema>;
+
+export const projectDeliverableRevisionDtoSchema = z.object({
+  id: z.string(),
+  deliverableId: z.string(),
+  revisionNumber: z.number().int(),
+  title: z.string().nullable(),
+  summary: z.string(),
+  fileUrl: z.string().nullable(),
+  notes: z.string().nullable(),
+  clientFeedback: z.string().nullable(),
+  status: z.enum(DELIVERABLE_REVISION_STATUSES_API),
+  createdByUserId: z.string(),
+  createdAt: z.string(),
+});
+export type ProjectDeliverableRevisionDto = z.infer<typeof projectDeliverableRevisionDtoSchema>;
+
+export const clientSupportTicketDtoSchema = z.object({
+  id: z.string(),
+  ownerUserId: z.string(),
+  projectId: z.string(),
+  kind: z.enum(SUPPORT_KINDS_API),
+  title: z.string(),
+  description: z.string().nullable(),
+  priority: z.enum(PROJECT_PRIORITIES_API),
+  assigneeId: z.string().nullable(),
+  dueDate: z.string().nullable(),
+  status: z.enum(REQUEST_STATUSES_API),
+  resolution: z.string().nullable(),
+  resolvedAt: z.string().nullable(),
+  resolvedByUserId: z.string().nullable(),
+  coverage: z.enum(SUPPORT_COVERAGES_API),
+  version: z.number().int(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type ClientSupportTicketDto = z.infer<typeof clientSupportTicketDtoSchema>;
+
+export const projectTemplateDtoSchema = z.object({
+  id: z.string(),
+  ownerUserId: z.string(),
+  name: z.string(),
+  type: z.string(),
+  builtIn: z.boolean(),
+  milestones: z.array(z.string()),
+  tasks: z.array(
+    z.object({
+      title: z.string(),
+      milestone: z.string().optional(),
+    }),
+  ),
+  requirements: z.array(z.string()),
+  qa: z.array(z.string()),
+  handover: z.array(z.string()),
+  archived: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type ProjectTemplateDto = z.infer<typeof projectTemplateDtoSchema>;
+
+export const projectAuditEventDtoSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  ownerUserId: z.string(),
+  actorUserId: z.string(),
+  eventType: z.string(),
+  summary: z.string(),
+  details: z.record(z.string(), z.unknown()).nullable(),
+  occurredIstDate: z.string(),
+  createdAt: z.string(),
+});
+export type ProjectAuditEventDto = z.infer<typeof projectAuditEventDtoSchema>;
+
+export const projectsListResponseSchema = z.object({
+  ok: z.literal(true),
+  items: z.array(projectDtoSchema),
+  total: z.number().int(),
+  limit: z.number().int(),
+  offset: z.number().int(),
+});
+export type ProjectsListResponse = z.infer<typeof projectsListResponseSchema>;
+
+export const projectDetailsResponseSchema = z.object({
+  ok: z.literal(true),
+  project: projectDtoSchema,
+  milestones: z.array(projectMilestoneDtoSchema),
+  tasks: z.array(projectTaskDtoSchema),
+  deliverables: z.array(projectDeliverableDtoSchema),
+  supportTickets: z.array(clientSupportTicketDtoSchema),
+  recentAuditEvents: z.array(projectAuditEventDtoSchema),
+});
+export type ProjectDetailsResponse = z.infer<typeof projectDetailsResponseSchema>;
+
+export const projectCreateResponseSchema = z.object({
+  ok: z.literal(true),
+  project: projectDtoSchema,
+});
+export type ProjectCreateResponse = z.infer<typeof projectCreateResponseSchema>;
+
+export const projectUpdateResponseSchema = z.object({
+  ok: z.literal(true),
+  project: projectDtoSchema,
+});
+export type ProjectUpdateResponse = z.infer<typeof projectUpdateResponseSchema>;
+
+export const projectOverviewMetricsResponseSchema = z.object({
+  ok: z.literal(true),
+  metrics: z.object({
+    active: z.number(),
+    awaiting: z.number(),
+    inProgress: z.number(),
+    overdue: z.number(),
+    delivered: z.number(),
+    openTasks: z.number(),
+    upcomingMilestones: z.number(),
+    openRequests: z.number(),
+  }),
+  attention: z.array(
+    z.object({
+      id: z.string(),
+      projectId: z.string(),
+      kind: z.string(),
+      text: z.string(),
+    }),
+  ),
+});
+export type ProjectOverviewMetricsResponse = z.infer<typeof projectOverviewMetricsResponseSchema>;
+
+export const projectMilestoneCreateResponseSchema = z.object({
+  ok: z.literal(true),
+  milestone: projectMilestoneDtoSchema,
+});
+export type ProjectMilestoneCreateResponse = z.infer<typeof projectMilestoneCreateResponseSchema>;
+
+export const projectMilestoneUpdateResponseSchema = z.object({
+  ok: z.literal(true),
+  milestone: projectMilestoneDtoSchema,
+});
+export type ProjectMilestoneUpdateResponse = z.infer<typeof projectMilestoneUpdateResponseSchema>;
+
+export const projectTaskCreateResponseSchema = z.object({
+  ok: z.literal(true),
+  task: projectTaskDtoSchema,
+});
+export type ProjectTaskCreateResponse = z.infer<typeof projectTaskCreateResponseSchema>;
+
+export const projectTaskUpdateResponseSchema = z.object({
+  ok: z.literal(true),
+  task: projectTaskDtoSchema,
+});
+export type ProjectTaskUpdateResponse = z.infer<typeof projectTaskUpdateResponseSchema>;
+
+export const projectDeliverableCreateResponseSchema = z.object({
+  ok: z.literal(true),
+  deliverable: projectDeliverableDtoSchema,
+});
+export type ProjectDeliverableCreateResponse = z.infer<typeof projectDeliverableCreateResponseSchema>;
+
+export const projectDeliverableRevisionCreateResponseSchema = z.object({
+  ok: z.literal(true),
+  deliverable: projectDeliverableDtoSchema,
+  revision: projectDeliverableRevisionDtoSchema,
+});
+export type ProjectDeliverableRevisionCreateResponse = z.infer<
+  typeof projectDeliverableRevisionCreateResponseSchema
+>;
+
+export const projectSupportTicketCreateResponseSchema = z.object({
+  ok: z.literal(true),
+  ticket: clientSupportTicketDtoSchema,
+});
+export type ProjectSupportTicketCreateResponse = z.infer<typeof projectSupportTicketCreateResponseSchema>;
+
+export const projectSupportTicketUpdateResponseSchema = z.object({
+  ok: z.literal(true),
+  ticket: clientSupportTicketDtoSchema,
+});
+export type ProjectSupportTicketUpdateResponse = z.infer<typeof projectSupportTicketUpdateResponseSchema>;
+
+export const projectTemplatesListResponseSchema = z.object({
+  ok: z.literal(true),
+  items: z.array(projectTemplateDtoSchema),
+});
+export type ProjectTemplatesListResponse = z.infer<typeof projectTemplatesListResponseSchema>;
+
+export const projectTemplateSaveResponseSchema = z.object({
+  ok: z.literal(true),
+  template: projectTemplateDtoSchema,
+});
+export type ProjectTemplateSaveResponse = z.infer<typeof projectTemplateSaveResponseSchema>;
