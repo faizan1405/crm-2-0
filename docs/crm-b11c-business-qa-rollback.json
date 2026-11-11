@@ -1,0 +1,59 @@
+{
+  "checkpoint": "B11C-BUSINESS-QA",
+  "capturedAt": "2026-11-11T19:04:00Z",
+  "stagingSite": "khaki-butterfly-345144.hostingersite.com",
+  "hostingUsername": "u256504187",
+  "databaseName": "u256504187_crm_b11c_stg",
+  "startingGitCommit": "532174d112c35b592e6b487ec15e46b8d858bb0b",
+  "startingGitBranch": "feat/b11c-business-final-qa",
+  "preQaLiveDeployment": {
+    "buildUuid": "01a1cbde-67a4-7053-9a02-06e80d62c061",
+    "state": "completed",
+    "createdAt": "2026-11-11T18:28:32Z",
+    "updatedAt": "2026-11-11T18:32:45Z",
+    "options": {
+      "node_version": 22,
+      "app_type": "nitro",
+      "root_directory": null,
+      "output_directory": ".output",
+      "build_script": "build",
+      "entry_file": "server/index.mjs",
+      "package_manager": "npm",
+      "source_type": "archive",
+      "source_options": {
+        "archive_path": "b11c-staging-src-v1-rb.zip"
+      }
+    }
+  },
+  "configuredEnvVarKeys": [
+    "NODE_ENV",
+    "DEV_LEAD_PILOT",
+    "APP_ORIGIN",
+    "BUSINESS_TIMEZONE",
+    "DB_HOST",
+    "DB_PORT",
+    "DB_NAME",
+    "DB_USER",
+    "DB_PASSWORD",
+    "DB_POOL_LIMIT",
+    "DB_SSL_MODE",
+    "PROOF_STORAGE_DRIVER",
+    "AI_PROVIDER",
+    "AUTH_TRUST_PROXY",
+    "AUTH_SECRET",
+    "SESSION_COOKIE_NAME"
+  ],
+  "rollbackInstructions": [
+    "To restore the pre-QA build from git commit dd95f6e (or re-upload archive from git archive dd95f6e), upload its source archive via Hostinger TUS upload URL and run hosting_nodejs_start-build on khaki-butterfly-345144.hostingersite.com.",
+    "Previous environment variable keys listed in configuredEnvVarKeys remain stored on Hostinger unless replaced."
+  ],
+  "untouchedTargets": [
+    "crm.joinscaleflow.in",
+    "minddesk.joinscaleflow.in",
+    "darkgray-louse-574826.hostingersite.com",
+    "u256504187_mhtest",
+    "u256504187_minddesk_v2",
+    "u256504187_minddesk_test",
+    "u256504187_minddesk"
+  ]
+}
