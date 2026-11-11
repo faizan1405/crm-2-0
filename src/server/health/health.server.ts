@@ -1,5 +1,11 @@
 import "@tanstack/react-start/server-only";
-import { loadServerEnv, summarizeSafeRuntimeEnv } from "../config/env.server";
+import {
+  assessProofStorageEnv,
+  loadServerEnv,
+  summarizeSafeRuntimeEnv,
+  type ProofStorageEnvAssessment,
+  type ServerEnv,
+} from "../config/env.server";
 import { getDatabaseStatus } from "../db/index.server";
 import { assessProofDirectorySafety } from "../storage/proofStorage.server";
 
@@ -21,8 +27,11 @@ export interface HealthResponseBody {
       status: "configured" | "not_configured";
     };
     storage: {
-      driver: "local-fs" | "object-storage";
+      driver: ServerEnv["PROOF_STORAGE_DRIVER"];
       isolationSafe: boolean;
+      productionReady: boolean;
+      failClosed: boolean;
+      durabilityStatus: ProofStorageEnvAssessment["status"];
     };
     ai: {
       mode: "demo";
@@ -40,6 +49,7 @@ export async function getHealthStatus(now: Date = new Date()): Promise<HealthRes
   const safe = summarizeSafeRuntimeEnv(env);
   const dbStatus = await getDatabaseStatus(false);
   const storageCheck = assessProofDirectorySafety(env.PROOF_STORAGE_DIR);
+  const storageEnv = assessProofStorageEnv(env);
 
   return {
     ok: true,
@@ -61,6 +71,9 @@ export async function getHealthStatus(now: Date = new Date()): Promise<HealthRes
       storage: {
         driver: safe.proofStorageDriver,
         isolationSafe: !storageCheck.unsafePublicOrBuildPath,
+        productionReady: storageEnv.productionReady,
+        failClosed: storageEnv.failClosed,
+        durabilityStatus: storageEnv.status,
       },
       ai: {
         mode: safe.aiProvider,

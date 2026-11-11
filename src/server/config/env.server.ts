@@ -39,12 +39,19 @@ export const serverEnvSchema = z.object({
 
   PROOF_STORAGE_DRIVER: z.preprocess(
     emptyToUndefined,
-    z.enum(["local-fs", "object-storage"]).default("local-fs"),
+    z
+      .enum(["local-fs", "object-storage", "hostinger-private-fs", "disposable-test", "disabled"])
+      .default("local-fs"),
   ),
   PROOF_STORAGE_DIR: z.preprocess(
     emptyToUndefined,
     z.string().min(1).default(".data/private-proofs"),
   ),
+  PROOF_PRODUCTION_DURABLE_CONFIRMED: z.preprocess(
+    emptyToUndefined,
+    z.enum(["true", "false"]).optional(),
+  ),
+  PROOF_TEST_STORAGE_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().max(1000).optional()),
 
   // B1B Owner authentication & session lifecycle configuration
   SESSION_COOKIE_NAME: z.preprocess(
@@ -273,6 +280,8 @@ export interface SafeRuntimeEnvSummary {
   dbPoolLimit: number;
   dbSslMode: ServerEnv["DB_SSL_MODE"];
   proofStorageDriver: ServerEnv["PROOF_STORAGE_DRIVER"];
+  proofProductionDurableConfirmed: boolean;
+  proofStorageFailClosed: boolean;
   sessionIdleTtlSeconds: number;
   sessionAbsoluteTtlSeconds: number;
   aiProvider: ServerEnv["AI_PROVIDER"];
@@ -298,6 +307,8 @@ function readEnvSnapshot(
     DB_SSL_MODE: raw["DB_SSL_MODE"],
     PROOF_STORAGE_DRIVER: raw["PROOF_STORAGE_DRIVER"],
     PROOF_STORAGE_DIR: raw["PROOF_STORAGE_DIR"],
+    PROOF_PRODUCTION_DURABLE_CONFIRMED: raw["PROOF_PRODUCTION_DURABLE_CONFIRMED"],
+    PROOF_TEST_STORAGE_ALLOWLIST: raw["PROOF_TEST_STORAGE_ALLOWLIST"],
     SESSION_COOKIE_NAME: raw["SESSION_COOKIE_NAME"],
     SESSION_IDLE_TTL_SECONDS: raw["SESSION_IDLE_TTL_SECONDS"],
     SESSION_ABSOLUTE_TTL_SECONDS: raw["SESSION_ABSOLUTE_TTL_SECONDS"],
@@ -386,6 +397,7 @@ export function getDatabaseConnectionConfig(env: ServerEnv): DatabaseConnectionC
 /** Safe, secret-free summary suitable for diagnostics and `/api/v1/health`. */
 export function summarizeSafeRuntimeEnv(env: ServerEnv): SafeRuntimeEnvSummary {
   const db = getDatabaseConnectionConfig(env);
+  const storageAssessment = assessProofStorageEnv(env);
   return {
     nodeEnv: env.NODE_ENV,
     businessTimezone: env.BUSINESS_TIMEZONE,
@@ -395,9 +407,266 @@ export function summarizeSafeRuntimeEnv(env: ServerEnv): SafeRuntimeEnvSummary {
     dbPoolLimit: db.poolLimit,
     dbSslMode: db.sslMode,
     proofStorageDriver: env.PROOF_STORAGE_DRIVER,
+    proofProductionDurableConfirmed: env.PROOF_PRODUCTION_DURABLE_CONFIRMED === "true",
+    proofStorageFailClosed: storageAssessment.failClosed,
     sessionIdleTtlSeconds: env.SESSION_IDLE_TTL_SECONDS,
     sessionAbsoluteTtlSeconds: env.SESSION_ABSOLUTE_TTL_SECONDS,
     aiProvider: env.AI_PROVIDER,
     leadPilotAvailable: isLeadPilotAvailable(env),
   };
+}
+
+export interface ProofStorageEnvAssessment {
+  driver: ServerEnv["PROOF_STORAGE_DRIVER"];
+  configured: boolean;
+  writable: boolean;
+  productionReady: boolean;
+  failClosed: boolean;
+  unsafePublicOrBuildPath: boolean;
+  isDefaultEphemeralDir: boolean;
+  status:
+    | "dev_local_only"
+    | "production_verified_private_dir"
+    | "blocked_disabled"
+    | "blocked_object_storage_unconfigured"
+    | "blocked_unsafe_path"
+    | "blocked_ephemeral_path"
+    | "blocked_durability_unverified";
+  blockedCode?: "storage_not_configured" | "storage_durability_blocked";
+  reasons: string[];
+}
+
+const UNSAFE_PUBLIC_OR_BUILD_DIR_REGEX =
+  /public_html|public[\\/]|hbuilds|\.output|\.next|[\\/]dist(?:[\\/]|$)/i;
+const DEFAULT_EPHEMERAL_DIR_REGEX = /(?:^|[\\/])\.data(?:[\\/]|$)/i;
+
+function isAbsolutePathCrossPlatform(dirPath: string): boolean {
+  const trimmed = dirPath.trim();
+  return /^(\/|[a-zA-Z]:[\\/]|\\\\)/.test(trimmed);
+}
+
+/**
+ * Assesses whether the configured payment-proof storage settings are safe and permitted
+ * in the active NODE_ENV. Production mode is strictly fail-closed until a verified durable
+ * private directory (or approved durable driver) is explicitly configured.
+ */
+export function assessProofStorageEnv(env: ServerEnv): ProofStorageEnvAssessment {
+  const driver = env.PROOF_STORAGE_DRIVER;
+  const rawDir = env.PROOF_STORAGE_DIR.trim();
+  const unsafePublicOrBuildPath = UNSAFE_PUBLIC_OR_BUILD_DIR_REGEX.test(rawDir);
+  const isDefaultEphemeralDir =
+    rawDir === ".data/private-proofs" || DEFAULT_EPHEMERAL_DIR_REGEX.test(rawDir);
+  const reasons: string[] = [];
+
+  if (unsafePublicOrBuildPath) {
+    reasons.push(
+      "Configured proof storage path lies inside a webroot or build/deploy artifact directory (public_html/public/hbuilds/.output/dist).",
+    );
+  }
+
+  if (driver === "disabled") {
+    return {
+      driver,
+      configured: false,
+      writable: false,
+      productionReady: false,
+      failClosed: true,
+      unsafePublicOrBuildPath,
+      isDefaultEphemeralDir,
+      status: "blocked_disabled",
+      blockedCode: "storage_not_configured",
+      reasons: [
+        ...reasons,
+        "PROOF_STORAGE_DRIVER is disabled; payment proof operations fail closed.",
+      ],
+    };
+  }
+
+  if (driver === "object-storage") {
+    return {
+      driver,
+      configured: false,
+      writable: false,
+      productionReady: false,
+      failClosed: true,
+      unsafePublicOrBuildPath,
+      isDefaultEphemeralDir,
+      status: "blocked_object_storage_unconfigured",
+      blockedCode: "storage_not_configured",
+      reasons: [
+        ...reasons,
+        "Object storage driver is not configured or approved for Hostinger Business hosting. Production and uploads fail closed with zero local fallback.",
+      ],
+    };
+  }
+
+  if (unsafePublicOrBuildPath) {
+    return {
+      driver,
+      configured: false,
+      writable: false,
+      productionReady: false,
+      failClosed: true,
+      unsafePublicOrBuildPath: true,
+      isDefaultEphemeralDir,
+      status: "blocked_unsafe_path",
+      blockedCode: "storage_not_configured",
+      reasons,
+    };
+  }
+
+  if (env.NODE_ENV === "production") {
+    if (driver === "disposable-test") {
+      return {
+        driver,
+        configured: false,
+        writable: false,
+        productionReady: false,
+        failClosed: true,
+        unsafePublicOrBuildPath: false,
+        isDefaultEphemeralDir,
+        status: "blocked_disabled",
+        blockedCode: "storage_not_configured",
+        reasons: ["disposable-test storage driver is forbidden in production."],
+      };
+    }
+
+    if (isDefaultEphemeralDir || !isAbsolutePathCrossPlatform(rawDir)) {
+      return {
+        driver,
+        configured: false,
+        writable: false,
+        productionReady: false,
+        failClosed: true,
+        unsafePublicOrBuildPath: false,
+        isDefaultEphemeralDir: true,
+        status: "blocked_ephemeral_path",
+        blockedCode: "storage_not_configured",
+        reasons: [
+          "Production proof storage cannot use the relative ephemeral '.data/private-proofs' directory.",
+        ],
+      };
+    }
+
+    if (env.PROOF_PRODUCTION_DURABLE_CONFIRMED !== "true") {
+      return {
+        driver,
+        configured: false,
+        writable: false,
+        productionReady: false,
+        failClosed: true,
+        unsafePublicOrBuildPath: false,
+        isDefaultEphemeralDir: false,
+        status: "blocked_durability_unverified",
+        blockedCode: "storage_durability_blocked",
+        reasons: [
+          "Production private proof storage durability is unverified on Hostinger Business shared hosting (PROOF_PRODUCTION_DURABLE_CONFIRMED is not 'true'). Production uploads fail closed.",
+        ],
+      };
+    }
+
+    return {
+      driver,
+      configured: true,
+      writable: true,
+      productionReady: true,
+      failClosed: false,
+      unsafePublicOrBuildPath: false,
+      isDefaultEphemeralDir: false,
+      status: "production_verified_private_dir",
+      reasons: ["Explicitly confirmed persistent private filesystem storage active."],
+    };
+  }
+
+  return {
+    driver,
+    configured: true,
+    writable: true,
+    productionReady: false,
+    failClosed: false,
+    unsafePublicOrBuildPath: false,
+    isDefaultEphemeralDir,
+    status: "dev_local_only",
+    reasons: [
+      isDefaultEphemeralDir
+        ? "Development/test local proof storage active; ephemeral .data fallback is forbidden in production."
+        : "Development/test local proof storage active; Hostinger production durability remains unverified.",
+    ],
+  };
+}
+
+export type DisposableProofStorageValidationResult =
+  | { ok: true; normalizedDir: string }
+  | {
+      ok: false;
+      code:
+        | "storage_dir_missing"
+        | "ephemeral_default_dir_forbidden"
+        | "unsafe_web_or_build_dir"
+        | "storage_dir_not_allowlisted";
+      message: string;
+    };
+
+/**
+ * Guards disposable test storage harnesses so isolated integration tests never point at
+ * production directories, `.data/private-proofs`, webroots, or unallowlisted paths.
+ */
+export function verifyDisposableProofTestStorageConfig(
+  targetDir: string,
+  rawEnv: Record<string, string | undefined> = process.env,
+): DisposableProofStorageValidationResult {
+  const trimmed = targetDir.trim();
+  if (!trimmed) {
+    return {
+      ok: false,
+      code: "storage_dir_missing",
+      message: "Disposable test proof storage directory must be explicitly provided.",
+    };
+  }
+
+  if (UNSAFE_PUBLIC_OR_BUILD_DIR_REGEX.test(trimmed)) {
+    return {
+      ok: false,
+      code: "unsafe_web_or_build_dir",
+      message: "Disposable test storage directory cannot reside inside public/build directories.",
+    };
+  }
+
+  if (trimmed === ".data/private-proofs" || DEFAULT_EPHEMERAL_DIR_REGEX.test(trimmed)) {
+    return {
+      ok: false,
+      code: "ephemeral_default_dir_forbidden",
+      message: "Disposable test storage directory cannot use '.data' paths.",
+    };
+  }
+
+  const normalizedTarget = trimmed
+    .replace(/[\\/]+/g, "/")
+    .replace(/\/+$/, "")
+    .toLowerCase();
+  const rawAllowlist = (rawEnv["PROOF_TEST_STORAGE_ALLOWLIST"] ?? "").trim();
+  if (rawAllowlist) {
+    const allowedPrefixes = rawAllowlist
+      .split(",")
+      .map((s) =>
+        s
+          .trim()
+          .replace(/[\\/]+/g, "/")
+          .replace(/\/+$/, "")
+          .toLowerCase(),
+      )
+      .filter((s) => s.length > 0);
+    const matches = allowedPrefixes.some(
+      (prefix) => normalizedTarget === prefix || normalizedTarget.startsWith(`${prefix}/`),
+    );
+    if (!matches) {
+      return {
+        ok: false,
+        code: "storage_dir_not_allowlisted",
+        message: "Disposable test storage directory does not match PROOF_TEST_STORAGE_ALLOWLIST.",
+      };
+    }
+  }
+
+  return { ok: true, normalizedDir: trimmed };
 }

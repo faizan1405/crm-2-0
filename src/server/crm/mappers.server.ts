@@ -55,10 +55,13 @@ export interface PaymentProofDto {
   fileSize: number;
   sha256: string;
   storageDriver: ProofStorageDriverKind;
+  storageStatus: "pending" | "committed" | "verified" | "missing" | "corrupted" | "orphan_cleaned";
   lifecycleStatus: "active" | "replaced" | "removed";
   version: number;
   uploadedByUserId: string;
   uploadedAt: string;
+  verifiedAt?: string;
+  verificationError?: string;
   removedAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -67,6 +70,7 @@ export interface PaymentProofDto {
 
 export function toPaymentProofDto(row: PaymentProofRow): PaymentProofDto {
   const uploadedAt = mysqlUtcToIso(row.uploadedAt) ?? row.uploadedAt;
+  const verifiedAt = mysqlUtcToIso(row.verifiedAt);
   const removedAt = mysqlUtcToIso(row.removedAt);
   const createdAt = mysqlUtcToIso(row.createdAt) ?? row.createdAt;
   const updatedAt = mysqlUtcToIso(row.updatedAt) ?? row.updatedAt;
@@ -82,10 +86,13 @@ export function toPaymentProofDto(row: PaymentProofRow): PaymentProofDto {
     fileSize: row.fileSize,
     sha256: row.sha256Hash,
     storageDriver: row.storageDriver as ProofStorageDriverKind,
+    storageStatus: (row.storageStatus ?? "verified") as PaymentProofDto["storageStatus"],
     lifecycleStatus: row.lifecycleStatus as "active" | "replaced" | "removed",
     version: row.version,
     uploadedByUserId: row.uploadedByUserId,
     uploadedAt,
+    ...(verifiedAt ? { verifiedAt } : {}),
+    ...(row.verificationError ? { verificationError: row.verificationError } : {}),
     ...(removedAt ? { removedAt } : {}),
     createdAt,
     updatedAt,

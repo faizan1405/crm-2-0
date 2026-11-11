@@ -206,7 +206,7 @@ export const VAULT_ENTITIES_INVENTORY: VaultInventoryItem[] = [
     verifiedByLiveRestore: true,
     status: "supported",
     description:
-      "Actual PNG, JPEG, and PDF proof binary bytes (Hostinger storage durability unverified).",
+      "Actual JPG, PNG, WebP, and PDF proof bytes with SHA-256 verification and fail-closed production gating (Hostinger production durability BLOCKED until Owner infrastructure verification).",
   },
   {
     number: 12,
@@ -459,9 +459,9 @@ export const VAULT_BLOCKERS: VaultBlocker[] = [
   {
     id: "blocker-storage-durability",
     severity: "critical",
-    title: "Hostinger Private Proof Storage Durability Unverified",
+    title: "Hostinger Production Private Proof Storage Blocked (Unverified Durability)",
     description:
-      "Binary payment proof files written to local disk (.data/private-proofs) are ephemeral across multi-node scaling, container rebuilds, and deployments on Hostinger. An S3/R2-compatible durable object storage driver must be configured before production rollout.",
+      "Current Hostinger Business shared hosting plan uses versioned hbuilds/public_html directories with 0 provisioned VPS instances and no native Hostinger managed S3 object storage. Production proof uploads fail closed without fallback until Owner verifies persistent non-build private storage on Hostinger VPS/volume or explicitly approves a durable backend.",
     status: "unverified",
   },
   {

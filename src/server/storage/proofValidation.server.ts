@@ -21,15 +21,22 @@ const EXT_TO_MIME: Record<string, ProofKind> = {
 };
 
 /**
- * Sniffs the authentic file MIME kind from the first 16 bytes of the file.
- * Exactly matches client-side sniffing in `src/lib/crm/attachments.ts`.
+ * Sniffs the authentic file MIME kind from the header magic bytes of the file.
+ * Supports JPG/JPEG, PNG, WebP, and PDF cleanly matching `src/lib/crm/attachments.ts`.
  */
 export function sniffProofKind(bytes: Uint8Array): ProofKind | null {
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+  if (
+    bytes.length >= 4 &&
+    bytes[0] === 0xff &&
+    bytes[1] === 0xd8 &&
+    bytes[2] === 0xff &&
+    bytes[3]! >= 0xc0 &&
+    bytes[3]! < 0xff
+  ) {
     return "image/jpeg";
   }
   if (
-    bytes.length >= 8 &&
+    bytes.length >= 12 &&
     bytes[0] === 0x89 &&
     bytes[1] === 0x50 &&
     bytes[2] === 0x4e &&
@@ -42,19 +49,144 @@ export function sniffProofKind(bytes: Uint8Array): ProofKind | null {
     return "image/png";
   }
   if (
-    bytes.length >= 12 &&
+    bytes.length >= 16 &&
     String.fromCharCode(bytes[0]!, bytes[1]!, bytes[2]!, bytes[3]!) === "RIFF" &&
     String.fromCharCode(bytes[8]!, bytes[9]!, bytes[10]!, bytes[11]!) === "WEBP"
   ) {
-    return "image/webp";
+    const vp8Tag = String.fromCharCode(bytes[12]!, bytes[13]!, bytes[14]!, bytes[15]!);
+    if (vp8Tag === "VP8 " || vp8Tag === "VP8L" || vp8Tag === "VP8X") {
+      return "image/webp";
+    }
   }
   if (
-    bytes.length >= 5 &&
-    String.fromCharCode(bytes[0]!, bytes[1]!, bytes[2]!, bytes[3]!, bytes[4]!) === "%PDF-"
+    bytes.length >= 8 &&
+    /^%PDF-\d\.\d/.test(
+      String.fromCharCode(
+        bytes[0]!,
+        bytes[1]!,
+        bytes[2]!,
+        bytes[3]!,
+        bytes[4]!,
+        bytes[5]!,
+        bytes[6]!,
+        bytes[7]!,
+      ),
+    )
   ) {
     return "application/pdf";
   }
   return null;
+}
+
+export function normalizeDeclaredProofMimeType(raw?: string | null): string | null {
+  if (!raw || typeof raw !== "string") return null;
+  const base = raw.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (!base || base === "application/octet-stream" || base === "binary/octet-stream") {
+    return null;
+  }
+  if (base === "image/jpg") return "image/jpeg";
+  return base;
+}
+
+/**
+ * Validates container-level structure for full uploaded payloads to reject truncated or corrupted files
+ * without false-rejecting minimal test signatures that omit full image streams.
+ */
+export function validateProofContainerStructure(kind: ProofKind, bytes: Uint8Array): void {
+  if (kind === "image/jpeg") {
+    // Only require trailing EOI (FF D9) if the JPEG payload has compressed scan/frame headers (SOF/SOS)
+    let hasFrameOrScan = false;
+    for (let i = 2; i < bytes.length - 1; i++) {
+      if (bytes[i] === 0xff) {
+        const marker = bytes[i + 1]!;
+        if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2 || marker === 0xda) {
+          hasFrameOrScan = true;
+          break;
+        }
+      }
+    }
+    if (hasFrameOrScan) {
+      let end = bytes.length;
+      while (end > 2 && bytes[end - 1] === 0x00 && bytes.length - end < 16) {
+        end--;
+      }
+      if (end < 4 || bytes[end - 2] !== 0xff || bytes[end - 1] !== 0xd9) {
+        throw new CrmServiceError(
+          400,
+          "file_corrupted",
+          "JPEG payment proof appears truncated or missing end-of-image marker.",
+        );
+      }
+    }
+    return;
+  }
+
+  if (kind === "image/png") {
+    const tag12 =
+      bytes.length >= 16 ? String.fromCharCode(bytes[12]!, bytes[13]!, bytes[14]!, bytes[15]!) : "";
+    if (tag12 === "IHDR") {
+      if (bytes.length < 33) {
+        throw new CrmServiceError(
+          400,
+          "file_corrupted",
+          "PNG payment proof has a truncated IHDR header chunk.",
+        );
+      }
+      const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      const width = dv.getUint32(16, false);
+      const height = dv.getUint32(20, false);
+      if (width === 0 || height === 0) {
+        throw new CrmServiceError(
+          400,
+          "file_corrupted",
+          "PNG payment proof has invalid zero image dimensions.",
+        );
+      }
+      const tailText = Buffer.from(bytes.subarray(Math.max(0, bytes.length - 64))).toString(
+        "latin1",
+      );
+      if (!tailText.includes("IEND")) {
+        throw new CrmServiceError(
+          400,
+          "file_corrupted",
+          "PNG payment proof appears truncated or missing IEND chunk.",
+        );
+      }
+    }
+    return;
+  }
+
+  if (kind === "image/webp") {
+    if (bytes.length > 16) {
+      const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      const riffPayloadSize = dv.getUint32(4, true);
+      const expectedTotal = riffPayloadSize + 8;
+      if (expectedTotal > bytes.length + 1) {
+        throw new CrmServiceError(
+          400,
+          "file_corrupted",
+          "WebP payment proof appears truncated compared to its RIFF container length.",
+        );
+      }
+    }
+    return;
+  }
+
+  if (kind === "application/pdf") {
+    const textSample = Buffer.from(bytes).toString("latin1");
+    if (/\b\d+\s+\d+\s+obj\b/.test(textSample) || /\btrailer\b|\bxref\b/.test(textSample)) {
+      const tailSlice = Buffer.from(bytes.subarray(Math.max(0, bytes.length - 1024))).toString(
+        "latin1",
+      );
+      if (!tailSlice.includes("%%EOF")) {
+        throw new CrmServiceError(
+          400,
+          "file_corrupted",
+          "PDF payment proof appears truncated or missing %%EOF trailer.",
+        );
+      }
+    }
+  }
 }
 
 export function extensionToProofKind(rawNameOrExt: string): ProofKind | null {
@@ -123,8 +255,10 @@ export function validateProofHeaderAndMetadata(params: {
   originalName: string;
   fileSize: number;
   headerBytes: Uint8Array;
+  declaredMimeType?: string | null | undefined;
+  fullBytes?: Uint8Array | undefined;
 }): ValidatedProofDescriptor {
-  const { originalName, fileSize, headerBytes } = params;
+  const { originalName, fileSize, headerBytes, declaredMimeType, fullBytes } = params;
 
   if (fileSize <= 0) {
     throw new CrmServiceError(400, "empty_file", "Payment proof file is empty (0 bytes).");
@@ -176,10 +310,31 @@ export function validateProofHeaderAndMetadata(params: {
     );
   }
 
+  const normalizedDeclaredMime = normalizeDeclaredProofMimeType(declaredMimeType);
+  if (normalizedDeclaredMime && normalizedDeclaredMime !== sniffedKind) {
+    throw new CrmServiceError(
+      400,
+      "invalid_file_type",
+      "Declared MIME Content-Type does not match detected file signature.",
+      {
+        details: {
+          declaredMimeType: normalizedDeclaredMime,
+          sniffedKind,
+        },
+      },
+    );
+  }
+
+  if (fullBytes) {
+    validateProofContainerStructure(sniffedKind, fullBytes);
+  } else {
+    validateProofContainerStructure(sniffedKind, headerBytes);
+  }
+
   const { sanitized, ext } = sanitizeProofFileName(originalName, "png");
 
   return {
-    originalFileName: originalName.trim().slice(0, 255),
+    originalFileName: sanitized,
     sanitizedFileName: sanitized,
     fileExtension: ext,
     mimeType: sniffedKind,

@@ -2,7 +2,8 @@
 
 > **Branch:** `feat/b3b-payment-proofs` (branched from `4607254` on `feat/b3a-finance-backend`)  
 > **Scope:** Server-side database schema (`crm_payment_proofs`), forward migration (`0006_b3b_payment_proofs.sql`), private storage engine (`ProofStorageBackend` with `LocalFsProofStorage` and pluggable `ObjectStorageProofStorage`), magic-byte sniffing (`JPEG`, `PNG`, `WebP`, `PDF`, `<= 10 MiB`), filename sanitization, atomic proof replacement, audit-retained removal, authenticated streaming download with security headers, and payment proof history APIs under `/api/v1/payments/:id/proof*`.  
-> **Non-Scope Enforced:** `src/routes/deals.tsx`, `src/lib/crm/store.ts` (`scale-flow-crm-2-demo`), and IndexedDB payment proofs (`scale-flow-payment-proofs`) remain 100% untouched. Deals UI integration is deferred to **B3C**.
+> **Non-Scope Enforced:** `src/routes/deals.tsx`, `src/lib/crm/store.ts` (`scale-flow-crm-2-demo`), and IndexedDB payment proofs (`scale-flow-payment-proofs`) remain 100% untouched. Deals UI integration is deferred to **B3C**.  
+> **B11A Security & Durability Update:** Silent `ObjectStorageProofStorage` local fallback was removed in Checkpoint B11A in favor of strict fail-closed production gating and Hostinger durability verification. See [docs/crm-b11a-durable-proof-storage.md](./crm-b11a-durable-proof-storage.md).
 
 ---
 

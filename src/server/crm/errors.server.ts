@@ -31,6 +31,8 @@ export type CrmErrorCode =
   | "empty_file"
   | "file_corrupted"
   | "storage_error"
+  | "storage_not_configured"
+  | "storage_durability_blocked"
   | "duplicate_quotation"
   | "quotation_not_found"
   | "deal_not_found"

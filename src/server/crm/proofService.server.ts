@@ -29,8 +29,21 @@ import type {
 
 export interface AttachProofPayload {
   originalFileName: string;
+  declaredMimeType?: string | null | undefined;
   streamOrBuffer: Buffer | Uint8Array | NodeJS.ReadableStream | ReadableStream<Uint8Array>;
   maxBytes?: number | undefined;
+}
+
+function assertProofStorageOperational(storage: ProofStorageBackend): void {
+  const health = storage.healthSummary();
+  if (health.failClosed || !health.writable) {
+    throw new CrmServiceError(
+      503,
+      health.blockedCode ?? "storage_not_configured",
+      health.reasons?.[0] ??
+        "Private payment proof storage is not durably configured for this runtime.",
+    );
+  }
 }
 
 export async function attachPaymentProofRecord(
@@ -58,11 +71,13 @@ export async function attachPaymentProofRecord(
   const nowUtc = toMysqlUtcDateTime(now);
   const istDate = toIstParts(now).istDate;
   const storage = options?.storageBackend ?? getProofStorageBackend();
+  assertProofStorageOperational(storage);
 
-  // Step 1: Stage upload and validate file integrity, headers and mime signature
+  // Step 1: Stage upload and validate file integrity, headers, declared MIME, and magic signature
   const staged = await storage.stageUpload({
     ownerUserId,
     originalFileName: payload.originalFileName,
+    declaredMimeType: payload.declaredMimeType,
     streamOrBuffer: payload.streamOrBuffer,
     maxBytes: payload.maxBytes,
   });
@@ -145,7 +160,7 @@ export async function attachPaymentProofRecord(
         );
       }
 
-      // Step 5: Move staged file to permanent private storage
+      // Step 5: Move staged file to permanent private storage and verify persisted integrity
       const proofId = generateServerId("proof");
       const persisted = await storage.persistStagedProof({
         ownerUserId,
@@ -153,6 +168,7 @@ export async function attachPaymentProofRecord(
         tempKey: staged.tempKey,
         ext: staged.descriptor.fileExtension,
         expectedSha256: staged.sha256,
+        expectedByteSize: staged.byteSize,
       });
       newlyPersistedKey = persisted.storageKey;
 
@@ -166,10 +182,14 @@ export async function attachPaymentProofRecord(
         originalFileName: staged.descriptor.sanitizedFileName,
         fileExtension: staged.descriptor.fileExtension,
         mimeType: staged.descriptor.mimeType,
-        fileSize: staged.byteSize,
-        sha256Hash: staged.sha256,
+        fileSize: persisted.byteSize,
+        sha256Hash: persisted.sha256,
         storageDriver: storage.driver,
         storageKey: persisted.storageKey,
+        storageStatus: "verified" as const,
+        storageProviderId: storage.driver,
+        verifiedAt: nowUtc,
+        verificationError: null,
         lifecycleStatus: "active" as const,
         activePaymentLock: paymentId,
         replacedByProofId: null,
@@ -248,11 +268,15 @@ export async function attachPaymentProofRecord(
       };
     });
 
+    if (result.replayed) {
+      await storage.deleteTemp(staged.tempKey).catch(() => undefined);
+    }
+
     return result;
   } catch (err) {
     // If the database transaction failed after writing the file, purge the newly persisted file (orphan prevention)
     if (newlyPersistedKey) {
-      await storage.deleteProof(newlyPersistedKey).catch(() => undefined);
+      await storage.deletePrivateObject(newlyPersistedKey).catch(() => undefined);
     } else {
       await storage.deleteTemp(staged.tempKey).catch(() => undefined);
     }
@@ -287,11 +311,13 @@ export async function replacePaymentProofRecord(
   const nowUtc = toMysqlUtcDateTime(now);
   const istDate = toIstParts(now).istDate;
   const storage = options?.storageBackend ?? getProofStorageBackend();
+  assertProofStorageOperational(storage);
 
   // Step 1: Stage upload and validate file integrity
   const staged = await storage.stageUpload({
     ownerUserId,
     originalFileName: payload.originalFileName,
+    declaredMimeType: payload.declaredMimeType,
     streamOrBuffer: payload.streamOrBuffer,
     maxBytes: payload.maxBytes,
   });
@@ -396,7 +422,7 @@ export async function replacePaymentProofRecord(
         );
       }
 
-      // Step 5: Move new staged file to permanent private storage
+      // Step 5: Move new staged file to permanent private storage and verify persisted integrity
       const newProofId = generateServerId("proof");
       const persisted = await storage.persistStagedProof({
         ownerUserId,
@@ -404,6 +430,7 @@ export async function replacePaymentProofRecord(
         tempKey: staged.tempKey,
         ext: staged.descriptor.fileExtension,
         expectedSha256: staged.sha256,
+        expectedByteSize: staged.byteSize,
       });
       newlyPersistedKey = persisted.storageKey;
 
@@ -446,10 +473,14 @@ export async function replacePaymentProofRecord(
         originalFileName: staged.descriptor.sanitizedFileName,
         fileExtension: staged.descriptor.fileExtension,
         mimeType: staged.descriptor.mimeType,
-        fileSize: staged.byteSize,
-        sha256Hash: staged.sha256,
+        fileSize: persisted.byteSize,
+        sha256Hash: persisted.sha256,
         storageDriver: storage.driver,
         storageKey: persisted.storageKey,
+        storageStatus: "verified",
+        storageProviderId: storage.driver,
+        verifiedAt: nowUtc,
+        verificationError: null,
         lifecycleStatus: "active",
         activePaymentLock: paymentId,
         replacedByProofId: null,
@@ -542,10 +573,14 @@ export async function replacePaymentProofRecord(
       };
     });
 
+    if (result.replayed) {
+      await storage.deleteTemp(staged.tempKey).catch(() => undefined);
+    }
+
     return result;
   } catch (err) {
     if (newlyPersistedKey) {
-      await storage.deleteProof(newlyPersistedKey).catch(() => undefined);
+      await storage.deletePrivateObject(newlyPersistedKey).catch(() => undefined);
     } else {
       await storage.deleteTemp(staged.tempKey).catch(() => undefined);
     }
@@ -838,6 +873,7 @@ export async function readPaymentProofContent(
   options?: {
     proofId?: string | undefined;
     storageBackend?: ProofStorageBackend | undefined;
+    verifyIntegrity?: boolean | undefined;
   },
 ): Promise<{
   stream: NodeJS.ReadableStream;
@@ -891,6 +927,29 @@ export async function readPaymentProofContent(
   }
 
   const storage = options?.storageBackend ?? getProofStorageBackend();
+  const shouldVerify = options?.verifyIntegrity ?? true;
+
+  if (shouldVerify) {
+    const verified = await storage.getPrivateObject(proofRow.storageKey, {
+      sha256: proofRow.sha256Hash,
+      byteSize: proofRow.fileSize,
+    });
+    if (!verified) {
+      throw new CrmServiceError(
+        500,
+        "storage_error",
+        "Payment proof file is missing from private storage.",
+        { details: { proofId: proofRow.id, status: "missing" } },
+      );
+    }
+
+    return {
+      stream: verified.stream,
+      proof: toPaymentProofDto(proofRow),
+      byteSize: verified.byteSize,
+    };
+  }
+
   const fileContent = await storage.readProofStream(proofRow.storageKey);
 
   if (!fileContent) {
@@ -898,7 +957,7 @@ export async function readPaymentProofContent(
       500,
       "storage_error",
       "Payment proof file is missing from private storage.",
-      { details: { storageKey: proofRow.storageKey } },
+      { details: { proofId: proofRow.id, status: "missing" } },
     );
   }
 
@@ -909,12 +968,216 @@ export async function readPaymentProofContent(
   };
 }
 
+export interface ProofConsistencyItemReport {
+  proofId: string;
+  paymentId: string;
+  lifecycleStatus: string;
+  verificationStatus: "verified" | "missing" | "size_mismatch" | "checksum_mismatch" | "unreadable";
+  persistedStorageStatus: "verified" | "missing" | "corrupted";
+  expectedBytes: number;
+  actualBytes: number;
+  reason?: string;
+}
+
+export async function verifyPaymentProofStorage(
+  db: CrmDatabase,
+  ownerUserId: string,
+  paymentId: string,
+  options?: {
+    proofId?: string | undefined;
+    storageBackend?: ProofStorageBackend | undefined;
+    persistStatus?: boolean | undefined;
+    now?: Date | undefined;
+  },
+): Promise<ProofConsistencyItemReport> {
+  const nowUtc = toMysqlUtcDateTime(options?.now ?? new Date());
+  const rows = options?.proofId
+    ? await db
+        .select()
+        .from(crmPaymentProofs)
+        .where(
+          and(
+            eq(crmPaymentProofs.id, options.proofId),
+            eq(crmPaymentProofs.paymentId, paymentId),
+            eq(crmPaymentProofs.ownerUserId, ownerUserId),
+          ),
+        )
+        .limit(1)
+    : await db
+        .select()
+        .from(crmPaymentProofs)
+        .where(
+          and(
+            eq(crmPaymentProofs.paymentId, paymentId),
+            eq(crmPaymentProofs.ownerUserId, ownerUserId),
+            eq(crmPaymentProofs.activePaymentLock, paymentId),
+          ),
+        )
+        .limit(1);
+
+  const proofRow = rows[0];
+  if (!proofRow) {
+    throw new CrmServiceError(404, "proof_not_found", "Payment proof not found.");
+  }
+
+  const storage = options?.storageBackend ?? getProofStorageBackend();
+  const verification = await storage.verifyPrivateObject(proofRow.storageKey, {
+    sha256: proofRow.sha256Hash,
+    byteSize: proofRow.fileSize,
+  });
+
+  const persistedStorageStatus: "verified" | "missing" | "corrupted" = verification.ok
+    ? "verified"
+    : verification.status === "missing"
+      ? "missing"
+      : "corrupted";
+  const safeError = verification.ok
+    ? null
+    : (verification.reason ?? "Integrity verification failed.").slice(0, 250);
+
+  if (options?.persistStatus !== false) {
+    await db
+      .update(crmPaymentProofs)
+      .set({
+        storageStatus: persistedStorageStatus,
+        verifiedAt: nowUtc,
+        verificationError: safeError,
+        updatedAt: nowUtc,
+      })
+      .where(
+        and(eq(crmPaymentProofs.id, proofRow.id), eq(crmPaymentProofs.ownerUserId, ownerUserId)),
+      );
+  }
+
+  return {
+    proofId: proofRow.id,
+    paymentId: proofRow.paymentId,
+    lifecycleStatus: proofRow.lifecycleStatus,
+    verificationStatus: verification.status,
+    persistedStorageStatus,
+    expectedBytes: proofRow.fileSize,
+    actualBytes: verification.byteSize,
+    ...(safeError ? { reason: safeError } : {}),
+  };
+}
+
+export async function inspectOwnerProofStorageConsistency(
+  db: CrmDatabase,
+  ownerUserId: string,
+  options?: {
+    storageBackend?: ProofStorageBackend | undefined;
+    persistStatus?: boolean | undefined;
+    minAgeMs?: number | undefined;
+    now?: Date | undefined;
+  },
+): Promise<{
+  totalProofRecords: number;
+  activeProofRecords: number;
+  historicalProofRecords: number;
+  verifiedCount: number;
+  missingCount: number;
+  corruptedCount: number;
+  orphanFileCount: number;
+  staleTempCount: number;
+  items: ProofConsistencyItemReport[];
+}> {
+  const storage = options?.storageBackend ?? getProofStorageBackend();
+  const nowUtc = toMysqlUtcDateTime(options?.now ?? new Date());
+  const rows = await db
+    .select()
+    .from(crmPaymentProofs)
+    .where(eq(crmPaymentProofs.ownerUserId, ownerUserId));
+
+  let activeProofRecords = 0;
+  let historicalProofRecords = 0;
+  let verifiedCount = 0;
+  let missingCount = 0;
+  let corruptedCount = 0;
+  const items: ProofConsistencyItemReport[] = [];
+
+  for (const row of rows) {
+    if (row.activePaymentLock === row.paymentId && row.lifecycleStatus === "active") {
+      activeProofRecords++;
+    } else {
+      historicalProofRecords++;
+    }
+
+    const verification = await storage.verifyPrivateObject(row.storageKey, {
+      sha256: row.sha256Hash,
+      byteSize: row.fileSize,
+    });
+    const persistedStorageStatus: "verified" | "missing" | "corrupted" = verification.ok
+      ? "verified"
+      : verification.status === "missing"
+        ? "missing"
+        : "corrupted";
+    const safeError = verification.ok
+      ? null
+      : (verification.reason ?? "Integrity verification failed.").slice(0, 250);
+
+    if (persistedStorageStatus === "verified") verifiedCount++;
+    else if (persistedStorageStatus === "missing") missingCount++;
+    else corruptedCount++;
+
+    if (options?.persistStatus) {
+      await db
+        .update(crmPaymentProofs)
+        .set({
+          storageStatus: persistedStorageStatus,
+          verifiedAt: nowUtc,
+          verificationError: safeError,
+          updatedAt: nowUtc,
+        })
+        .where(and(eq(crmPaymentProofs.id, row.id), eq(crmPaymentProofs.ownerUserId, ownerUserId)));
+    }
+
+    items.push({
+      proofId: row.id,
+      paymentId: row.paymentId,
+      lifecycleStatus: row.lifecycleStatus,
+      verificationStatus: verification.status,
+      persistedStorageStatus,
+      expectedBytes: row.fileSize,
+      actualBytes: verification.byteSize,
+      ...(safeError ? { reason: safeError } : {}),
+    });
+  }
+
+  // Only inspect global storage orphans against ALL DB rows across all owners so Owner A doesn't count Owner B files as orphans
+  const allRows = await db
+    .select({ storageKey: crmPaymentProofs.storageKey })
+    .from(crmPaymentProofs);
+  const allReferencedKeys = new Set(allRows.map((r) => r.storageKey));
+  let orphanFileCount = 0;
+  let staleTempCount = 0;
+  if (!storage.healthSummary().failClosed) {
+    const orphans = await storage.listOrphanedObjects(allReferencedKeys, {
+      minAgeMs: options?.minAgeMs ?? 15 * 60 * 1000,
+    });
+    orphanFileCount = orphans.unreferencedFiles.length;
+    staleTempCount = orphans.staleTempFiles.length;
+  }
+
+  return {
+    totalProofRecords: rows.length,
+    activeProofRecords,
+    historicalProofRecords,
+    verifiedCount,
+    missingCount,
+    corruptedCount,
+    orphanFileCount,
+    staleTempCount,
+    items,
+  };
+}
+
 export async function reconcileOrphanProofFiles(
   db: CrmDatabase,
   options?: {
     storageBackend?: ProofStorageBackend | undefined;
     deleteOrphans?: boolean | undefined;
     minAgeMs?: number | undefined;
+    tempMaxAgeMs?: number | undefined;
   },
 ): Promise<{
   activeDbCount: number;
@@ -922,25 +1185,30 @@ export async function reconcileOrphanProofFiles(
   deletedOrphans: string[];
   missingKeys: string[];
   gracePeriodSkippedCount: number;
+  staleTempFiles: string[];
+  deletedTempFiles: number;
 }> {
   const storage = options?.storageBackend ?? getProofStorageBackend();
-  const rows = await db
-    .select({ storageKey: crmPaymentProofs.storageKey })
-    .from(crmPaymentProofs);
+  const rows = await db.select({ storageKey: crmPaymentProofs.storageKey }).from(crmPaymentProofs);
 
   const activeKeys = new Set(rows.map((r) => r.storageKey));
-  const { unreferencedFiles, missingKeys, gracePeriodSkippedCount } = await storage.reconcileStorage(
-    activeKeys,
-    options?.minAgeMs !== undefined ? { minAgeMs: options.minAgeMs } : undefined,
-  );
+  const { unreferencedFiles, missingKeys, gracePeriodSkippedCount, staleTempFiles } =
+    await storage.listOrphanedObjects(activeKeys, {
+      minAgeMs: options?.minAgeMs,
+      tempMaxAgeMs: options?.tempMaxAgeMs,
+    });
 
   const deletedOrphans: string[] = [];
+  let deletedTempFiles = 0;
   if (options?.deleteOrphans) {
     for (const file of unreferencedFiles) {
-      const deleted = await storage.deleteProof(file);
+      const deleted = await storage.deletePrivateObject(file);
       if (deleted) {
         deletedOrphans.push(file);
       }
+    }
+    if (staleTempFiles.length > 0) {
+      deletedTempFiles = await storage.cleanupAbandonedTemp(options?.tempMaxAgeMs ?? 3_600_000);
     }
   }
 
@@ -950,5 +1218,7 @@ export async function reconcileOrphanProofFiles(
     deletedOrphans,
     missingKeys,
     gracePeriodSkippedCount,
+    staleTempFiles,
+    deletedTempFiles,
   };
 }

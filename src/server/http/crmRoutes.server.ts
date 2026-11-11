@@ -82,11 +82,14 @@ import {
 import {
   attachPaymentProofRecord,
   getActivePaymentProof,
+  inspectOwnerProofStorageConsistency,
   listPaymentProofHistory,
   readPaymentProofContent,
   removePaymentProofRecord,
   replacePaymentProofRecord,
+  verifyPaymentProofStorage,
 } from "../crm/proofService.server";
+import { getProofStorageBackend } from "../storage/proofStorage.server";
 import {
   archiveQuotationRecord,
   changeQuotationStatusRecord,
@@ -470,9 +473,17 @@ async function parseJsonObject(
 
 interface ParsedProofUpload {
   originalFileName: string;
+  declaredMimeType?: string | undefined;
   fileBuffer: Buffer;
   reason?: string | undefined;
   idempotencyKey?: string | undefined;
+  expectedProofVersion?: number | undefined;
+}
+
+function parseOptionalVersionInput(raw: unknown): number | undefined {
+  if (raw === undefined || raw === null || raw === "") return undefined;
+  const num = Number(raw);
+  return Number.isFinite(num) ? num : -1;
 }
 
 const MAX_PROOF_BYTES = 10 * 1024 * 1024; // 10 MiB
@@ -522,9 +533,17 @@ async function parseProofUploadRequest(
 
       const file = fileEntry as unknown as {
         name?: string;
+        type?: string;
         arrayBuffer: () => Promise<ArrayBuffer>;
       };
       const originalFileName = file.name || "payment-proof";
+      const formMimeVal = formData.get("mimeType");
+      const declaredMimeType =
+        typeof formMimeVal === "string" && formMimeVal.trim()
+          ? formMimeVal.trim()
+          : typeof file.type === "string" && file.type.trim()
+            ? file.type.trim()
+            : undefined;
       const arrayBuffer = await file.arrayBuffer();
       const fileBuffer = Buffer.from(arrayBuffer);
 
@@ -568,14 +587,19 @@ async function parseProofUploadRequest(
         typeof idKeyVal === "string" && idKeyVal.trim()
           ? idKeyVal.trim()
           : (request.headers.get("idempotency-key") ?? undefined);
+      const expectedProofVersion = parseOptionalVersionInput(
+        formData.get("expectedProofVersion") ?? request.headers.get("x-expected-proof-version"),
+      );
 
       return {
         ok: true,
         payload: {
           originalFileName,
+          declaredMimeType,
           fileBuffer,
           reason,
           idempotencyKey,
+          expectedProofVersion,
         },
       };
     } catch (err) {
@@ -675,6 +699,9 @@ async function parseProofUploadRequest(
     const fileNameVal = data["fileName"] ?? data["originalFileName"];
     const fileName =
       typeof fileNameVal === "string" && fileNameVal.trim() ? fileNameVal.trim() : "payment-proof";
+    const mimeVal = data["mimeType"] ?? data["contentType"];
+    const declaredMimeType =
+      typeof mimeVal === "string" && mimeVal.trim() ? mimeVal.trim() : undefined;
     const reasonVal = data["reason"];
     const reason = typeof reasonVal === "string" && reasonVal.trim() ? reasonVal.trim() : undefined;
     const idempotencyKeyVal = data["idempotencyKey"];
@@ -682,14 +709,19 @@ async function parseProofUploadRequest(
       typeof idempotencyKeyVal === "string" && idempotencyKeyVal.trim()
         ? idempotencyKeyVal.trim()
         : (request.headers.get("idempotency-key") ?? undefined);
+    const expectedProofVersion = parseOptionalVersionInput(
+      data["expectedProofVersion"] ?? request.headers.get("x-expected-proof-version"),
+    );
 
     return {
       ok: true,
       payload: {
         originalFileName: fileName,
+        declaredMimeType,
         fileBuffer,
         reason,
         idempotencyKey,
+        expectedProofVersion,
       },
     };
   }
@@ -735,17 +767,27 @@ async function parseProofUploadRequest(
     const originalFileName = fileNameHeader
       ? decodeURIComponent(fileNameHeader.trim())
       : "payment-proof";
+    const rawMimeHeader =
+      request.headers.get("x-file-mime") ??
+      request.headers.get("x-mime-type") ??
+      (contentType && !contentType.startsWith("application/octet-stream") ? contentType : null);
+    const declaredMimeType = rawMimeHeader ? rawMimeHeader.trim() : undefined;
     const reasonHeader = request.headers.get("x-reason");
     const reason = reasonHeader ? decodeURIComponent(reasonHeader.trim()) : undefined;
     const idempotencyKey = request.headers.get("idempotency-key") ?? undefined;
+    const expectedProofVersion = parseOptionalVersionInput(
+      request.headers.get("x-expected-proof-version"),
+    );
 
     return {
       ok: true,
       payload: {
         originalFileName,
+        declaredMimeType,
         fileBuffer,
         reason,
         idempotencyKey,
+        expectedProofVersion,
       },
     };
   } catch (err) {
@@ -2118,11 +2160,17 @@ export async function handleCrmApiRequest(
             const upload = await parseProofUploadRequest(request);
             if (!upload.ok) return upload.response;
 
-            const replaceInput = replaceProofBodySchema.parse({ reason: upload.payload.reason });
+            const replaceInput = replaceProofBodySchema.parse({
+              reason: upload.payload.reason,
+              ...(upload.payload.expectedProofVersion !== undefined
+                ? { expectedProofVersion: upload.payload.expectedProofVersion }
+                : {}),
+            });
             const idemKey = resolveEffectiveIdempotencyKey({
               headerKey: request.headers.get("idempotency-key"),
               bodyKey: upload.payload.idempotencyKey,
             });
+            const storageBackend = getProofStorageBackend({ env });
 
             const res = await replacePaymentProofRecord(
               auth.db,
@@ -2131,10 +2179,11 @@ export async function handleCrmApiRequest(
               paymentId,
               {
                 originalFileName: upload.payload.originalFileName,
+                declaredMimeType: upload.payload.declaredMimeType,
                 streamOrBuffer: upload.payload.fileBuffer,
               },
               replaceInput,
-              { idempotencyKey: idemKey },
+              { idempotencyKey: idemKey, storageBackend },
             );
 
             return jsonResponse(
@@ -2152,8 +2201,10 @@ export async function handleCrmApiRequest(
             if (!auth.ok) return auth.response;
 
             const proofIdParam = parsedUrl.searchParams.get("proofId") || undefined;
+            const storageBackend = getProofStorageBackend({ env });
             const downloadRes = await readPaymentProofContent(auth.db, auth.userId, paymentId, {
               proofId: proofIdParam,
+              storageBackend,
             });
 
             const isDownload =
@@ -2180,10 +2231,30 @@ export async function handleCrmApiRequest(
                 "content-security-policy",
                 "default-src 'none'; style-src 'unsafe-inline'; sandbox",
               );
+            } else {
+              headers.set("content-security-policy", "default-src 'none'; sandbox");
             }
 
             const webStream = Readable.toWeb(downloadRes.stream as Readable);
             return new Response(webStream as unknown as BodyInit, { status: 200, headers });
+          }
+
+          // GET /api/v1/payments/:id/proof/verify
+          if (action === "verify") {
+            if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+            const auth = await requireAuthenticatedOwnerDb(request, env);
+            if (!auth.ok) return auth.response;
+
+            const proofIdParam = parsedUrl.searchParams.get("proofId") || undefined;
+            const persistParam = parsedUrl.searchParams.get("persist") === "1";
+            const storageBackend = getProofStorageBackend({ env });
+            const verification = await verifyPaymentProofStorage(auth.db, auth.userId, paymentId, {
+              proofId: proofIdParam,
+              storageBackend,
+              persistStatus: persistParam,
+            });
+            return jsonResponse({ ok: true, verification }, 200);
           }
 
           // GET /api/v1/payments/:id/proof/history
@@ -2230,6 +2301,7 @@ export async function handleCrmApiRequest(
               headerKey: request.headers.get("idempotency-key"),
               bodyKey: upload.payload.idempotencyKey,
             });
+            const storageBackend = getProofStorageBackend({ env });
 
             const res = await attachPaymentProofRecord(
               auth.db,
@@ -2238,9 +2310,10 @@ export async function handleCrmApiRequest(
               paymentId,
               {
                 originalFileName: upload.payload.originalFileName,
+                declaredMimeType: upload.payload.declaredMimeType,
                 streamOrBuffer: upload.payload.fileBuffer,
               },
-              { idempotencyKey: idemKey },
+              { idempotencyKey: idemKey, storageBackend },
             );
 
             return jsonResponse(
@@ -2261,11 +2334,17 @@ export async function handleCrmApiRequest(
             const upload = await parseProofUploadRequest(request);
             if (!upload.ok) return upload.response;
 
-            const replaceInput = replaceProofBodySchema.parse({ reason: upload.payload.reason });
+            const replaceInput = replaceProofBodySchema.parse({
+              reason: upload.payload.reason,
+              ...(upload.payload.expectedProofVersion !== undefined
+                ? { expectedProofVersion: upload.payload.expectedProofVersion }
+                : {}),
+            });
             const idemKey = resolveEffectiveIdempotencyKey({
               headerKey: request.headers.get("idempotency-key"),
               bodyKey: upload.payload.idempotencyKey,
             });
+            const storageBackend = getProofStorageBackend({ env });
 
             const res = await replacePaymentProofRecord(
               auth.db,
@@ -2274,10 +2353,11 @@ export async function handleCrmApiRequest(
               paymentId,
               {
                 originalFileName: upload.payload.originalFileName,
+                declaredMimeType: upload.payload.declaredMimeType,
                 streamOrBuffer: upload.payload.fileBuffer,
               },
               replaceInput,
-              { idempotencyKey: idemKey },
+              { idempotencyKey: idemKey, storageBackend },
             );
 
             return jsonResponse(
@@ -4409,6 +4489,37 @@ export async function handleCrmApiRequest(
 
         const coverage = await getVaultCoverage(auth.db, auth.userId);
         return jsonResponse({ ok: true, coverage }, 200);
+      }
+
+      // GET /api/v1/vault/storage-diagnostics (secret-free & path-free B11A proof storage diagnostics)
+      if (sub === "storage-diagnostics") {
+        if (request.method !== "GET") return methodNotAllowed(["GET"]);
+        const auth = await requireAuthenticatedOwnerDb(request, env);
+        if (!auth.ok) return auth.response;
+
+        const storageBackend = getProofStorageBackend({ env });
+        const summary = storageBackend.healthSummary();
+        const consistency = await inspectOwnerProofStorageConsistency(auth.db, auth.userId, {
+          storageBackend,
+          persistStatus: false,
+        });
+
+        return jsonResponse(
+          {
+            ok: true,
+            diagnostics: {
+              driver: summary.driver,
+              configured: summary.configured,
+              writable: summary.writable,
+              productionReady: summary.productionReady,
+              failClosed: summary.failClosed,
+              status: summary.status,
+              reasons: summary.reasons ?? [],
+              consistency,
+            },
+          },
+          200,
+        );
       }
 
       // POST /api/v1/vault/synthetic-backup

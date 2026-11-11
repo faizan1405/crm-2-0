@@ -218,9 +218,24 @@ Following B4A Quotation Backend completion:
   - `1,364` Vitest tests across `134` test files passing (including `17` new `b10c-qa-execution-safety.test.ts` and `18` `b10c-automation-execution.test.ts` tests).
   - `18 / 18` live MariaDB 11.4.13 + compiled Nitro HTTP QA scenarios (`QA-01`..`QA-18`) passing, including production lockout, DB allowlist rejection, concurrency race, server stop/restart replay, rate limiter `429`, and zero financial/communication writes.
 - **Owner-Only Go-Live Hardening Checklist & Browser Preservation:**
-  1. Provision external object storage (S3/R2) for `ObjectStorageProofStorage` before cutover so payment proofs never depend on container-local disk.
+  1. Resolve durable payment-proof storage provisioning on Hostinger (see B11A Section 10 and [docs/crm-b11a-durable-proof-storage.md](./crm-b11a-durable-proof-storage.md)); keep production proof uploads fail-closed (`503`) until Owner approves infrastructure.
   2. Set production environment strictly: `NODE_ENV=production`, `DEV_LEAD_PILOT=false`, omit `AUTOMATION_TEST_DB_ALLOWLIST`, run `npm run db:migrate`, and initialize the single Owner via `scripts/bootstrap-owner.mjs`.
   3. Keep unattended cron/background schedulers disabled until hosting worker durability is verified; any future execution runtime must remain Owner-scoped and bounded.
   4. Preserve `localStorage` (`scale-flow-crm-2-demo`, `scale-flow-sidebar-groups`) and IndexedDB (`scale-flow-payment-proofs`) untouched until an explicit Owner-approved Data Vault dry-run and cutover migration.
+
+---
+
+## 10. Checkpoint B11A Addendum (11 Nov 2026) — Durable Private Payment-Proof Storage Backend
+
+- **Branch:** `feat/b11a-durable-private-proof-storage` (branched from `feat/b10c-qa-execution-safety` / `8430a80`)
+- **Production Durability Status:** **BLOCKED (FAIL CLOSED)** on `hostinger_business_v3` shared Node.js hosting (`0` VPS provisioned, versioned `hbuilds` redeploys, no managed S3-compatible service).
+- **Superseded Policy Note:** Supersedes earlier B7A/B10C-QA references to provisioning S3/R2 directly; **Hostinger is the exclusive hosting platform** unless the Owner explicitly approves an external exception.
+- **Database Migration (`0014_b11a_proof_storage_hardening.sql`):** Added `storage_status`, `storage_provider_id`, `verified_at`, `verification_error`, and `idx_crm_payment_proofs_storage_status` to `crm_payment_proofs` (`47` CRM tables across `15` Drizzle migrations `0000`..`0014`).
+- **Storage & Security Controls Implemented:**
+  - Eliminated silent local fallback in `ObjectStorageProofStorage`; both `object-storage` and `disabled` plus unconfirmed/ephemeral/web-root production configs fail closed (`503 storage_not_configured` / `storage_durability_blocked`) without touching `.data/`.
+  - Extended `ProofStorageBackend` with `putPrivateObject`, `getPrivateObject`, `headPrivateObject`, `verifyPrivateObject`, `deletePrivateObject`, and `listOrphanedObjects`, plus `DisposableTestProofStorage` fault injection behind `PROOF_TEST_STORAGE_ALLOWLIST`.
+  - Added JPEG/PNG/WebP/PDF structural truncation checks, declared MIME validation, sanitized `originalFileName` storage, SHA-256 + byte-size verification on reads, `GET /api/v1/payments/:id/proof/verify`, Pilot-only `GET /api/v1/vault/storage-diagnostics`, secret-free `/api/v1/health` storage flags, updated Data Vault `blocker-storage-durability`, and strict download CSP sandbox headers.
+  - Malware scanning remains unavailable on Hostinger Business shared Node.js hosting (explicitly disclosed and compensated via structural validation, opaque keys, and download sandbox headers).
+- **Full Details:** See [docs/crm-b11a-durable-proof-storage.md](./crm-b11a-durable-proof-storage.md).
 
 

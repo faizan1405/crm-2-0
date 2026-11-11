@@ -735,6 +735,10 @@ export const crmPaymentProofs = mysqlTable(
     sha256Hash: char("sha256_hash", { length: 64 }).notNull(),
     storageDriver: varchar("storage_driver", { length: 32 }).notNull().default("local-fs"),
     storageKey: varchar("storage_key", { length: 255 }).notNull(),
+    storageStatus: varchar("storage_status", { length: 24 }).notNull().default("verified"),
+    storageProviderId: varchar("storage_provider_id", { length: 64 }),
+    verifiedAt: utcDateTime("verified_at"),
+    verificationError: varchar("verification_error", { length: 255 }),
     lifecycleStatus: varchar("lifecycle_status", { length: 24 }).notNull().default("active"),
     activePaymentLock: varchar("active_payment_lock", { length: 64 }),
     replacedByProofId: crmId("replaced_by_proof_id").references(
@@ -762,6 +766,7 @@ export const crmPaymentProofs = mysqlTable(
     index("idx_crm_payment_proofs_owner_deal").on(table.ownerUserId, table.dealId),
     index("idx_crm_payment_proofs_sha256").on(table.sha256Hash),
     index("idx_crm_payment_proofs_storage_key").on(table.storageKey),
+    index("idx_crm_payment_proofs_storage_status").on(table.ownerUserId, table.storageStatus),
   ],
 );
 
