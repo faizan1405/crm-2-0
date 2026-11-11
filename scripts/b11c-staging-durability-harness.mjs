@@ -233,6 +233,7 @@ function parseCliArgs(argv) {
     confirmStaging: false,
     phase: "api",
     baseUrl: "",
+    releaseId: process.env["B11C_RELEASE_ID"] || "unspecified",
     stateFile: "/var/lib/scaleflow-crm/staging/b11c-harness-state.json",
     proofStorageDir: "/var/lib/scaleflow-crm/private-proofs",
     backupScript: path.resolve(process.cwd(), "infra/hostinger-vps/scripts/07-backup-encrypted.sh"),
@@ -247,6 +248,7 @@ function parseCliArgs(argv) {
     else if (arg === "--confirm-staging") opts.confirmStaging = true;
     else if (arg === "--phase") opts.phase = argv[++i] ?? "";
     else if (arg === "--base-url") opts.baseUrl = argv[++i] ?? "";
+    else if (arg === "--release-id") opts.releaseId = argv[++i] ?? "";
     else if (arg === "--state-file") opts.stateFile = argv[++i] ?? "";
     else if (arg === "--proof-storage-dir") opts.proofStorageDir = argv[++i] ?? "";
     else if (arg === "--age-identity") opts.ageIdentityFile = argv[++i] ?? "";
@@ -254,6 +256,15 @@ function parseCliArgs(argv) {
     else throw new Error(`Unknown CLI argument: ${arg}`);
   }
   return opts;
+}
+
+function parseJsonSafe(text) {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { rawText: text.slice(0, 500) };
+  }
 }
 
 function buildInitialReport(baseUrl = null) {
@@ -271,6 +282,7 @@ function buildInitialReport(baseUrl = null) {
           phase: t.phase,
           status: "NOT_YET_EXECUTED",
           detail: null,
+          evidence: null,
           checkedAtUtc: null,
         },
       ]),
@@ -291,11 +303,18 @@ function saveState(stateFile, state) {
   fs.writeFileSync(stateFile, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
 }
 
-function markResult(state, key, status, detail) {
+function markResult(state, key, status, detail, evidence = {}) {
   state.tests[key] = {
     ...state.tests[key],
     status,
     detail,
+    evidence: {
+      httpOutcome: evidence.httpOutcome ?? null,
+      sqlAssertion: evidence.sqlAssertion ?? null,
+      fileHash: evidence.fileHash ?? null,
+      serverRelease: evidence.serverRelease ?? state.activeReleaseId ?? null,
+      recoveryObservation: evidence.recoveryObservation ?? null,
+    },
     checkedAtUtc: new Date().toISOString(),
   };
 }
@@ -322,13 +341,7 @@ async function apiJson(baseUrl, cookie, method, apiPath, body) {
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
   const text = await res.text();
-  let json = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = { rawText: text };
-  }
-  return { status: res.status, headers: res.headers, json, text };
+  return { status: res.status, headers: res.headers, json: parseJsonSafe(text), text };
 }
 
 async function uploadMultipart(
@@ -348,7 +361,7 @@ async function uploadMultipart(
     body: form,
   });
   const text = await res.text();
-  return { status: res.status, headers: res.headers, json: JSON.parse(text), text };
+  return { status: res.status, headers: res.headers, json: parseJsonSafe(text), text };
 }
 
 async function verifyPersistedSyntheticSet(baseUrl, cookie, state) {
@@ -528,11 +541,33 @@ async function runApiPhase(baseUrl, proofStorageDir, state) {
     "GET /proof/verify?persist=1 returned verified on all 4 proofs.",
   );
 
-  // Test 4: Unauthenticated & cross-site CSRF rejection
+  // Test 4: Unauthenticated, session-expiry after logout, path traversal, and cross-site CSRF rejection
   const unauthRes = await fetch(
     `${baseUrl}/api/v1/payments/${encodeURIComponent(uploaded[0].paymentId)}/proof/download`,
   );
   assert.equal(unauthRes.status, 401);
+
+  const probeSessionCookie = await loginOwner(baseUrl, ownerAEmail, ownerAPass);
+  const logoutRes = await apiJson(baseUrl, probeSessionCookie, "POST", "/api/v1/auth/logout", {});
+  assert.ok(
+    [200, 204].includes(logoutRes.status),
+    `Expected 200/204 on logout, got ${logoutRes.status}`,
+  );
+  const expiredDl = await fetch(
+    `${baseUrl}/api/v1/payments/${encodeURIComponent(uploaded[0].paymentId)}/proof/download`,
+    { headers: { cookie: probeSessionCookie } },
+  );
+  assert.equal(expiredDl.status, 401, "Revoked/logged-out session must return HTTP 401");
+
+  const traversalRes = await fetch(
+    `${baseUrl}/api/v1/payments/..%2F..%2Fetc%2Fpasswd/proof/download`,
+    { headers: { cookie: cookieA } },
+  );
+  assert.ok(
+    [400, 403, 404].includes(traversalRes.status),
+    `Expected 400/403/404 on path traversal probe, got ${traversalRes.status}`,
+  );
+
   const csrfRes = await fetch(`${baseUrl}/api/v1/leads`, {
     method: "POST",
     headers: {
@@ -548,12 +583,37 @@ async function runApiPhase(baseUrl, proofStorageDir, state) {
     state,
     "owner_access_control",
     "PASS",
-    "Unauthenticated download returned 401 and cross-site POST returned 403.",
+    "Unauth (401), logged-out session (401), path traversal block, and cross-site POST CSRF rejection (403) passed.",
+    {
+      httpOutcome: `unauth=401, post_logout=401, traversal=${traversalRes.status}, csrf=403`,
+    },
   );
 
-  // Test 5: Cross-owner rejection (if second test owner exists on staging DB)
+  // Test 5: Cross-owner rejection across metadata, verify, download & upload/replace
   if (ownerBEmail && ownerBPass) {
     const cookieB = await loginOwner(baseUrl, ownerBEmail, ownerBPass);
+    const crossMeta = await apiJson(
+      baseUrl,
+      cookieB,
+      "GET",
+      `/api/v1/payments/${encodeURIComponent(uploaded[0].paymentId)}/proof`,
+    );
+    assert.ok(
+      [403, 404].includes(crossMeta.status),
+      `Expected 403/404 cross-owner GET /proof, got ${crossMeta.status}`,
+    );
+
+    const crossVerify = await apiJson(
+      baseUrl,
+      cookieB,
+      "GET",
+      `/api/v1/payments/${encodeURIComponent(uploaded[0].paymentId)}/proof/verify`,
+    );
+    assert.ok(
+      [403, 404].includes(crossVerify.status),
+      `Expected 403/404 cross-owner GET /verify, got ${crossVerify.status}`,
+    );
+
     const crossDl = await fetch(
       `${baseUrl}/api/v1/payments/${encodeURIComponent(uploaded[0].paymentId)}/proof/download`,
       {
@@ -562,20 +622,33 @@ async function runApiPhase(baseUrl, proofStorageDir, state) {
     );
     assert.ok(
       [403, 404].includes(crossDl.status),
-      `Expected 403/404 cross-owner rejection, got ${crossDl.status}`,
+      `Expected 403/404 cross-owner download rejection, got ${crossDl.status}`,
+    );
+
+    const crossUpload = await uploadMultipart(baseUrl, cookieB, uploaded[0].paymentId, {
+      fileName: "cross-owner-probe.jpg",
+      mimeType: "image/jpeg",
+      bytes: buildSyntheticJpeg(),
+    });
+    assert.ok(
+      [403, 404].includes(crossUpload.status),
+      `Expected 403/404 cross-owner upload rejection, got ${crossUpload.status}`,
     );
     markResult(
       state,
       "cross_owner_access_rejection",
       "PASS",
-      `Secondary synthetic owner received HTTP ${crossDl.status} on Owner A proof.`,
+      `Secondary synthetic owner rejected across metadata (${crossMeta.status}), verify (${crossVerify.status}), download (${crossDl.status}), and upload (${crossUpload.status}).`,
+      {
+        httpOutcome: `meta=${crossMeta.status}, verify=${crossVerify.status}, download=${crossDl.status}, upload=${crossUpload.status}`,
+      },
     );
   } else {
     markResult(
       state,
       "cross_owner_access_rejection",
-      "PENDING_MANUAL",
-      "Provide B11C_OWNER_B_EMAIL/PASSWORD on staging DB to execute automated cross-owner test.",
+      "BLOCKED",
+      "Missing B11C_OWNER_B_EMAIL/PASSWORD synthetic Owner B credentials (requires Phase 0 approval).",
     );
   }
 
@@ -649,6 +722,7 @@ async function runFaultDrillPhase(baseUrl, proofStorageDir, state) {
   const ext = target.ext || (target.kind === "jpeg" ? "jpg" : target.kind);
   const filePath = path.join(proofStorageDir, "proofs", `prf_${target.proofId}.${ext}`);
   assert.ok(fs.existsSync(filePath), `Expected staged binary at ${filePath}`);
+  const origStat = fs.statSync(filePath);
   const original = fs.readFileSync(filePath);
   const quarantined = `${filePath}.b11c_quarantine`;
 
@@ -672,7 +746,10 @@ async function runFaultDrillPhase(baseUrl, proofStorageDir, state) {
     );
     assert.equal(verMiss.json.verification.verificationStatus, "missing");
   } finally {
-    fs.renameSync(quarantined, filePath);
+    if (fs.existsSync(quarantined)) {
+      fs.renameSync(quarantined, filePath);
+    }
+    fs.chmodSync(filePath, origStat.mode & 0o777);
   }
   const verRestored1 = await apiJson(
     baseUrl,
@@ -685,7 +762,11 @@ async function runFaultDrillPhase(baseUrl, proofStorageDir, state) {
     state,
     "safe_missing_storage_behavior",
     "PASS",
-    "Missing binary returned secret-free 500 & flagged missing, then recovered.",
+    "Missing binary returned secret-free 500 & flagged missing, then recovered with original ownership/mode.",
+    {
+      httpOutcome: "download=500, verify=missing -> restored verified",
+      fileHash: target.sha256,
+    },
   );
 
   // Test 12: 1-byte bit-rot corruption detection
@@ -709,6 +790,14 @@ async function runFaultDrillPhase(baseUrl, proofStorageDir, state) {
     assert.equal(verCorr.json.verification.verificationStatus, "corrupted");
   } finally {
     fs.writeFileSync(filePath, original);
+    if (typeof fs.chownSync === "function") {
+      try {
+        fs.chownSync(filePath, origStat.uid, origStat.gid);
+      } catch {
+        // Ignore on non-POSIX hosts
+      }
+    }
+    fs.chmodSync(filePath, origStat.mode & 0o777);
   }
   const verRestored2 = await apiJson(
     baseUrl,
@@ -721,7 +810,11 @@ async function runFaultDrillPhase(baseUrl, proofStorageDir, state) {
     state,
     "corrupted_file_detection",
     "PASS",
-    "Bit-rot corruption blocked download (500), flagged corrupted, and recovered.",
+    "Bit-rot corruption blocked download (500), flagged corrupted, and recovered cleanly.",
+    {
+      httpOutcome: "download=500, verify=corrupted -> restored verified",
+      fileHash: target.sha256,
+    },
   );
 }
 
@@ -825,10 +918,18 @@ function runBackupRestorePhase(opts, state) {
 }
 
 async function runFinalizePhase(baseUrl, state) {
-  const health = await (await fetch(`${baseUrl}/api/v1/health`)).json();
-  assert.equal(health.ok, true);
+  const healthRes = await fetch(`${baseUrl}/api/v1/health`);
   assert.equal(
-    health.runtime.env,
+    healthRes.status,
+    200,
+    `Expected HTTP 200 on /api/v1/health, got ${healthRes.status}`,
+  );
+  const healthText = await healthRes.text();
+  const health = parseJsonSafe(healthText);
+  assert.equal(health?.ok, true, `Unexpected /api/v1/health payload: ${healthText.slice(0, 200)}`);
+  assert.equal(health?.status, "ok", "Health status must equal 'ok'.");
+  assert.equal(
+    health?.runtime?.env,
     "production",
     "Staging VPS runtime must run with NODE_ENV=production.",
   );
@@ -862,7 +963,10 @@ async function runFinalizePhase(baseUrl, state) {
     state,
     "final_storage_durability_acceptance",
     "PASS",
-    "All 1..19 checks passed & production/automation lockouts confirmed. Ready for Owner approval of PROOF_PRODUCTION_DURABLE_CONFIRMED=true.",
+    "All 1..19 checks passed & production/automation lockouts confirmed. Ready for Owner review.",
+    {
+      httpOutcome: `health=200 (env=production), execute-test=${execRes.status}`,
+    },
   );
   state.status = "STAGING_20_OF_20_PASS";
 }
@@ -873,7 +977,7 @@ async function main() {
     console.log(
       JSON.stringify(
         {
-          checkpoint: "B11C-PRE",
+          checkpoint: "B11C",
           executionStatus: "NOT_YET_EXECUTED",
           testCount: STAGING_DURABILITY_PLAN.length,
           tests: STAGING_DURABILITY_PLAN,
@@ -894,6 +998,7 @@ async function main() {
   const baseUrl = assertSafeStagingOrigin(opts.baseUrl);
   const state = loadOrInitState(opts.stateFile, baseUrl);
   state.baseUrl = baseUrl;
+  state.activeReleaseId = opts.releaseId;
 
   if (opts.phase === "api") await runApiPhase(baseUrl, opts.proofStorageDir, state);
   else if (opts.phase === "fault-drill")

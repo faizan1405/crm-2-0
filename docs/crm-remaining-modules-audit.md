@@ -265,4 +265,15 @@ Following B4A Quotation Backend completion:
 - **Staging Durability Harness (`scripts/b11c-staging-durability-harness.mjs`):** Prepared locally with `--plan` (`NOT_YET_EXECUTED`) covering all **20 staging tests**, blocking unapproved live runs and blocking `crm.joinscaleflow.in`.
 - **Full Preparation Runbook:** See [docs/crm-b11c-pre-vps-deployment-prep.md](./crm-b11c-pre-vps-deployment-prep.md).
 
+---
+
+## 13. Checkpoint B11C Addendum (11 Nov 2026) — Phase 0 Approval Gate & Phase 1 Script Audit (BLOCKED Before VPS Setup)
+
+- **Branch:** `feat/b11c-vps-staging-durability-qa` (branched cleanly from `feat/b11c-pre-vps-deployment-preparation` / `a22e990`)
+- **Hostinger Read-Only Verification:** `0` VPS instances provisioned, `crm.joinscaleflow.in` (`u256504187`, Business v3) + remaining sites untouched, `dns_records_list("joinscaleflow.in")` empty in Hostinger DNS Manager.
+- **Phase 0 Mandatory Gate Result:** **STOPPED** — none of the 9 explicit Owner approvals (VPS purchase/budget, instance ID, DNS edit, SSH/server access, synthetic Owner A/B credentials, staging deploy, restart/reboot drills, off-VPS backup target/key custody, clean-target restore drill) have been granted yet.
+- **Phase 1 Audit & Fixes Applied:** Fixed 9 critical/high safety & reliability defects across `lib-common.sh`, `01`–`08`, `nginx-scaleflow-crm.conf.template`, `logrotate-scaleflow-crm.template`, and `scripts/b11c-staging-durability-harness.mjs` (SQL `DROP`/`TRIGGER`/`SHOW VIEW` grants + `root` unix-socket backup/restore, single-backslash password guard, removing root `source crm.env` during deploy, self-contained Certbot `--webroot` Nginx TLS config, `NITRO_HOST`/`NITRO_PORT`/`PROOF_TEST_STORAGE_ALLOWLIST` checks, removing silent `cp -a` suppression, `jq -n` manifests, separate `backup.log` logrotate stanza, fault-drill permission preservation + session-expiry/traversal/cross-owner test hardening).
+- **Stage Status & Next Gate:** `20/20` staging tests, backup/restore drills, and KVM 1 resource metrics remain **`BLOCKED / NOT EXECUTED`**; do **NOT** move to B12 until Phase 0 approvals and Phases 2–9 staging acceptance complete.
+- **Full Gate & Audit Report:** See [docs/crm-b11c-vps-staging-durability-qa.md](./crm-b11c-vps-staging-durability-qa.md).
+
 

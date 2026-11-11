@@ -76,25 +76,61 @@ assert_not_crm_v1_domain() {
   fi
 }
 
-# Validate private storage path mirrors B11A UNSAFE_SEGMENTS rules.
-assert_safe_private_storage_path() {
-  local dir_path="${1:-}"
-  [[ "${dir_path}" == /* ]] || die "PROOF_STORAGE_DIR must be an absolute path: '${dir_path}'"
+# Reject dangerous webroots, build folders, temp dirs, traversal segments, or control whitespace.
+assert_safe_nonpublic_path() {
+  local label="$1"
+  local dir_path="${2:-}"
+  [[ "${dir_path}" == /* ]] || die "${label} must be an absolute path: '${dir_path}'"
+  if [[ "${dir_path}" =~ [[:space:][:cntrl:]] ]]; then
+    die "${label} cannot contain whitespace or control characters."
+  fi
+  if [[ "${dir_path}" == *".."* ]]; then
+    die "${label} cannot contain '..' traversal segments: '${dir_path}'"
+  fi
   local lower="/${dir_path,,}/"
   local seg
-  for seg in "public_html" "public" ".output" "dist" "hbuilds"; do
+  for seg in "public_html" "public" ".output" "dist" "hbuilds" "var/www" "opt/scaleflow-crm" "etc/scaleflow-crm"; do
     if [[ "${lower}" == *"/${seg}/"* ]]; then
-      die "PROOF_STORAGE_DIR ('${dir_path}') contains forbidden web/deploy path segment '${seg}'."
+      die "${label} ('${dir_path}') overlaps forbidden web/deploy/config path '${seg}'."
     fi
   done
+  case "${dir_path}" in
+    /tmp|/tmp/*|/var/tmp|/var/tmp/*|/dev/shm|/dev/shm/*|/root|/root/*)
+      die "${label} ('${dir_path}') cannot use temporary or /root directories."
+      ;;
+  esac
 }
 
-# Parse crm.env strictly as key=value without executing shell substitutions and never print secrets.
+# Validate private storage path mirrors B11A UNSAFE_SEGMENTS + systemd ReadWritePaths rules.
+assert_safe_private_storage_path() {
+  local dir_path="${1:-}"
+  assert_safe_nonpublic_path "PROOF_STORAGE_DIR" "${dir_path}"
+  if [[ "${dir_path}" != "${SCALEFLOW_VAR_ROOT}/"* ]]; then
+    die "PROOF_STORAGE_DIR ('${dir_path}') must live inside ${SCALEFLOW_VAR_ROOT}/ to match systemd ReadWritePaths."
+  fi
+  if [[ "${dir_path}" == "${SCALEFLOW_STAGING_DIR}" || "${dir_path}" == "${SCALEFLOW_STAGING_DIR}/"* ]]; then
+    die "PROOF_STORAGE_DIR ('${dir_path}') cannot point inside operational staging dir ${SCALEFLOW_STAGING_DIR}."
+  fi
+  if [[ "${dir_path}" == "${SCALEFLOW_BACKUP_DIR}" || "${dir_path}" == "${SCALEFLOW_BACKUP_DIR}/"* ]]; then
+    die "PROOF_STORAGE_DIR ('${dir_path}') cannot point inside backup archive dir ${SCALEFLOW_BACKUP_DIR}."
+  fi
+}
+
+assert_safe_backup_archive_path() {
+  local archive_dir="${1:-}"
+  local proof_dir="${2:-${SCALEFLOW_PROOF_DIR}}"
+  assert_safe_nonpublic_path "BACKUP_ARCHIVE_DIR" "${archive_dir}"
+  if [[ "${archive_dir}" == "${proof_dir}" || "${archive_dir}" == "${proof_dir}/"* ]]; then
+    die "BACKUP_ARCHIVE_DIR ('${archive_dir}') cannot overlap PROOF_STORAGE_DIR ('${proof_dir}')."
+  fi
+}
+
+# Parse crm.env strictly as key=value (last definition wins) without shell evaluation.
 read_env_value() {
   local env_file="$1"
   local target_key="$2"
   [[ -r "${env_file}" ]] || return 1
-  local line key val
+  local line val="" found="false"
   while IFS= read -r line || [[ -n "${line}" ]]; do
     line="${line%%$'\r'}"
     [[ -z "${line}" || "${line}" =~ ^[[:space:]]*# ]] && continue
@@ -104,10 +140,13 @@ read_env_value() {
       val="${val%\"}"
       val="${val#\'}"
       val="${val%\'}"
-      printf '%s' "${val}"
-      return 0
+      found="true"
     fi
   done < "${env_file}"
+  if [[ "${found}" == "true" ]]; then
+    printf '%s' "${val}"
+    return 0
+  fi
   return 1
 }
 
@@ -125,12 +164,15 @@ validate_crm_env_file() {
 
   [[ -f "${env_file}" ]] || die "Missing environment file: ${env_file}"
 
-  local node_env port host app_origin tz db_host db_port db_name db_user db_pass
-  local driver storage_dir durable_confirmed trust_proxy auth_secret dev_pilot age_rec
+  local node_env port nitro_port host nitro_host app_origin tz
+  local db_host db_port db_name db_user db_pass db_ssl
+  local driver storage_dir durable_confirmed trust_proxy auth_secret dev_pilot age_rec archive_dir
 
   node_env="$(read_env_value "${env_file}" "NODE_ENV" || true)"
   port="$(read_env_value "${env_file}" "PORT" || true)"
+  nitro_port="$(read_env_value "${env_file}" "NITRO_PORT" || true)"
   host="$(read_env_value "${env_file}" "HOST" || true)"
+  nitro_host="$(read_env_value "${env_file}" "NITRO_HOST" || true)"
   app_origin="$(read_env_value "${env_file}" "APP_ORIGIN" || true)"
   tz="$(read_env_value "${env_file}" "BUSINESS_TIMEZONE" || true)"
   db_host="$(read_env_value "${env_file}" "DB_HOST" || true)"
@@ -138,6 +180,7 @@ validate_crm_env_file() {
   db_name="$(read_env_value "${env_file}" "DB_NAME" || true)"
   db_user="$(read_env_value "${env_file}" "DB_USER" || true)"
   db_pass="$(read_env_value "${env_file}" "DB_PASSWORD" || true)"
+  db_ssl="$(read_env_value "${env_file}" "DB_SSL_MODE" || true)"
   driver="$(read_env_value "${env_file}" "PROOF_STORAGE_DRIVER" || true)"
   storage_dir="$(read_env_value "${env_file}" "PROOF_STORAGE_DIR" || true)"
   durable_confirmed="$(read_env_value "${env_file}" "PROOF_PRODUCTION_DURABLE_CONFIRMED" || true)"
@@ -145,11 +188,18 @@ validate_crm_env_file() {
   auth_secret="$(read_env_value "${env_file}" "AUTH_SECRET" || true)"
   dev_pilot="$(read_env_value "${env_file}" "DEV_LEAD_PILOT" || true)"
   age_rec="$(read_env_value "${env_file}" "BACKUP_AGE_RECIPIENT" || true)"
+  archive_dir="$(read_env_value "${env_file}" "BACKUP_ARCHIVE_DIR" || true)"
 
   [[ "${node_env}" == "production" ]] || die "NODE_ENV must be 'production' in ${env_file} (got '${node_env}')."
   [[ "${dev_pilot}" == "false" ]] || die "DEV_LEAD_PILOT must be 'false' in ${env_file} (got '${dev_pilot}')."
-  [[ "${port}" =~ ^[0-9]+$ ]] && [[ "${port}" -ge 1024 ]] || die "Invalid PORT='${port}'."
+  [[ "${port}" =~ ^[0-9]+$ ]] && [[ "${port}" -ge 1024 && "${port}" -le 65535 ]] || die "Invalid PORT='${port}'."
+  if [[ -n "${nitro_port}" && "${nitro_port}" != "${port}" ]]; then
+    die "NITRO_PORT ('${nitro_port}') must match PORT ('${port}') to stay aligned with Nginx upstream."
+  fi
   [[ "${host}" == "127.0.0.1" ]] || die "HOST must bind strictly to '127.0.0.1' behind Nginx (got '${host}')."
+  if [[ -n "${nitro_host}" && "${nitro_host}" != "127.0.0.1" ]]; then
+    die "NITRO_HOST must bind strictly to '127.0.0.1' (got '${nitro_host}')."
+  fi
   [[ "${tz}" == "Asia/Kolkata" ]] || die "BUSINESS_TIMEZONE must be 'Asia/Kolkata' (got '${tz}')."
   [[ "${trust_proxy}" == "true" ]] || die "AUTH_TRUST_PROXY must be 'true' behind Nginx TLS termination."
 
@@ -158,7 +208,10 @@ validate_crm_env_file() {
   assert_not_crm_v1_domain "${app_origin}"
 
   [[ "${db_host}" == "127.0.0.1" ]] || die "DB_HOST must be IPv4 loopback '127.0.0.1' (got '${db_host}')."
-  [[ "${db_port}" =~ ^[0-9]+$ ]] || die "Invalid DB_PORT='${db_port}'."
+  [[ "${db_port}" =~ ^[0-9]+$ ]] && [[ "${db_port}" -ge 1 && "${db_port}" -le 65535 ]] || die "Invalid DB_PORT='${db_port}'."
+  if [[ -n "${db_ssl}" && ! "${db_ssl}" =~ ^(disabled|preferred|required)$ ]]; then
+    die "Invalid DB_SSL_MODE='${db_ssl}'."
+  fi
   assert_no_placeholder_value "DB_NAME" "${db_name}"
   assert_no_placeholder_value "DB_USER" "${db_user}"
   assert_no_placeholder_value "DB_PASSWORD" "${db_pass}"
@@ -170,10 +223,17 @@ validate_crm_env_file() {
   if [[ -n "$(read_env_value "${env_file}" "AUTOMATION_TEST_DB_ALLOWLIST" || true)" ]]; then
     die "AUTOMATION_TEST_DB_ALLOWLIST must NEVER be configured on staging or production VPS."
   fi
+  if [[ -n "$(read_env_value "${env_file}" "PROOF_TEST_STORAGE_ALLOWLIST" || true)" ]]; then
+    die "PROOF_TEST_STORAGE_ALLOWLIST must NEVER be configured on staging or production VPS."
+  fi
 
   [[ "${driver}" == "hostinger-private-fs" ]] || die "PROOF_STORAGE_DRIVER must be 'hostinger-private-fs' (got '${driver}')."
   assert_no_placeholder_value "PROOF_STORAGE_DIR" "${storage_dir}"
   assert_safe_private_storage_path "${storage_dir}"
+
+  if [[ -n "${archive_dir}" ]]; then
+    assert_safe_backup_archive_path "${archive_dir}" "${storage_dir}"
+  fi
 
   if [[ "${require_durable}" == "true" && "${durable_confirmed}" != "true" ]]; then
     die "PROOF_PRODUCTION_DURABLE_CONFIRMED must remain 'false' until B11C 20/20 durability tests pass and Owner approves."

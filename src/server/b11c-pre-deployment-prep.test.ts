@@ -213,6 +213,44 @@ describe("Checkpoint B11C-PRE Hostinger VPS Deployment Preparation & Safety Gate
       }
       expect(v1Blocked).toBe(true);
 
+      // Verify Phase 1 hardening contracts across templates and scripts
+      expect(commonSh).toContain("NITRO_HOST");
+      expect(commonSh).toContain("PROOF_TEST_STORAGE_ALLOWLIST");
+      expect(commonSh).toContain("assert_safe_backup_archive_path");
+
+      const installSh = fs.readFileSync(
+        path.join(SCRIPTS_DIR, "02-install-node-mariadb.sh"),
+        "utf8",
+      );
+      expect(installSh).toContain("DROP");
+      expect(installSh).not.toContain("*'\\\\'*");
+
+      const deploySh = fs.readFileSync(path.join(SCRIPTS_DIR, "05-deploy-release.sh"), "utf8");
+      expect(deploySh).not.toMatch(/^\s*source\s+"\$\{ENV_FILE\}"/m);
+      expect(deploySh).toContain("--env-file=");
+      expect(deploySh).toContain("for banned_name in .env");
+
+      const backupSh = fs.readFileSync(path.join(SCRIPTS_DIR, "07-backup-encrypted.sh"), "utf8");
+      expect(backupSh).not.toContain(
+        'cp -a "${PROOFS_SUBDIR}/." "${BUNDLE_STAGE}/files/proofs/" 2>/dev/null || true',
+      );
+      expect(backupSh).toContain("jq -n");
+      expect(restoreSh).not.toContain("2>/dev/null || true");
+
+      const nginxTpl = fs.readFileSync(
+        path.join(TEMPLATES_DIR, "nginx-scaleflow-crm.conf.template"),
+        "utf8",
+      );
+      expect(nginxTpl).not.toContain("options-ssl-nginx.conf");
+      expect(nginxTpl).toContain("default_server");
+
+      const logrotateTpl = fs.readFileSync(
+        path.join(TEMPLATES_DIR, "logrotate-scaleflow-crm.template"),
+        "utf8",
+      );
+      expect(logrotateTpl).toContain("create 0640 root root");
+      expect(logrotateTpl).toContain("create 0640 crmapp adm");
+
       // Verify validate_crm_env_file accepts a populated copy of crm.env.example cleanly despite comment notes
       const tmpEnvDir = fs.mkdtempSync(path.join(os.tmpdir(), "b11c-env-"));
       const tmpEnvPath = path.join(tmpEnvDir, "crm.env");
@@ -242,6 +280,22 @@ describe("Checkpoint B11C-PRE Hostinger VPS Deployment Preparation & Safety Gate
           ["-c", `source "${unixCommonPath}" && validate_crm_env_file "${unixTmpEnv}" "false"`],
           { stdio: "pipe" },
         );
+
+        // Verify NITRO_HOST=0.0.0.0 fails validation even when HOST=127.0.0.1
+        const badNitroEnvPath = path.join(tmpEnvDir, "bad-nitro.env");
+        fs.writeFileSync(badNitroEnvPath, `${populatedEnv}\nNITRO_HOST=0.0.0.0\n`, "utf8");
+        const unixBadNitro = badNitroEnvPath.replace(/\\/g, "/");
+        let nitroRejected = false;
+        try {
+          execFileSync(
+            bashPath,
+            ["-c", `source "${unixCommonPath}" && validate_crm_env_file "${unixBadNitro}" "false"`],
+            { stdio: "pipe" },
+          );
+        } catch {
+          nitroRejected = true;
+        }
+        expect(nitroRejected).toBe(true);
       } finally {
         fs.rmSync(tmpEnvDir, { recursive: true, force: true });
       }

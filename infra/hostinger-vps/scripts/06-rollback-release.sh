@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Checkpoint B11C-PRE — Controlled Application Symlink Rollback Script
+# Checkpoint B11C — Controlled Application Symlink Rollback Script (Phase 1 Hardened)
 # Enforces explicit confirmation that any applied DB migrations are backward-compatible.
 # For schema-incompatible rollbacks, use 08-restore-verify.sh against the pre-deploy backup!
 
@@ -30,6 +30,8 @@ if [[ "${ACK_SCHEMA}" != "true" ]]; then
   die "Rollback blocked: confirm code-only schema compatibility with --ack-schema-compatible, OR run 08-restore-verify.sh to restore the paired pre-deploy DB+proof backup."
 fi
 
+"${SCRIPT_DIR}/04-validate-env-and-preflight.sh" --env-file "${ENV_FILE}"
+
 TARGET_DIR="${SCALEFLOW_RELEASES_DIR}/${TARGET_RELEASE}"
 [[ -d "${TARGET_DIR}" && -f "${TARGET_DIR}/.output/server/index.mjs" ]] || die "Target release invalid or missing .output/server/index.mjs: ${TARGET_DIR}"
 
@@ -40,7 +42,7 @@ systemctl restart scaleflow-crm
 
 port="$(read_env_value "${ENV_FILE}" "PORT")"
 for _ in $(seq 1 20); do
-  if curl -fsS --max-time 2 "http://127.0.0.1:${port}/api/v1/health" | jq -e '.ok == true' >/dev/null 2>&1; then
+  if curl -fsS --max-time 2 "http://127.0.0.1:${port}/api/v1/health" | jq -e '.ok == true and .status == "ok"' >/dev/null 2>&1; then
     log_info "Rollback to '${TARGET_RELEASE}' succeeded cleanly and passed /api/v1/health."
     exit 0
   fi

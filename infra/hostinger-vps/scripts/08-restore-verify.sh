@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Checkpoint B11C-PRE — Encrypted Archive Verification, Clean-Target Restore & Proof Reconciliation
+# Checkpoint B11C — Encrypted Archive Verification, Clean-Target Restore & Proof Reconciliation (Phase 1 Hardened)
 # Supports safe clean-target verification (`--mode staging-clean-verify`) AND explicit gated
-# production restore (`--mode overwrite-live`).
+# overwrite restore (`--mode overwrite-live`).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./lib-common.sh
@@ -37,9 +37,12 @@ umask 077
 
 command -v age >/dev/null || die "'age' binary missing."
 command -v zstd >/dev/null || die "'zstd' binary missing."
+command -v jq >/dev/null || die "'jq' binary missing."
 
 if [[ -f "${ARCHIVE_FILE}.sha256" ]]; then
   (cd "$(dirname "${ARCHIVE_FILE}")" && sha256sum -c "$(basename "${ARCHIVE_FILE}.sha256")")
+else
+  log_warn "External ${ARCHIVE_FILE}.sha256 not found; proceeding with AEAD age + manifest.json cryptographic checks."
 fi
 
 WORK_DIR="$(mktemp -d "${SCALEFLOW_STAGING_DIR}/rst_XXXXXX")"
@@ -50,10 +53,10 @@ cleanup_restore_tmp() {
 trap cleanup_restore_tmp EXIT
 
 log_info "Decrypting and unpacking ${ARCHIVE_FILE} into temporary isolated workspace..."
-age -d -i "${AGE_IDENTITY_FILE}" "${ARCHIVE_FILE}" | zstd -d -q | tar -C "${WORK_DIR}" -xf -
+age -d -i "${AGE_IDENTITY_FILE}" "${ARCHIVE_FILE}" | zstd -d -q | tar --no-same-owner -C "${WORK_DIR}" -xf -
 
 EXTRACTED_DIR="$(find "${WORK_DIR}" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
-[[ -n "${EXTRACTED_DIR}" && -f "${EXTRACTED_DIR}/manifest.json" ]] || die "Decrypted bundle missing manifest.json."
+[[ -n "${EXTRACTED_DIR}" && -f "${EXTRACTED_DIR}/manifest.json" && -s "${EXTRACTED_DIR}/database.sql" ]] || die "Decrypted bundle invalid (missing manifest.json or database.sql)."
 
 expected_db_sha="$(jq -r '.databaseDump.sha256' "${EXTRACTED_DIR}/manifest.json")"
 actual_db_sha="$(sha256sum "${EXTRACTED_DIR}/database.sql" | awk '{print $1}')"
@@ -64,26 +67,27 @@ if [[ -s "${EXTRACTED_DIR}/metadata/proof-files.sha256" ]]; then
 fi
 log_info "Manifest cryptographic verification passed for SQL dump and all proof binaries."
 
-db_host="$(read_env_value "${ENV_FILE}" "DB_HOST")"
-db_port="$(read_env_value "${ENV_FILE}" "DB_PORT")"
 live_db_name="$(read_env_value "${ENV_FILE}" "DB_NAME")"
-db_user="$(read_env_value "${ENV_FILE}" "DB_USER")"
-db_pass="$(read_env_value "${ENV_FILE}" "DB_PASSWORD")"
 live_proof_root="$(read_env_value "${ENV_FILE}" "PROOF_STORAGE_DIR")"
+port="$(read_env_value "${ENV_FILE}" "PORT")"
 
 if [[ "${MODE}" == "staging-clean-verify" ]]; then
   [[ "${VERIFY_DB}" != "${live_db_name}" ]] || die "Refusing --verify-db matching active DB '${live_db_name}' in clean verify mode!"
   [[ "${VERIFY_DB}" =~ ^[a-z0-9_]{3,64}$ ]] || die "Invalid --verify-db '${VERIFY_DB}'."
+  assert_safe_nonpublic_path "VERIFY_PROOF_DIR" "${VERIFY_PROOF_DIR}"
+  [[ "${VERIFY_PROOF_DIR}" != "${live_proof_root}" && "${VERIFY_PROOF_DIR}" != "${live_proof_root}/"* ]] || die "VERIFY_PROOF_DIR cannot overlap active PROOF_STORAGE_DIR."
 
   log_info "Restoring into clean disposable verification DB '${VERIFY_DB}' and dir '${VERIFY_PROOF_DIR}'..."
-  mariadb --protocol=socket -u root -e "DROP DATABASE IF EXISTS \`${VERIFY_DB}\`; CREATE DATABASE \`${VERIFY_DB}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; GRANT ALL PRIVILEGES ON \`${VERIFY_DB}\`.* TO '${db_user}'@'127.0.0.1'; FLUSH PRIVILEGES;"
-  MYSQL_PWD="${db_pass}" mariadb --protocol=tcp -h "${db_host}" -P "${db_port}" -u "${db_user}" "${VERIFY_DB}" < "${EXTRACTED_DIR}/database.sql"
+  mariadb --protocol=socket -u root -e "DROP DATABASE IF EXISTS \`${VERIFY_DB}\`; CREATE DATABASE \`${VERIFY_DB}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+  mariadb --protocol=socket -u root "${VERIFY_DB}" < "${EXTRACTED_DIR}/database.sql"
 
   rm -rf "${VERIFY_PROOF_DIR}"
   mkdir -p "${VERIFY_PROOF_DIR}/proofs"
-  cp -a "${EXTRACTED_DIR}/files/proofs/." "${VERIFY_PROOF_DIR}/proofs/" 2>/dev/null || true
+  if [[ -d "${EXTRACTED_DIR}/files/proofs" ]] && find "${EXTRACTED_DIR}/files/proofs" -mindepth 1 -print -quit | grep -q .; then
+    cp -a "${EXTRACTED_DIR}/files/proofs/." "${VERIFY_PROOF_DIR}/proofs/"
+  fi
 
-  restored_tables="$(MYSQL_PWD="${db_pass}" mariadb -N -s --protocol=tcp -h "${db_host}" -P "${db_port}" -u "${db_user}" -D "${VERIFY_DB}" -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE();")"
+  restored_tables="$(mariadb -N -s --protocol=socket -u root -D "${VERIFY_DB}" -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE();")"
   [[ "${restored_tables}" -ge 48 ]] || die "Expected >=48 physical tables after restore, found ${restored_tables}."
 
   log_info "Reconciling crm_payment_proofs rows against restored binary files..."
@@ -102,8 +106,7 @@ if [[ "${MODE}" == "staging-clean-verify" ]]; then
       log_warn "Integrity mismatch on ${proof_id} (${storage_key})"
       mismatch_count=$((mismatch_count + 1))
     fi
-  done < <(MYSQL_PWD="${db_pass}" mariadb -N -B --protocol=tcp -h "${db_host}" -P "${db_port}" -u "${db_user}" -D "${VERIFY_DB}" -e "SELECT id, storage_key, sha256_hash, file_size FROM crm_payment_proofs WHERE storage_status NOT IN ('corrupted', 'missing');")
-  unset db_pass
+  done < <(mariadb -N -B --protocol=socket -u root -D "${VERIFY_DB}" -e "SELECT id, storage_key, sha256_hash, file_size FROM crm_payment_proofs WHERE storage_status NOT IN ('corrupted', 'missing');")
 
   [[ "${mismatch_count}" -eq 0 ]] || die "Proof-to-DB reconciliation failed with ${mismatch_count} mismatch(es)."
   log_info "Clean restore verification PASSED (${restored_tables} physical tables, 0 payment-proof mismatches)."
@@ -116,14 +119,26 @@ require_confirmation_phrase "RESTORE OVERWRITE LIVE CRM" "Stop scaleflow-crm and
 log_info "Stopping scaleflow-crm before live database and proof restore..."
 systemctl stop scaleflow-crm
 
-MYSQL_PWD="${db_pass}" mariadb --protocol=tcp -h "${db_host}" -P "${db_port}" -u "${db_user}" "${live_db_name}" < "${EXTRACTED_DIR}/database.sql"
+mariadb --protocol=socket -u root "${live_db_name}" < "${EXTRACTED_DIR}/database.sql"
+restored_live_tables="$(mariadb -N -s --protocol=socket -u root -D "${live_db_name}" -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE();")"
+[[ "${restored_live_tables}" -ge 48 ]] || die "Live restore table verification failed (expected >=48, got ${restored_live_tables})."
+
 mkdir -p "${live_proof_root}/proofs"
-rm -rf "${live_proof_root}/proofs/"*
-cp -a "${EXTRACTED_DIR}/files/proofs/." "${live_proof_root}/proofs/" 2>/dev/null || true
+find "${live_proof_root}/proofs" -mindepth 1 -delete
+if [[ -d "${EXTRACTED_DIR}/files/proofs" ]] && find "${EXTRACTED_DIR}/files/proofs" -mindepth 1 -print -quit | grep -q .; then
+  cp -a "${EXTRACTED_DIR}/files/proofs/." "${live_proof_root}/proofs/"
+fi
 chown -R "${SCALEFLOW_APP_USER}:${SCALEFLOW_APP_GROUP}" "${live_proof_root}"
 find "${live_proof_root}" -type d -exec chmod 0700 {} +
 find "${live_proof_root}/proofs" -type f -exec chmod 0600 {} +
-unset db_pass
 
 systemctl start scaleflow-crm
-log_info "Live restore complete. Verify /api/v1/health and proof verification checks immediately."
+for _ in $(seq 1 20); do
+  if curl -fsS --max-time 2 "http://127.0.0.1:${port}/api/v1/health" | jq -e '.ok == true and .status == "ok"' >/dev/null 2>&1; then
+    log_info "Live restore complete and /api/v1/health healthy (${restored_live_tables} tables)."
+    exit 0
+  fi
+  sleep 1
+done
+
+die "Live restore finished DB/proof writes but /api/v1/health failed after restart."

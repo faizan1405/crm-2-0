@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Checkpoint B11C-PRE — Controlled Application Release Deployment Script
+# Checkpoint B11C — Controlled Application Release Deployment Script (Phase 1 Hardened)
 # Deploys a built CRM V2 release artifact into /opt/scaleflow-crm/releases/<id>, runs preflight,
-# captures pre-deploy encrypted backup, runs db:migrate, swaps `current` symlink, restarts systemd,
-# and verifies /api/v1/health without touching private proofs or crm.env.
+# validates tarball hygiene (no .env/.data/.git leaks), captures pre-deploy encrypted backup,
+# loads crm.env without bash `source` evaluation, runs db:migrate as unprivileged user, swaps `current`,
+# restarts systemd, and verifies /api/v1/health without touching private proofs or crm.env.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./lib-common.sh
@@ -66,35 +67,55 @@ if [[ -L "${SCALEFLOW_CURRENT_LINK}" ]]; then
   PREV_TARGET="$(readlink -f "${SCALEFLOW_CURRENT_LINK}" || true)"
 fi
 
+SYMLINK_SWITCHED="false"
+cleanup_incomplete_release() {
+  if [[ "${SYMLINK_SWITCHED}" != "true" && -n "${RELEASE_DIR}" && -d "${RELEASE_DIR}" ]]; then
+    log_warn "Removing incomplete failed release directory ${RELEASE_DIR}..."
+    rm -rf "${RELEASE_DIR}"
+  fi
+}
+trap cleanup_incomplete_release ERR
+
 log_info "Unpacking release into ${RELEASE_DIR}..."
 mkdir -p "${RELEASE_DIR}"
-tar -xzf "${ARTIFACT_PATH}" -C "${RELEASE_DIR}"
+tar --no-same-owner --no-same-permissions -xzf "${ARTIFACT_PATH}" -C "${RELEASE_DIR}"
+
+# Reject leaked credentials or local dev files inside release artifacts
+for banned_name in .env .env.local .env.production .env.development .data .git; do
+  if [[ -e "${RELEASE_DIR}/${banned_name}" ]]; then
+    die "SECURITY BLOCK: Release artifact must NOT contain '${banned_name}'."
+  fi
+done
+
 [[ -f "${RELEASE_DIR}/.output/server/index.mjs" ]] || die "Compiled Nitro server missing at ${RELEASE_DIR}/.output/server/index.mjs"
 [[ -f "${RELEASE_DIR}/scripts/db-migrate.mjs" ]] || die "Migration script missing at ${RELEASE_DIR}/scripts/db-migrate.mjs"
 
 node_ver="$(node -v | sed 's/^v//')"
 node_major="${node_ver%%.*}"
-[[ "${node_major}" -ge 22 ]] || die "Node.js >=22.12.0 required (found v${node_ver})."
+node_minor="$(printf '%s' "${node_ver}" | cut -d. -f2)"
+if [[ "${node_major:-0}" -lt 22 || ( "${node_major:-0}" -eq 22 && "${node_minor:-0}" -lt 12 ) ]]; then
+  die "Node.js >=22.12.0 required (found v${node_ver})."
+fi
 
 chown -R "${SCALEFLOW_DEPLOY_USER}:${SCALEFLOW_APP_GROUP}" "${RELEASE_DIR}"
+chmod -R u+rwX,g+rX,g-w,o-rwx "${RELEASE_DIR}"
 
 log_info "Installing production Node dependencies if node_modules is absent..."
 if [[ ! -d "${RELEASE_DIR}/node_modules" ]]; then
-  (cd "${RELEASE_DIR}" && su -s /bin/bash "${SCALEFLOW_DEPLOY_USER}" -c "npm ci --omit=dev")
+  (cd "${RELEASE_DIR}" && runuser -u "${SCALEFLOW_DEPLOY_USER}" -- npm ci --omit=dev)
+  chown -R "${SCALEFLOW_DEPLOY_USER}:${SCALEFLOW_APP_GROUP}" "${RELEASE_DIR}/node_modules"
+  chmod -R u+rwX,g+rX,g-w,o-rwx "${RELEASE_DIR}/node_modules"
 fi
 
-log_info "Running Drizzle forward migrations against ${db_name}@${db_host}:${db_port}..."
+log_info "Running Drizzle forward migrations as '${SCALEFLOW_APP_USER}' without bash env sourcing..."
 (
   cd "${RELEASE_DIR}"
-  set -a
-  # shellcheck disable=SC1090
-  source "${ENV_FILE}"
-  set +a
-  node scripts/db-migrate.mjs
+  runuser -u "${SCALEFLOW_APP_USER}" -- node --env-file="${ENV_FILE}" "${RELEASE_DIR}/scripts/db-migrate.mjs"
 )
 
 log_info "Atomically switching symlink ${SCALEFLOW_CURRENT_LINK} -> ${RELEASE_DIR}..."
 ln -sfn "${RELEASE_DIR}" "${SCALEFLOW_CURRENT_LINK}"
+SYMLINK_SWITCHED="true"
 systemctl restart scaleflow-crm
 
 port="$(read_env_value "${ENV_FILE}" "PORT")"
@@ -110,9 +131,18 @@ done
 if [[ "${health_ok}" != "true" ]]; then
   log_warn "Health check failed after restart!"
   if [[ -n "${PREV_TARGET}" && -d "${PREV_TARGET}" ]]; then
-    log_warn "Attempting symlink revert to ${PREV_TARGET} (check DB migrations separately via 08-restore-verify.sh if schema changed!)."
+    log_warn "Reverting current symlink to ${PREV_TARGET} (verify schema compatibility via 08-restore-verify.sh if migrations ran!)."
     ln -sfn "${PREV_TARGET}" "${SCALEFLOW_CURRENT_LINK}"
     systemctl restart scaleflow-crm || true
+    revert_ok="false"
+    for _ in $(seq 1 15); do
+      if curl -fsS --max-time 2 "http://127.0.0.1:${port}/api/v1/health" | jq -e '.ok == true and .status == "ok"' >/dev/null 2>&1; then
+        revert_ok="true"
+        break
+      fi
+      sleep 1
+    done
+    log_warn "Auto-revert health verification: ${revert_ok}."
   fi
   die "Deployment health check failed on http://127.0.0.1:${port}/api/v1/health. Inspect journalctl -u scaleflow-crm."
 fi

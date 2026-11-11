@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Checkpoint B11C-PRE — Install Node.js 22 LTS + MariaDB 11.4 and configure local CRM database.
+# Checkpoint B11C — Install Node.js 22 LTS + MariaDB 11.4 and configure local CRM database (Phase 1 Hardened).
 # Never modifies any existing external/Hostinger shared DB or CRM V1.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -31,10 +31,18 @@ printf 'deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.
   > /etc/apt/sources.list.d/nodesource.list
 apt-get update -y
 apt-get install -y nodejs
-node -v
+
+node_ver="$(node -v | sed 's/^v//')"
+node_major="${node_ver%%.*}"
+node_minor="$(printf '%s' "${node_ver}" | cut -d. -f2)"
+if [[ "${node_major:-0}" -lt 22 || ( "${node_major:-0}" -eq 22 && "${node_minor:-0}" -lt 12 ) ]]; then
+  die "Node.js >=22.12.0 required, found v${node_ver}."
+fi
+log_info "Verified Node.js runtime v${node_ver}."
 
 log_info "Installing MariaDB 11.4 server and client..."
-UBUNTU_CODENAME="$(. /etc/os-release && printf '%s' "${VERSION_CODENAME:-noble}")"
+UBUNTU_CODENAME="$(awk -F= '/^VERSION_CODENAME=/{gsub(/"/,"",$2); print $2}' /etc/os-release || true)"
+UBUNTU_CODENAME="${UBUNTU_CODENAME:-noble}"
 if [[ ! -f /etc/apt/keyrings/mariadb-keyring.pgp ]]; then
   curl -fsSL https://mariadb.org/mariadb_release_signing_key.pgp -o /etc/apt/keyrings/mariadb-keyring.pgp
 fi
@@ -61,9 +69,9 @@ if [[ -z "${CRM_DB_PASSWORD:-}" ]]; then
   printf '\n' >&2
 fi
 [[ "${#CRM_DB_PASSWORD}" -ge 20 ]] || die "CRM_DB_PASSWORD must be at least 20 characters."
-# Reject characters that break SQL literal escaping without extra quoting
-if [[ "${CRM_DB_PASSWORD}" == *"'"* || "${CRM_DB_PASSWORD}" == *'\\'* ]]; then
-  die "Avoid single quotes or backslashes inside CRM_DB_PASSWORD."
+# Strictly disallow quotes, single backslash, backticks, or whitespace/control chars in SQL literal
+if [[ "${CRM_DB_PASSWORD}" == *"'"* || "${CRM_DB_PASSWORD}" == *'"'* || "${CRM_DB_PASSWORD}" == *'\'* || "${CRM_DB_PASSWORD}" == *'`'* || "${CRM_DB_PASSWORD}" =~ [[:space:][:cntrl:]] ]]; then
+  die "CRM_DB_PASSWORD cannot contain quotes, backslashes, backticks, spaces, or control characters."
 fi
 
 mariadb --protocol=socket -u root <<SQL
@@ -73,7 +81,7 @@ DROP DATABASE IF EXISTS test;
 CREATE DATABASE IF NOT EXISTS \`${TARGET_DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '${TARGET_DB_USER}'@'127.0.0.1' IDENTIFIED BY '${CRM_DB_PASSWORD}';
 ALTER USER '${TARGET_DB_USER}'@'127.0.0.1' IDENTIFIED BY '${CRM_DB_PASSWORD}';
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES ON \`${TARGET_DB_NAME}\`.* TO '${TARGET_DB_USER}'@'127.0.0.1';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, INDEX, REFERENCES, TRIGGER, SHOW VIEW ON \`${TARGET_DB_NAME}\`.* TO '${TARGET_DB_USER}'@'127.0.0.1';
 FLUSH PRIVILEGES;
 SQL
 unset CRM_DB_PASSWORD

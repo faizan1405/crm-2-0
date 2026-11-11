@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Checkpoint B11C-PRE — Non-destructive Environment, Permissions, MariaDB & Disk Preflight Validator
+# Checkpoint B11C — Non-destructive Environment, Permissions, MariaDB & Disk Preflight Validator (Phase 1 Hardened)
 # Never prints environment secrets. Safely fails closed if any prerequisite is missing.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,6 +37,16 @@ proof_dir="$(read_env_value "${ENV_FILE}" "PROOF_STORAGE_DIR")"
 [[ -d "${proof_dir}" ]] || die "Private proof directory missing: ${proof_dir}"
 proof_perm="$(stat -c '%U:%G %a' "${proof_dir}")"
 [[ "${proof_perm}" == "${SCALEFLOW_APP_USER}:${SCALEFLOW_APP_GROUP} 700" ]] || die "${proof_dir} must be ${SCALEFLOW_APP_USER}:${SCALEFLOW_APP_GROUP} mode 700 (got '${proof_perm}')."
+
+if [[ -d "${SCALEFLOW_STAGING_DIR}" ]]; then
+  staging_perm="$(stat -c '%U:%G %a' "${SCALEFLOW_STAGING_DIR}")"
+  [[ "${staging_perm}" == "${SCALEFLOW_APP_USER}:${SCALEFLOW_APP_GROUP} 700" ]] || die "${SCALEFLOW_STAGING_DIR} must be ${SCALEFLOW_APP_USER}:${SCALEFLOW_APP_GROUP} mode 700 (got '${staging_perm}')."
+fi
+
+if [[ -d "${SCALEFLOW_BACKUP_DIR}" ]]; then
+  bkp_perm="$(stat -c '%U:%G %a' "${SCALEFLOW_BACKUP_DIR}")"
+  [[ "${bkp_perm}" == "root:root 700" ]] || die "${SCALEFLOW_BACKUP_DIR} must be root:root mode 700 (got '${bkp_perm}')."
+fi
 
 # Verify minimum 5 GB free disk headroom on storage mount
 avail_kb="$(df -Pk "${proof_dir}" | awk 'NR==2 { print $4 }')"

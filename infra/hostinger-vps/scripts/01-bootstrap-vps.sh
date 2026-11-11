@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Checkpoint B11C-PRE — Initial Hostinger KVM 1 Ubuntu LTS VPS Bootstrap
+# Checkpoint B11C — Initial Hostinger KVM 1 Ubuntu LTS VPS Bootstrap (Phase 1 Hardened)
 # Prepares OS packages, swap, `crmapp` & `deploy` users, SSH key-only hardening, UFW firewall,
 # and hardened directory layout without touching application code or external services.
 
@@ -13,7 +13,7 @@ require_vps_execution_gate "01-bootstrap-vps"
 require_confirmation_phrase "BOOTSTRAP CRM VPS" "Initial OS hardening, swap, SSH, UFW firewall, and filesystem layout creation"
 
 SSH_ALLOW_PORT="${SSH_PORT:-22}"
-[[ "${SSH_ALLOW_PORT}" =~ ^[0-9]+$ ]] || die "Invalid SSH_PORT='${SSH_ALLOW_PORT}'."
+[[ "${SSH_ALLOW_PORT}" =~ ^[0-9]+$ ]] && [[ "${SSH_ALLOW_PORT}" -ge 1 && "${SSH_ALLOW_PORT}" -le 65535 ]] || die "Invalid SSH_PORT='${SSH_ALLOW_PORT}'."
 
 log_info "Updating apt indexes and installing baseline Ubuntu security tooling..."
 export DEBIAN_FRONTEND=noninteractive
@@ -28,7 +28,6 @@ apt-get install -y --no-install-recommends \
   unattended-upgrades \
   nginx \
   certbot \
-  python3-certbot-nginx \
   age \
   zstd \
   jq \
@@ -37,7 +36,9 @@ apt-get install -y --no-install-recommends \
 log_info "Configuring 2 GB swapfile safeguard (only if no active swap exists)..."
 if ! swapon --show | grep -q '/swapfile'; then
   if [[ ! -f /swapfile ]]; then
-    fallocate -l 2G /swapfile
+    if ! fallocate -l 2G /swapfile 2>/dev/null; then
+      dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
+    fi
     chmod 0600 /swapfile
     mkswap /swapfile
   fi
