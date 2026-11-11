@@ -146,6 +146,7 @@ describe("Checkpoint B10C — Automation Execution Engine Contracts & Invariants
     it("requires explicit authorized: true", () => {
       const validPayload = {
         event: {
+          eventId: "evt_b10c_valid_001",
           triggerType: "lead_created",
           leadId: "lead_001",
         },
@@ -154,9 +155,13 @@ describe("Checkpoint B10C — Automation Execution Engine Contracts & Invariants
 
       const result = executeAutomationInputSchema.safeParse(validPayload);
       expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.event.eventId).toBe("evt_b10c_valid_001");
+      }
 
       const unauthorized = {
         event: {
+          eventId: "evt_b10c_unauth_001",
           triggerType: "lead_created",
           leadId: "lead_001",
         },
@@ -168,7 +173,7 @@ describe("Checkpoint B10C — Automation Execution Engine Contracts & Invariants
 
     it("rejects negative depth", () => {
       const invalidDepth = {
-        event: { triggerType: "lead_created", leadId: "lead_001" },
+        event: { eventId: "evt_b10c_depth_001", triggerType: "lead_created", leadId: "lead_001" },
         authorized: true,
         depth: -1,
       };
@@ -177,9 +182,19 @@ describe("Checkpoint B10C — Automation Execution Engine Contracts & Invariants
     });
 
     it("accepts valid test failure injection modes", () => {
-      for (const mode of ["none", "transaction_error", "constraint_violation"] as const) {
+      for (const mode of [
+        "none",
+        "transaction_error",
+        "constraint_violation",
+        "lead_sync_error",
+        "activity_error",
+      ] as const) {
         const payload = {
-          event: { triggerType: "lead_created", leadId: "lead_001" },
+          event: {
+            eventId: "evt_b10c_inject_001",
+            triggerType: "lead_created",
+            leadId: "lead_001",
+          },
           authorized: true,
           testFailureInjection: mode,
         };
@@ -190,7 +205,11 @@ describe("Checkpoint B10C — Automation Execution Engine Contracts & Invariants
 
     it("rejects unknown failure injection modes", () => {
       const payload = {
-        event: { triggerType: "lead_created", leadId: "lead_001" },
+        event: {
+          eventId: "evt_b10c_bad_inject_001",
+          triggerType: "lead_created",
+          leadId: "lead_001",
+        },
         authorized: true,
         testFailureInjection: "hack_database",
       };

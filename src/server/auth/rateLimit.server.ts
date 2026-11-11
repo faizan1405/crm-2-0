@@ -1,8 +1,10 @@
 import "@tanstack/react-start/server-only";
+import { createHash } from "node:crypto";
 import { and, eq, inArray, lte } from "drizzle-orm";
 import type { CrmDatabase } from "../db/index.server";
 import { crmAuthRateLimits } from "../db/schema.server";
 import { addSeconds, parseUtcDateTime, toMysqlUtcDateTime } from "../db/utc.server";
+import { isMysqlDuplicateKeyError } from "../crm/errors.server";
 
 export interface RateLimitPolicy {
   maxAttempts: number;
@@ -211,4 +213,157 @@ export async function clearRateLimitsOnLoginSuccess(
   await db
     .delete(crmAuthRateLimits)
     .where(inArray(crmAuthRateLimits.limitKey, [keys.ipEmailKey, keys.emailGlobalKey]));
+}
+
+export interface FixedWindowRateLimitPolicy {
+  maxRequests: number;
+  windowSeconds: number;
+}
+
+export interface FixedWindowRateLimitResult {
+  blocked: boolean;
+  retryAfterSeconds: number;
+  remaining: number;
+}
+
+/**
+ * Pure state transition for fixed-window request rate limiting.
+ */
+export function nextFixedWindowRateLimitState(
+  existing: RateLimitStateSnapshot | null,
+  policy: FixedWindowRateLimitPolicy,
+  now: Date,
+): {
+  nextState: RateLimitStateSnapshot;
+  blocked: boolean;
+  retryAfterSeconds: number;
+  remaining: number;
+} {
+  const nowStr = toMysqlUtcDateTime(now);
+  let resetWindow = !existing;
+  let windowEnd: Date | null = null;
+  if (existing) {
+    windowEnd = addSeconds(parseUtcDateTime(existing.windowStartedAt), policy.windowSeconds);
+    if (Number.isNaN(windowEnd.getTime()) || now >= windowEnd) {
+      resetWindow = true;
+    }
+  }
+
+  if (resetWindow || !existing || !windowEnd) {
+    return {
+      nextState: {
+        attemptCount: 1,
+        windowStartedAt: nowStr,
+        blockedUntil: null,
+      },
+      blocked: false,
+      retryAfterSeconds: 0,
+      remaining: Math.max(0, policy.maxRequests - 1),
+    };
+  }
+
+  if (existing.attemptCount >= policy.maxRequests) {
+    const retryAfterSeconds = Math.max(1, Math.ceil((windowEnd.getTime() - now.getTime()) / 1000));
+    return {
+      nextState: {
+        attemptCount: existing.attemptCount,
+        windowStartedAt: existing.windowStartedAt,
+        blockedUntil: toMysqlUtcDateTime(windowEnd),
+      },
+      blocked: true,
+      retryAfterSeconds,
+      remaining: 0,
+    };
+  }
+
+  const nextCount = existing.attemptCount + 1;
+  return {
+    nextState: {
+      attemptCount: nextCount,
+      windowStartedAt: existing.windowStartedAt,
+      blockedUntil: null,
+    },
+    blocked: false,
+    retryAfterSeconds: 0,
+    remaining: Math.max(0, policy.maxRequests - nextCount),
+  };
+}
+
+/**
+ * Consumes one request token from a MySQL-backed fixed-window rate limiter keyed by a 64-char hash.
+ */
+export async function consumeFixedWindowRateLimit(
+  db: CrmDatabase,
+  rawLimitKey: string,
+  policy: FixedWindowRateLimitPolicy,
+  now: Date = new Date(),
+): Promise<FixedWindowRateLimitResult> {
+  const hashedKey = createHash("sha256").update(rawLimitKey).digest("hex");
+  const nowStr = toMysqlUtcDateTime(now);
+
+  return db.transaction(async (tx) => {
+    let rows = await tx
+      .select()
+      .from(crmAuthRateLimits)
+      .where(eq(crmAuthRateLimits.limitKey, hashedKey))
+      .for("update")
+      .limit(1);
+
+    if (!rows[0]) {
+      const initial = nextFixedWindowRateLimitState(null, policy, now);
+      try {
+        await tx.insert(crmAuthRateLimits).values({
+          limitKey: hashedKey,
+          attemptCount: initial.nextState.attemptCount,
+          windowStartedAt: initial.nextState.windowStartedAt,
+          blockedUntil: initial.nextState.blockedUntil,
+          updatedAt: nowStr,
+        });
+        return {
+          blocked: initial.blocked,
+          retryAfterSeconds: initial.retryAfterSeconds,
+          remaining: initial.remaining,
+        };
+      } catch (err) {
+        if (!isMysqlDuplicateKeyError(err)) {
+          throw err;
+        }
+        rows = await tx
+          .select()
+          .from(crmAuthRateLimits)
+          .where(eq(crmAuthRateLimits.limitKey, hashedKey))
+          .for("update")
+          .limit(1);
+      }
+    }
+
+    const row = rows[0];
+    const transition = nextFixedWindowRateLimitState(
+      row
+        ? {
+            attemptCount: row.attemptCount,
+            windowStartedAt: row.windowStartedAt,
+            blockedUntil: row.blockedUntil,
+          }
+        : null,
+      policy,
+      now,
+    );
+
+    await tx
+      .update(crmAuthRateLimits)
+      .set({
+        attemptCount: transition.nextState.attemptCount,
+        windowStartedAt: transition.nextState.windowStartedAt,
+        blockedUntil: transition.nextState.blockedUntil,
+        updatedAt: nowStr,
+      })
+      .where(eq(crmAuthRateLimits.limitKey, hashedKey));
+
+    return {
+      blocked: transition.blocked,
+      retryAfterSeconds: transition.retryAfterSeconds,
+      remaining: transition.remaining,
+    };
+  });
 }

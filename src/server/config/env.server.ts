@@ -82,13 +82,171 @@ export const serverEnvSchema = z.object({
     }
     return cleaned;
   }, z.boolean().default(false)),
+
+  // B10C-QA Exact allowlist of disposable MariaDB databases permitted for POST /automations/:id/execute-test.
+  AUTOMATION_TEST_DB_ALLOWLIST: z.preprocess(
+    (value) => emptyToUndefined(value),
+    z.string().max(500).optional(),
+  ),
+  AUTOMATION_TEST_RATE_LIMIT_MAX: z.preprocess(
+    (value) => emptyToUndefined(value),
+    z.coerce.number().int().min(1).max(500).optional(),
+  ),
+  AUTOMATION_TEST_RATE_LIMIT_WINDOW_SECONDS: z.preprocess(
+    (value) => emptyToUndefined(value),
+    z.coerce.number().int().min(1).max(3600).optional(),
+  ),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
 
+/** Resolved fixed-window rate limit policy for manual automation test execution. */
+export function getAutomationTestRateLimitPolicy(
+  env: Pick<
+    ServerEnv,
+    "AUTOMATION_TEST_RATE_LIMIT_MAX" | "AUTOMATION_TEST_RATE_LIMIT_WINDOW_SECONDS"
+  >,
+): { maxRequests: number; windowSeconds: number } {
+  return {
+    maxRequests: env.AUTOMATION_TEST_RATE_LIMIT_MAX ?? 60,
+    windowSeconds: env.AUTOMATION_TEST_RATE_LIMIT_WINDOW_SECONDS ?? 60,
+  };
+}
+
 /** Server-enforced pilot gate: strictly disabled in production regardless of client URL/storage. */
 export function isLeadPilotAvailable(env: Pick<ServerEnv, "NODE_ENV" | "DEV_LEAD_PILOT">): boolean {
   return env.NODE_ENV !== "production" && env.DEV_LEAD_PILOT === true;
+}
+
+const LOOPBACK_DB_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+const FORBIDDEN_AUTOMATION_DB_PATTERN =
+  /(^|[_-])(prod|production|staging|live|hostinger)([_-]|$)|^u\d{6,}_/i;
+
+export type DisposableDbGuardResult =
+  { ok: true; database: string; host: string } | { ok: false; code: string; message: string };
+
+function readRuntimeNodeEnv(
+  raw: Record<string, string | undefined> = process.env,
+): string | undefined {
+  const envKey = ["NODE", "ENV"].join("_");
+  return raw[envKey];
+}
+
+/**
+ * Verifies that automation test execution can run only in non-production runtime,
+ * against a loopback MariaDB host, on an explicitly allowlisted disposable database.
+ */
+export function verifyDisposableAutomationTestDatabaseConfig(
+  env: ServerEnv,
+  liveDatabaseName?: string | null,
+): DisposableDbGuardResult {
+  if (readRuntimeNodeEnv() === "production" || env.NODE_ENV === "production") {
+    return {
+      ok: false,
+      code: "automation_test_disabled_in_production",
+      message: "Automation test execution is strictly disabled in production mode.",
+    };
+  }
+  if (!isLeadPilotAvailable(env)) {
+    return {
+      ok: false,
+      code: "pilot_disabled",
+      message: "Automation test execution requires DEV_LEAD_PILOT to be explicitly enabled.",
+    };
+  }
+
+  const dbCfg = getDatabaseConnectionConfig(env);
+  if (!dbCfg.configured) {
+    return {
+      ok: false,
+      code: "database_unconfigured",
+      message: "Database connection is not configured for automation test execution.",
+    };
+  }
+
+  let rawHost = dbCfg.host ?? "";
+  let rawDatabase = dbCfg.database ?? "";
+  if (dbCfg.source === "url" && dbCfg.url) {
+    try {
+      const parsed = new URL(dbCfg.url);
+      rawHost = parsed.hostname.replace(/^\[(.*)\]$/, "$1");
+      rawDatabase = decodeURIComponent(parsed.pathname.replace(/^\/+/, "").split("/")[0] ?? "");
+    } catch {
+      return {
+        ok: false,
+        code: "database_unconfigured",
+        message: "Database URL could not be parsed safely.",
+      };
+    }
+  }
+
+  const host = rawHost.trim().toLowerCase();
+  if (!LOOPBACK_DB_HOSTS.has(host)) {
+    return {
+      ok: false,
+      code: "non_local_database_blocked",
+      message: "Automation test execution is permitted only against a local loopback database.",
+    };
+  }
+
+  const rawAllowlist = (env.AUTOMATION_TEST_DB_ALLOWLIST ?? "").trim();
+  if (!rawAllowlist) {
+    return {
+      ok: false,
+      code: "disposable_db_allowlist_required",
+      message:
+        "AUTOMATION_TEST_DB_ALLOWLIST must list at least one explicit disposable test database name.",
+    };
+  }
+
+  const entries = rawAllowlist
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  if (entries.length === 0 || entries.some((item) => /[*?%\s/\\]/.test(item))) {
+    return {
+      ok: false,
+      code: "invalid_disposable_db_allowlist",
+      message: "AUTOMATION_TEST_DB_ALLOWLIST must contain exact database names without wildcards.",
+    };
+  }
+
+  const configuredDb = rawDatabase.trim();
+  const liveDb = typeof liveDatabaseName === "string" ? liveDatabaseName.trim() : "";
+  if (!configuredDb || (liveDatabaseName !== undefined && !liveDb)) {
+    return {
+      ok: false,
+      code: "database_name_unknown",
+      message: "Connected database name could not be verified.",
+    };
+  }
+  if (liveDatabaseName !== undefined && configuredDb !== liveDb) {
+    return {
+      ok: false,
+      code: "database_name_mismatch",
+      message: "Configured database name does not match the active database connection.",
+    };
+  }
+
+  const targetDb = liveDatabaseName !== undefined ? liveDb : configuredDb;
+  if (FORBIDDEN_AUTOMATION_DB_PATTERN.test(targetDb)) {
+    return {
+      ok: false,
+      code: "protected_database_blocked",
+      message:
+        "Automation test execution is permanently blocked on production, staging, or hosted databases.",
+    };
+  }
+
+  if (!entries.includes(targetDb)) {
+    return {
+      ok: false,
+      code: "database_not_allowlisted",
+      message: "Connected database is not in AUTOMATION_TEST_DB_ALLOWLIST.",
+    };
+  }
+
+  return { ok: true, database: targetDb, host };
 }
 
 export interface DatabaseConnectionConfig {
@@ -150,6 +308,9 @@ function readEnvSnapshot(
     AUTH_SECRET: raw["AUTH_SECRET"],
     AI_PROVIDER: raw["AI_PROVIDER"],
     DEV_LEAD_PILOT: raw["DEV_LEAD_PILOT"],
+    AUTOMATION_TEST_DB_ALLOWLIST: raw["AUTOMATION_TEST_DB_ALLOWLIST"],
+    AUTOMATION_TEST_RATE_LIMIT_MAX: raw["AUTOMATION_TEST_RATE_LIMIT_MAX"],
+    AUTOMATION_TEST_RATE_LIMIT_WINDOW_SECONDS: raw["AUTOMATION_TEST_RATE_LIMIT_WINDOW_SECONDS"],
   };
 }
 

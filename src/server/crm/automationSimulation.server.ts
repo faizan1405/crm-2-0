@@ -29,6 +29,7 @@ import {
 import { CrmServiceError } from "./errors.server";
 
 export const syntheticEventSchema = z.object({
+  eventId: z.string().trim().min(3).max(128).optional(),
   triggerType: z.enum(ALL_TRIGGERS),
   leadId: z.string().max(64).optional(),
   projectId: z.string().max(64).optional(),
@@ -140,27 +141,37 @@ export async function simulateRuleExecution(
       .limit(1);
 
     if (!lead) {
-      throw new CrmServiceError(404, "lead_not_found", `Lead with ID "${leadId}" not found for this Owner.`);
+      throw new CrmServiceError(
+        404,
+        "lead_not_found",
+        `Lead with ID "${leadId}" not found for this Owner.`,
+      );
     }
 
     // Query recent activities (Owner-scoped)
     const activities = await db
       .select()
       .from(crmLeadActivities)
-      .where(and(eq(crmLeadActivities.leadId, leadId), eq(crmLeadActivities.ownerUserId, ownerUserId)));
+      .where(
+        and(eq(crmLeadActivities.leadId, leadId), eq(crmLeadActivities.ownerUserId, ownerUserId)),
+      );
 
     // Query inbox item
     const [inboxItem] = await db
       .select()
       .from(crmLeadInboxItems)
-      .where(and(eq(crmLeadInboxItems.leadId, leadId), eq(crmLeadInboxItems.ownerUserId, ownerUserId)))
+      .where(
+        and(eq(crmLeadInboxItems.leadId, leadId), eq(crmLeadInboxItems.ownerUserId, ownerUserId)),
+      )
       .limit(1);
 
     // Query custom field values
     const fieldValues = await db
       .select()
       .from(crmLeadFieldValues)
-      .where(and(eq(crmLeadFieldValues.leadId, leadId), eq(crmLeadFieldValues.ownerUserId, ownerUserId)));
+      .where(
+        and(eq(crmLeadFieldValues.leadId, leadId), eq(crmLeadFieldValues.ownerUserId, ownerUserId)),
+      );
 
     const customFieldValuesMap: Record<string, unknown> = {};
     for (const fv of fieldValues) {
@@ -409,23 +420,39 @@ export async function simulateRuleExecution(
       .limit(1);
 
     if (!project) {
-      throw new CrmServiceError(404, "project_not_found", `Project with ID "${projectId}" not found for this Owner.`);
+      throw new CrmServiceError(
+        404,
+        "project_not_found",
+        `Project with ID "${projectId}" not found for this Owner.`,
+      );
     }
 
     const tasks = await db
       .select()
       .from(crmProjectTasks)
-      .where(and(eq(crmProjectTasks.projectId, projectId), eq(crmProjectTasks.ownerUserId, ownerUserId)));
+      .where(
+        and(eq(crmProjectTasks.projectId, projectId), eq(crmProjectTasks.ownerUserId, ownerUserId)),
+      );
 
     const milestones = await db
       .select()
       .from(crmProjectMilestones)
-      .where(and(eq(crmProjectMilestones.projectId, projectId), eq(crmProjectMilestones.ownerUserId, ownerUserId)));
+      .where(
+        and(
+          eq(crmProjectMilestones.projectId, projectId),
+          eq(crmProjectMilestones.ownerUserId, ownerUserId),
+        ),
+      );
 
     const supportTickets = await db
       .select()
       .from(crmClientSupportTickets)
-      .where(and(eq(crmClientSupportTickets.projectId, projectId), eq(crmClientSupportTickets.ownerUserId, ownerUserId)));
+      .where(
+        and(
+          eq(crmClientSupportTickets.projectId, projectId),
+          eq(crmClientSupportTickets.ownerUserId, ownerUserId),
+        ),
+      );
 
     const target = `prj:${project.id}`;
     const plannedActions: PlannedActionItem[] = [];
@@ -434,12 +461,22 @@ export async function simulateRuleExecution(
       plannedActions.push({
         action,
         label: ACTION_LABELS[action] ?? action,
-        category: action === "reminder" || action === "notify" || action === "flag" || action === "owner_review" ? "internal" : "business_state",
+        category:
+          action === "reminder" ||
+          action === "notify" ||
+          action === "flag" ||
+          action === "owner_review"
+            ? "internal"
+            : "business_state",
         target,
         reason: `Project rule "${rule.name}" triggered for project "${project.name}"`,
         dueAt: nowIso,
         details: { projectId: project.id, projectName: project.name },
-        executableInCurrentCheckpoint: action === "reminder" || action === "notify" || action === "flag" || action === "owner_review",
+        executableInCurrentCheckpoint:
+          action === "reminder" ||
+          action === "notify" ||
+          action === "flag" ||
+          action === "owner_review",
         unattendedExecutionAllowed: false,
       });
     }
@@ -470,5 +507,9 @@ export async function simulateRuleExecution(
     };
   }
 
-  throw new CrmServiceError(400, "automation_validation_error", `Unsupported subject: ${rule.subject}`);
+  throw new CrmServiceError(
+    400,
+    "automation_validation_error",
+    `Unsupported subject: ${rule.subject}`,
+  );
 }

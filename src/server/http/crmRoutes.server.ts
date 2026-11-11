@@ -1,7 +1,9 @@
 import "@tanstack/react-start/server-only";
+import { sql } from "drizzle-orm";
 import { Readable } from "node:stream";
 import { z, ZodError } from "zod";
 import { resolveAuthenticatedSession } from "../auth/authService.server";
+import { consumeFixedWindowRateLimit } from "../auth/rateLimit.server";
 import {
   buildClearSessionCookie,
   getClientIp,
@@ -10,7 +12,12 @@ import {
   shouldUseSecureCookie,
   verifyCsrfAndOrigin,
 } from "../auth/security.server";
-import { type ServerEnv, isLeadPilotAvailable } from "../config/env.server";
+import {
+  type ServerEnv,
+  getAutomationTestRateLimitPolicy,
+  isLeadPilotAvailable,
+  verifyDisposableAutomationTestDatabaseConfig,
+} from "../config/env.server";
 import { createLeadActivity, listLeadActivities } from "../crm/activitiesService.server";
 import {
   createCallLogRecord,
@@ -4752,17 +4759,69 @@ export async function handleCrmApiRequest(
           const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
           if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
 
+          // Pre-check non-production mode and disposable DB config before executing anything
+          const preGuard = verifyDisposableAutomationTestDatabaseConfig(env);
+          if (!preGuard.ok) {
+            return jsonResponse(
+              { ok: false, error: { code: preGuard.code, message: preGuard.message } },
+              403,
+            );
+          }
+
           const auth = await requireAuthenticatedOwnerDb(request, env);
           if (!auth.ok) return auth.response;
+
+          // Verify connected MariaDB database name at runtime against explicit disposable allowlist
+          let liveDbName: string | null = null;
+          if (typeof (auth.db as { execute?: unknown }).execute === "function") {
+            const rawDbRes = await auth.db.execute(sql`SELECT DATABASE() AS dbName`);
+            const rowContainer = Array.isArray(rawDbRes) ? rawDbRes[0] : rawDbRes;
+            const firstRow = Array.isArray(rowContainer) ? rowContainer[0] : rowContainer;
+            if (firstRow && typeof firstRow === "object" && "dbName" in firstRow) {
+              const val = (firstRow as { dbName: unknown }).dbName;
+              liveDbName = val == null ? null : String(val);
+            }
+          }
+          const runtimeGuard = verifyDisposableAutomationTestDatabaseConfig(env, liveDbName);
+          if (!runtimeGuard.ok) {
+            return jsonResponse(
+              { ok: false, error: { code: runtimeGuard.code, message: runtimeGuard.message } },
+              403,
+            );
+          }
+
+          // Enforce DB-backed rate limit on manual test execution endpoint
+          const clientIpPrefix = maskIpPrefix(getClientIp(request, env));
+          const rate = await consumeFixedWindowRateLimit(
+            auth.db,
+            `auto_exec:${auth.userId}:${clientIpPrefix}`,
+            getAutomationTestRateLimitPolicy(env),
+          );
+          if (rate.blocked) {
+            return jsonResponse(
+              {
+                ok: false,
+                error: {
+                  code: "rate_limited",
+                  message:
+                    "Too many automation test execution requests. Please retry after cooldown.",
+                  retryAfterSeconds: rate.retryAfterSeconds,
+                },
+              },
+              429,
+              { "retry-after": String(rate.retryAfterSeconds) },
+            );
+          }
 
           const parsedBody = await parseJsonObject(request);
           if (!parsedBody.ok) return parsedBody.response;
 
+          const bodyData = parsedBody.data as Record<string, unknown>;
           const idemHeader = request.headers.get("idempotency-key");
           const inputData = {
-            ...(parsedBody.data as any),
-            ...(idemHeader && !(parsedBody.data as any).idempotencyKey ? { idempotencyKey: idemHeader } : {}),
-          };
+            ...bodyData,
+            ...(idemHeader && !bodyData["idempotencyKey"] ? { idempotencyKey: idemHeader } : {}),
+          } as Parameters<typeof executeAutomationRuleRecord>[4];
 
           const result = await executeAutomationRuleRecord(
             auth.db,
@@ -4772,7 +4831,7 @@ export async function handleCrmApiRequest(
             inputData,
           );
 
-          return jsonResponse(result, 200);
+          return jsonResponse(result, 200, { "x-ratelimit-remaining": String(rate.remaining) });
         }
 
         return null;

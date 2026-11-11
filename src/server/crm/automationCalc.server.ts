@@ -149,7 +149,10 @@ export const ruleConditionsSchema = z
     minStageDays: z.number().min(0).max(3650).optional(),
     minInactiveHours: z.number().min(0).max(87600).optional(),
     followupStatus: z.enum(["any", "pending", "overdue", "completed"]).optional(),
-    custom: z.array(ruleConditionCustomItemSchema).max(25, "Maximum 25 custom conditions allowed").optional(),
+    custom: z
+      .array(ruleConditionCustomItemSchema)
+      .max(25, "Maximum 25 custom conditions allowed")
+      .optional(),
     customMode: z.enum(["and", "or"]).optional(),
   })
   .strict();
@@ -158,7 +161,10 @@ export type RuleConditions = z.infer<typeof ruleConditionsSchema>;
 
 export const ruleSettingsSchema = z
   .object({
-    cooldownHours: z.number().min(1, "Cooldown must be at least 1 hour to prevent repeat loops").max(87600),
+    cooldownHours: z
+      .number()
+      .min(1, "Cooldown must be at least 1 hour to prevent repeat loops")
+      .max(87600),
     overdueMinutes: z.number().min(0).max(525600).optional(),
     escalateOwnerAfterMinutes: z.number().min(0).max(525600).optional(),
     followupInHours: z.number().min(1).max(87600).optional(),
@@ -171,30 +177,36 @@ export const ruleSettingsSchema = z
 
 export type RuleSettings = z.infer<typeof ruleSettingsSchema>;
 
-export const baseAutomationRuleSchema = z
-  .object({
-    name: z.string().trim().min(1, "Rule name is required").max(128),
-    description: z.string().trim().max(255).default(""),
-    templateId: z.string().trim().max(64).nullable().optional(),
-    subject: z.enum(RULE_SUBJECTS).default("lead"),
-    triggerType: z.enum(ALL_TRIGGERS),
-    status: z.enum(RULE_STATUSES).default("draft"),
-    conditions: ruleConditionsSchema,
-    actions: z.array(z.enum(ACTION_TYPES)).min(1, "Choose at least one action"),
-    settings: ruleSettingsSchema,
-  });
+export const MAX_ACTIONS_PER_EVENT = 5;
+
+export const baseAutomationRuleSchema = z.object({
+  name: z.string().trim().min(1, "Rule name is required").max(128),
+  description: z.string().trim().max(255).default(""),
+  templateId: z.string().trim().max(64).nullable().optional(),
+  subject: z.enum(RULE_SUBJECTS).default("lead"),
+  triggerType: z.enum(ALL_TRIGGERS),
+  status: z.enum(RULE_STATUSES).default("draft"),
+  conditions: ruleConditionsSchema,
+  actions: z
+    .array(z.enum(ACTION_TYPES))
+    .min(1, "Choose at least one action")
+    .max(MAX_ACTIONS_PER_EVENT, `Choose at most ${MAX_ACTIONS_PER_EVENT} actions per rule`),
+  settings: ruleSettingsSchema,
+});
 
 function validateRuleSafety(val: { name: string; description: string }): boolean {
-  if (DANGEROUS_EXPRESSION_REGEX.test(val.name) || DANGEROUS_EXPRESSION_REGEX.test(val.description)) {
+  if (
+    DANGEROUS_EXPRESSION_REGEX.test(val.name) ||
+    DANGEROUS_EXPRESSION_REGEX.test(val.description)
+  ) {
     return false;
   }
   return true;
 }
 
-export const createAutomationRuleSchema = baseAutomationRuleSchema.refine(
-  validateRuleSafety,
-  { message: "Unsafe script or expression detected in rule name or description" },
-);
+export const createAutomationRuleSchema = baseAutomationRuleSchema.refine(validateRuleSafety, {
+  message: "Unsafe script or expression detected in rule name or description",
+});
 
 export type CreateAutomationRuleInput = z.infer<typeof createAutomationRuleSchema>;
 
@@ -202,10 +214,9 @@ export const updateAutomationRuleSchema = baseAutomationRuleSchema
   .extend({
     expectedVersion: z.number().int().min(1, "expectedVersion is required for optimistic locking"),
   })
-  .refine(
-    validateRuleSafety,
-    { message: "Unsafe script or expression detected in rule name or description" },
-  );
+  .refine(validateRuleSafety, {
+    message: "Unsafe script or expression detected in rule name or description",
+  });
 
 export type UpdateAutomationRuleInput = z.infer<typeof updateAutomationRuleSchema>;
 
@@ -242,7 +253,10 @@ export function validateRuleSemantics(rule: {
     }
   }
 
-  if (rule.actions.includes("followup") && !(rule.settings.followupInHours && rule.settings.followupInHours > 0)) {
+  if (
+    rule.actions.includes("followup") &&
+    !(rule.settings.followupInHours && rule.settings.followupInHours > 0)
+  ) {
     return "Set when the automatic follow-up should be due (followupInHours).";
   }
 
@@ -325,7 +339,12 @@ const CONNECTED_CALL_OUTCOMES = new Set([
 
 export function calculateContactState(
   leadId: string,
-  activities: Array<{ leadId: string; type: string; outcome?: string | null; opId?: string | null }>,
+  activities: Array<{
+    leadId: string;
+    type: string;
+    outcome?: string | null;
+    opId?: string | null;
+  }>,
 ): ContactState {
   let state: ContactState = "none";
   for (const act of activities) {
@@ -354,7 +373,10 @@ export function calculateLastAttemptAt(
     if (
       act.leadId === leadId &&
       !act.opId?.startsWith("auto:") &&
-      (act.type === "call" || act.type === "whatsapp" || act.type === "email" || act.type === "meeting")
+      (act.type === "call" ||
+        act.type === "whatsapp" ||
+        act.type === "email" ||
+        act.type === "meeting")
     ) {
       if (!latest || act.at > latest) {
         latest = act.at;
@@ -435,10 +457,20 @@ export function evaluateConditionOperator(
   expected: unknown,
 ): boolean {
   if (op === "empty") {
-    return actual === null || actual === undefined || actual === "" || (Array.isArray(actual) && actual.length === 0);
+    return (
+      actual === null ||
+      actual === undefined ||
+      actual === "" ||
+      (Array.isArray(actual) && actual.length === 0)
+    );
   }
   if (op === "not_empty") {
-    return actual !== null && actual !== undefined && actual !== "" && (!Array.isArray(actual) || actual.length > 0);
+    return (
+      actual !== null &&
+      actual !== undefined &&
+      actual !== "" &&
+      (!Array.isArray(actual) || actual.length > 0)
+    );
   }
 
   if (actual === null || actual === undefined) {
@@ -470,16 +502,28 @@ export function evaluateConditionOperator(
       case "ends_with":
         return act.endsWith(exp);
       case "in":
-        return exp.split(",").map((s) => s.trim().toLowerCase()).includes(act);
+        return exp
+          .split(",")
+          .map((s) => s.trim().toLowerCase())
+          .includes(act);
       case "not_in":
-        return !exp.split(",").map((s) => s.trim().toLowerCase()).includes(act);
+        return !exp
+          .split(",")
+          .map((s) => s.trim().toLowerCase())
+          .includes(act);
     }
   }
 
   if (op === "between" && Array.isArray(expected) && expected.length === 2) {
     const numActual = typeof actual === "number" ? actual : Number(actual);
     const [min, max] = expected.map(Number);
-    return Number.isFinite(numActual) && Number.isFinite(min) && Number.isFinite(max) && numActual >= min! && numActual <= max!;
+    return (
+      Number.isFinite(numActual) &&
+      Number.isFinite(min) &&
+      Number.isFinite(max) &&
+      numActual >= min! &&
+      numActual <= max!
+    );
   }
 
   // Numeric comparisons (handles numbers or numeric strings representing INR paise or counts)
@@ -534,7 +578,9 @@ export function evaluateLeadConditions(
       expected: conditions.sources,
       actual: lead.source,
       passed,
-      message: passed ? `Source "${lead.source}" matched` : `Source "${lead.source}" not in allowed sources`,
+      message: passed
+        ? `Source "${lead.source}" matched`
+        : `Source "${lead.source}" not in allowed sources`,
     });
   }
 
@@ -547,7 +593,9 @@ export function evaluateLeadConditions(
       expected: conditions.stages,
       actual: lead.status,
       passed,
-      message: passed ? `Stage "${lead.status}" matched` : `Stage "${lead.status}" not in allowed stages`,
+      message: passed
+        ? `Stage "${lead.status}" matched`
+        : `Stage "${lead.status}" not in allowed stages`,
     });
   }
 
@@ -560,7 +608,9 @@ export function evaluateLeadConditions(
       expected: conditions.priorities,
       actual: lead.priority,
       passed,
-      message: passed ? `Priority "${lead.priority}" matched` : `Priority "${lead.priority}" not in allowed priorities`,
+      message: passed
+        ? `Priority "${lead.priority}" matched`
+        : `Priority "${lead.priority}" not in allowed priorities`,
     });
   }
 
@@ -577,7 +627,9 @@ export function evaluateLeadConditions(
       expected: conditions.assigned,
       actual: employeeId ? "assigned" : "unassigned",
       passed,
-      message: passed ? `Assignment condition "${conditions.assigned}" satisfied` : `Assignment condition failed`,
+      message: passed
+        ? `Assignment condition "${conditions.assigned}" satisfied`
+        : `Assignment condition failed`,
     });
   }
   if (conditions.employeeId !== undefined && conditions.employeeId !== null) {
@@ -611,14 +663,18 @@ export function evaluateLeadConditions(
   // 6. First contact pending
   const contactState = calculateContactState(lead.id, ctx.activities);
   if (conditions.firstContactPending !== undefined) {
-    const passed = conditions.firstContactPending ? contactState === "none" : contactState !== "none";
+    const passed = conditions.firstContactPending
+      ? contactState === "none"
+      : contactState !== "none";
     results.push({
       id: "cond_first_contact",
       field: "firstContactPending",
       expected: conditions.firstContactPending,
       actual: contactState,
       passed,
-      message: passed ? `First contact pending condition satisfied (${contactState})` : `First contact pending condition failed (${contactState})`,
+      message: passed
+        ? `First contact pending condition satisfied (${contactState})`
+        : `First contact pending condition failed (${contactState})`,
     });
   }
 
@@ -633,7 +689,9 @@ export function evaluateLeadConditions(
       expected: conditions.minCreatedMinutes,
       actual: elapsedMinutes,
       passed,
-      message: passed ? `Created ${elapsedMinutes}m ago >= ${conditions.minCreatedMinutes}m` : `Created ${elapsedMinutes}m ago < required ${conditions.minCreatedMinutes}m`,
+      message: passed
+        ? `Created ${elapsedMinutes}m ago >= ${conditions.minCreatedMinutes}m`
+        : `Created ${elapsedMinutes}m ago < required ${conditions.minCreatedMinutes}m`,
     });
   }
 
@@ -650,7 +708,10 @@ export function evaluateLeadConditions(
         message: "No contact attempt has been recorded",
       });
     } else {
-      const elapsedMinutes = Math.max(0, Math.floor((nowMs - new Date(lastAttemptIso).getTime()) / 60000));
+      const elapsedMinutes = Math.max(
+        0,
+        Math.floor((nowMs - new Date(lastAttemptIso).getTime()) / 60000),
+      );
       const passed = elapsedMinutes >= conditions.minSinceAttemptMinutes;
       results.push({
         id: "cond_min_attempt",
@@ -658,14 +719,19 @@ export function evaluateLeadConditions(
         expected: conditions.minSinceAttemptMinutes,
         actual: elapsedMinutes,
         passed,
-        message: passed ? `Last attempt ${elapsedMinutes}m ago >= ${conditions.minSinceAttemptMinutes}m` : `Last attempt ${elapsedMinutes}m ago < required ${conditions.minSinceAttemptMinutes}m`,
+        message: passed
+          ? `Last attempt ${elapsedMinutes}m ago >= ${conditions.minSinceAttemptMinutes}m`
+          : `Last attempt ${elapsedMinutes}m ago < required ${conditions.minSinceAttemptMinutes}m`,
       });
     }
   }
 
   if (conditions.minInactiveHours !== undefined && conditions.minInactiveHours >= 0) {
     const lastActIso = calculateLastActivityAt(lead.createdAt, lead.id, ctx.activities);
-    const elapsedHours = Math.max(0, Math.floor((nowMs - new Date(lastActIso).getTime()) / 3600000));
+    const elapsedHours = Math.max(
+      0,
+      Math.floor((nowMs - new Date(lastActIso).getTime()) / 3600000),
+    );
     const passed = elapsedHours >= conditions.minInactiveHours;
     results.push({
       id: "cond_min_inactive",
@@ -673,7 +739,9 @@ export function evaluateLeadConditions(
       expected: conditions.minInactiveHours,
       actual: elapsedHours,
       passed,
-      message: passed ? `Inactive for ${elapsedHours}h >= ${conditions.minInactiveHours}h` : `Inactive for ${elapsedHours}h < required ${conditions.minInactiveHours}h`,
+      message: passed
+        ? `Inactive for ${elapsedHours}h >= ${conditions.minInactiveHours}h`
+        : `Inactive for ${elapsedHours}h < required ${conditions.minInactiveHours}h`,
     });
   }
 
@@ -708,7 +776,9 @@ export function evaluateLeadConditions(
           expected: c.value,
           actual: actualValue,
           passed,
-          message: passed ? `Custom field condition "${c.field} ${c.op} ${c.value}" passed` : `Custom field condition failed`,
+          message: passed
+            ? `Custom field condition "${c.field} ${c.op} ${c.value}" passed`
+            : `Custom field condition failed`,
         });
       }
     }

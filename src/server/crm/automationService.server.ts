@@ -228,7 +228,11 @@ export async function getAutomationRuleRecord(
     .limit(1);
 
   if (!row) {
-    throw new CrmServiceError(404, "automation_rule_not_found", `Automation rule "${ruleId}" not found.`);
+    throw new CrmServiceError(
+      404,
+      "automation_rule_not_found",
+      `Automation rule "${ruleId}" not found.`,
+    );
   }
 
   return parseRuleRow(row);
@@ -255,13 +259,16 @@ export async function createAutomationRuleRecord(
 
   return await db.transaction(async (tx) => {
     if (idemKey) {
-      const replay = await findOrVerifyIdempotencyReplay<{ ok: true; rule: ParsedAutomationRule }>(tx, {
-        ownerUserId,
-        scope,
-        idemKey,
-        requestHash,
-        now,
-      });
+      const replay = await findOrVerifyIdempotencyReplay<{ ok: true; rule: ParsedAutomationRule }>(
+        tx,
+        {
+          ownerUserId,
+          scope,
+          idemKey,
+          requestHash,
+          now,
+        },
+      );
       if (replay.hit) {
         return { ...replay.body, replayed: true };
       }
@@ -395,13 +402,16 @@ export async function updateAutomationRuleRecord(
 
   return await db.transaction(async (tx) => {
     if (idemKey) {
-      const replay = await findOrVerifyIdempotencyReplay<{ ok: true; rule: ParsedAutomationRule }>(tx, {
-        ownerUserId,
-        scope,
-        idemKey,
-        requestHash,
-        now,
-      });
+      const replay = await findOrVerifyIdempotencyReplay<{ ok: true; rule: ParsedAutomationRule }>(
+        tx,
+        {
+          ownerUserId,
+          scope,
+          idemKey,
+          requestHash,
+          now,
+        },
+      );
       if (replay.hit) {
         return { ...replay.body, replayed: true };
       }
@@ -410,16 +420,26 @@ export async function updateAutomationRuleRecord(
     const [existing] = await tx
       .select()
       .from(crmAutomationRules)
-      .where(and(eq(crmAutomationRules.id, ruleId), eq(crmAutomationRules.ownerUserId, ownerUserId)))
+      .where(
+        and(eq(crmAutomationRules.id, ruleId), eq(crmAutomationRules.ownerUserId, ownerUserId)),
+      )
       .limit(1)
       .for("update");
 
     if (!existing) {
-      throw new CrmServiceError(404, "automation_rule_not_found", `Automation rule "${ruleId}" not found.`);
+      throw new CrmServiceError(
+        404,
+        "automation_rule_not_found",
+        `Automation rule "${ruleId}" not found.`,
+      );
     }
 
     if (existing.status === "archived") {
-      throw new CrmServiceError(400, "automation_rule_archived", "Archived rules cannot be edited.");
+      throw new CrmServiceError(
+        400,
+        "automation_rule_archived",
+        "Archived rules cannot be edited.",
+      );
     }
 
     // Optimistic locking
@@ -552,13 +572,16 @@ export async function duplicateAutomationRuleRecord(
 
   return await db.transaction(async (tx) => {
     if (idemKey) {
-      const replay = await findOrVerifyIdempotencyReplay<{ ok: true; rule: ParsedAutomationRule }>(tx, {
-        ownerUserId,
-        scope,
-        idemKey,
-        requestHash,
-        now,
-      });
+      const replay = await findOrVerifyIdempotencyReplay<{ ok: true; rule: ParsedAutomationRule }>(
+        tx,
+        {
+          ownerUserId,
+          scope,
+          idemKey,
+          requestHash,
+          now,
+        },
+      );
       if (replay.hit) {
         return { ...replay.body, replayed: true };
       }
@@ -567,11 +590,17 @@ export async function duplicateAutomationRuleRecord(
     const [existing] = await tx
       .select()
       .from(crmAutomationRules)
-      .where(and(eq(crmAutomationRules.id, ruleId), eq(crmAutomationRules.ownerUserId, ownerUserId)))
+      .where(
+        and(eq(crmAutomationRules.id, ruleId), eq(crmAutomationRules.ownerUserId, ownerUserId)),
+      )
       .limit(1);
 
     if (!existing) {
-      throw new CrmServiceError(404, "automation_rule_not_found", `Automation rule "${ruleId}" not found.`);
+      throw new CrmServiceError(
+        404,
+        "automation_rule_not_found",
+        `Automation rule "${ruleId}" not found.`,
+      );
     }
 
     const newRuleId = generateServerId("ar");
@@ -656,13 +685,16 @@ export async function archiveAutomationRuleRecord(
 
   return await db.transaction(async (tx) => {
     if (idemKey) {
-      const replay = await findOrVerifyIdempotencyReplay<{ ok: true; rule: ParsedAutomationRule }>(tx, {
-        ownerUserId,
-        scope,
-        idemKey,
-        requestHash,
-        now,
-      });
+      const replay = await findOrVerifyIdempotencyReplay<{ ok: true; rule: ParsedAutomationRule }>(
+        tx,
+        {
+          ownerUserId,
+          scope,
+          idemKey,
+          requestHash,
+          now,
+        },
+      );
       if (replay.hit) {
         return { ...replay.body, replayed: true };
       }
@@ -671,12 +703,18 @@ export async function archiveAutomationRuleRecord(
     const [existing] = await tx
       .select()
       .from(crmAutomationRules)
-      .where(and(eq(crmAutomationRules.id, ruleId), eq(crmAutomationRules.ownerUserId, ownerUserId)))
+      .where(
+        and(eq(crmAutomationRules.id, ruleId), eq(crmAutomationRules.ownerUserId, ownerUserId)),
+      )
       .limit(1)
       .for("update");
 
     if (!existing) {
-      throw new CrmServiceError(404, "automation_rule_not_found", `Automation rule "${ruleId}" not found.`);
+      throw new CrmServiceError(
+        404,
+        "automation_rule_not_found",
+        `Automation rule "${ruleId}" not found.`,
+      );
     }
 
     if (existing.status === "archived") {
@@ -762,7 +800,11 @@ export async function getAutomationRuleRevisionsRecord(
     .limit(1);
 
   if (!rule) {
-    throw new CrmServiceError(404, "automation_rule_not_found", `Automation rule "${ruleId}" not found.`);
+    throw new CrmServiceError(
+      404,
+      "automation_rule_not_found",
+      `Automation rule "${ruleId}" not found.`,
+    );
   }
 
   const rows = await db
@@ -815,6 +857,7 @@ export async function simulateAutomationRuleRecord(
     id: runId,
     ownerUserId,
     ruleId,
+    ruleVersion: rule.version,
     triggerType: event.triggerType,
     outcome: result.matched ? "simulated" : "skipped",
     isSimulation: true,
@@ -829,12 +872,11 @@ export async function simulateAutomationRuleRecord(
     createdAt: nowStr,
   });
 
-  // Update rule lastEvaluatedAt
+  // Update rule lastEvaluatedAt (simulation is evaluation-only; lastTriggeredAt records real executions)
   await db
     .update(crmAutomationRules)
     .set({
       lastEvaluatedAt: nowStr,
-      ...(result.matched ? { lastTriggeredAt: nowStr } : {}),
     })
     .where(eq(crmAutomationRules.id, ruleId));
 
@@ -860,7 +902,9 @@ export function getAutomationDefinitions(): {
   const triggers = ALL_TRIGGERS.map((t) => ({
     type: t,
     label: TRIGGER_LABELS[t],
-    subject: (LEAD_TRIGGERS as readonly string[]).includes(t) ? ("lead" as const) : ("project" as const),
+    subject: (LEAD_TRIGGERS as readonly string[]).includes(t)
+      ? ("lead" as const)
+      : ("project" as const),
   }));
 
   const actions = (Object.keys(ACTION_LABELS) as ActionType[]).map((a) => ({
@@ -879,7 +923,12 @@ export function getAutomationDefinitions(): {
       description: "Assigned lead with no recorded contact attempt after the set time.",
       subject: "lead" as const,
       triggerType: "lead_assigned" as const,
-      conditions: { assigned: "assigned" as const, firstContactPending: true, minCreatedMinutes: 30, stages: ["new"] },
+      conditions: {
+        assigned: "assigned" as const,
+        firstContactPending: true,
+        minCreatedMinutes: 30,
+        stages: ["new"],
+      },
       actions: ["reminder" as const, "flag" as const, "notify" as const],
       settings: { cooldownHours: 24, escalateOwnerAfterMinutes: 120 },
     },
@@ -926,7 +975,8 @@ export function getAutomationDefinitions(): {
     {
       templateId: "tpl_won",
       name: "Won deal handoff",
-      description: "Offer a project handoff checklist when a deal is won. The sales record is unchanged.",
+      description:
+        "Offer a project handoff checklist when a deal is won. The sales record is unchanged.",
       subject: "lead" as const,
       triggerType: "deal_won" as const,
       conditions: { stages: ["won"] },
@@ -959,7 +1009,9 @@ export function getAutomationDefinitions(): {
       description: "Project is awaiting content — remind owner to follow up.",
       subject: "project" as const,
       triggerType: "project_stage_changed" as const,
-      conditions: { custom: [{ id: "c_stage", field: "p.stage", op: "is" as const, value: "awaiting_content" }] },
+      conditions: {
+        custom: [{ id: "c_stage", field: "p.stage", op: "is" as const, value: "awaiting_content" }],
+      },
       actions: ["reminder" as const],
       settings: { cooldownHours: 72 },
     },
@@ -991,7 +1043,10 @@ export function getAutomationDefinitions(): {
       triggerType: "project_delivered" as const,
       conditions: {},
       actions: ["reminder" as const, "task" as const],
-      settings: { cooldownHours: 24 * 365, taskTitle: "Confirm handover and support details with client" },
+      settings: {
+        cooldownHours: 24 * 365,
+        taskTitle: "Confirm handover and support details with client",
+      },
     },
   ];
 

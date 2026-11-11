@@ -65,6 +65,7 @@ export type CrmErrorCode =
   | "automation_rule_archived"
   | "automation_validation_error"
   | "automation_simulation_error"
+  | "automation_execution_failed"
   | "crm_unavailable";
 
 export interface CrmErrorPayload {
