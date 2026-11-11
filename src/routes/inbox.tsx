@@ -3,6 +3,9 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CalendarPlus, CheckCheck, StickyNote, Eye, Flag, GitCompare, Inbox, Pencil, PhoneCall, RotateCcw, Search, UserPlus, Users } from "lucide-react";
 import { Shell, PriorityBadge, selectCls, Identity, Empty } from "@/components/crm/Shell";
+import { AppShellSkeleton } from "@/components/crm/ShellPrimitives";
+import { PilotInboxPage } from "@/components/pilot/PilotInboxPage";
+import { parsePilotSearch, useLeadPilotState } from "@/lib/api/pilotHook";
 import { CallButton } from "@/components/crm/CallButton";
 import { openCallLog } from "@/components/crm/PostCallDialog";
 import { WhatsAppButton } from "@/components/crm/WhatsAppComposer";
@@ -21,7 +24,31 @@ import { buildRows, CATEGORY_LABEL, DUP_LABEL, duplicateIds, filterRows, findDup
 import { EMPTY_SELECTION, addPage, isSelected, selectMatching, selectedIds, selectionCount, toggle, type Selection } from "@/lib/crm/bulk";
 import { onRovingKeyDown, roving } from "@/lib/a11y/tabKeys";
 
+export type InboxSearch = {
+  pilot?: 1 | 0;
+  category?: string;
+  q?: string;
+  search?: string;
+  source?: string;
+  priority?: string;
+  stage?: string;
+  status?: string;
+};
+
 export const Route = createFileRoute("/inbox")({
+  validateSearch: (s: Record<string, unknown>): InboxSearch => {
+    const pilotObj = parsePilotSearch(s);
+    return {
+      ...(typeof s["category"] === "string" ? { category: s["category"] } : {}),
+      ...(typeof s["q"] === "string" ? { q: s["q"] } : {}),
+      ...(typeof s["search"] === "string" ? { search: s["search"] } : {}),
+      ...(typeof s["source"] === "string" ? { source: s["source"] } : {}),
+      ...(typeof s["priority"] === "string" ? { priority: s["priority"] } : {}),
+      ...(typeof s["stage"] === "string" ? { stage: s["stage"] } : {}),
+      ...(typeof s["status"] === "string" ? { status: s["status"] } : {}),
+      ...(pilotObj.pilot !== undefined ? { pilot: pilotObj.pilot } : {}),
+    };
+  },
   head: () => ({
     meta: [
       { title: "Smart Lead Inbox · Scale Flow CRM" },
@@ -32,8 +59,21 @@ export const Route = createFileRoute("/inbox")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: InboxPage,
+  component: InboxEntry,
 });
+
+function InboxEntry() {
+  const search = Route.useSearch();
+  const { pilotActive, pilotResolved } = useLeadPilotState(search.pilot);
+
+  if (pilotActive) {
+    return <PilotInboxPage search={search as Record<string, unknown>} />;
+  }
+  if (!pilotResolved) {
+    return <AppShellSkeleton />;
+  }
+  return <InboxPage />;
+}
 
 const CATS: InboxCategory[] = ["all", "needs_review", "unassigned", "newly_assigned", "duplicates", "recently_reviewed"];
 const PAGE = 50;

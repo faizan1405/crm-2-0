@@ -103,6 +103,7 @@ import { PilotQuotationDetailDrawer } from "./PilotQuotationDetailDrawer";
 import { PilotShell } from "./PilotShell";
 import { PilotWhatsAppButton, PilotWhatsAppDialog } from "./PilotWhatsAppDialog";
 import { usePilotWhatsAppLauncher } from "./pilotWhatsAppLauncher";
+import { PilotLeadRelationshipsCard } from "./PilotLeadRelationshipsCard";
 
 const ACTIVITY_TYPE_LABEL: Record<ManualActivityTypeApi, string> = {
   note: "Note",
@@ -1150,6 +1151,11 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
               })()}
             </div>
           </section>
+
+          {/* Active Lead Relationships */}
+          <div data-testid="pilot-lead-relationships-section">
+            <PilotLeadRelationshipsCard leadId={id} />
+          </div>
 
           <section className="surface p-5" data-testid="pilot-lead-calls-panel">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
