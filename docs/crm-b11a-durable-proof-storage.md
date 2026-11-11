@@ -64,7 +64,7 @@ Verified directly via Hostinger MCP read-only inspection during B11A:
 
 ## 4. Schema Hardening (`0014_b11a_proof_storage_hardening.sql`)
 
-Additive forward migration `0014_b11a_proof_storage_hardening.sql` extends `crm_payment_proofs` (total MariaDB schema: `47` CRM tables across `15` migrations `0000`..`0014`):
+Additive forward migration `0014_b11a_proof_storage_hardening.sql` extends `crm_payment_proofs` (Drizzle schema: `47` tables [`46 crm_*` + `_crm_schema_meta`] across `15` migrations `0000`..`0014`; `48` total physical MariaDB tables including `__drizzle_migrations` — see [docs/crm-b11b-hostinger-storage-decision-gate.md](./crm-b11b-hostinger-storage-decision-gate.md)):
 
 - `storage_status varchar(24) DEFAULT 'verified' NOT NULL`
 - `storage_provider_id varchar(64)`

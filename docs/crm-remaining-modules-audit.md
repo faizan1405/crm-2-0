@@ -230,12 +230,26 @@ Following B4A Quotation Backend completion:
 - **Branch:** `feat/b11a-durable-private-proof-storage` (branched from `feat/b10c-qa-execution-safety` / `8430a80`)
 - **Production Durability Status:** **BLOCKED (FAIL CLOSED)** on `hostinger_business_v3` shared Node.js hosting (`0` VPS provisioned, versioned `hbuilds` redeploys, no managed S3-compatible service).
 - **Superseded Policy Note:** Supersedes earlier B7A/B10C-QA references to provisioning S3/R2 directly; **Hostinger is the exclusive hosting platform** unless the Owner explicitly approves an external exception.
-- **Database Migration (`0014_b11a_proof_storage_hardening.sql`):** Added `storage_status`, `storage_provider_id`, `verified_at`, `verification_error`, and `idx_crm_payment_proofs_storage_status` to `crm_payment_proofs` (`47` CRM tables across `15` Drizzle migrations `0000`..`0014`).
+- **Database Migration (`0014_b11a_proof_storage_hardening.sql`):** Added `storage_status`, `storage_provider_id`, `verified_at`, `verification_error`, and `idx_crm_payment_proofs_storage_status` to `crm_payment_proofs` (`47` Drizzle schema tables [`46 crm_*` + `_crm_schema_meta`], `48` physical MariaDB tables including `__drizzle_migrations`, across `15` migrations `0000`..`0014`).
 - **Storage & Security Controls Implemented:**
   - Eliminated silent local fallback in `ObjectStorageProofStorage`; both `object-storage` and `disabled` plus unconfirmed/ephemeral/web-root production configs fail closed (`503 storage_not_configured` / `storage_durability_blocked`) without touching `.data/`.
   - Extended `ProofStorageBackend` with `putPrivateObject`, `getPrivateObject`, `headPrivateObject`, `verifyPrivateObject`, `deletePrivateObject`, and `listOrphanedObjects`, plus `DisposableTestProofStorage` fault injection behind `PROOF_TEST_STORAGE_ALLOWLIST`.
   - Added JPEG/PNG/WebP/PDF structural truncation checks, declared MIME validation, sanitized `originalFileName` storage, SHA-256 + byte-size verification on reads, `GET /api/v1/payments/:id/proof/verify`, Pilot-only `GET /api/v1/vault/storage-diagnostics`, secret-free `/api/v1/health` storage flags, updated Data Vault `blocker-storage-durability`, and strict download CSP sandbox headers.
   - Malware scanning remains unavailable on Hostinger Business shared Node.js hosting (explicitly disclosed and compensated via structural validation, opaque keys, and download sandbox headers).
 - **Full Details:** See [docs/crm-b11a-durable-proof-storage.md](./crm-b11a-durable-proof-storage.md).
+
+---
+
+## 11. Checkpoint B11B Addendum (11 Nov 2026) — Hostinger Durable Storage Architecture & Production Decision Gate
+
+- **Branch:** `feat/b11b-hostinger-storage-decision-gate` (branched from `feat/b11a-durable-private-proof-storage` / `9930761`)
+- **Audit Scope:** Read-only Hostinger MCP account audit, official documentation review, schema inventory reconciliation, Option A/B/C evaluation, threat modeling, B11C 20-point staging plan, and Owner decision gate (**zero** VPS provisioned, **zero** remote changes, **zero** code/UI/DB mutations).
+- **Table Count Reconciled:** `48` total physical MariaDB tables = `46 crm_*` tables + `_crm_schema_meta` (`47` Drizzle schema/snapshot tables in `schema.server.ts` / `0014_snapshot.json`) + `__drizzle_migrations` (runtime Drizzle migrator table).
+- **Key Infrastructure Findings:**
+  - Account `u256504187` (`hostinger_business_v3`, ₹699/mo) already runs **5/5 Node.js apps** (the hard plan ceiling, including CRM V1 `crm.joinscaleflow.in`), `0` VPS instances, no managed S3 SKU, and no always-running background workers; backups on Business guarantee `public_html` + MySQL.
+  - Official Hostinger documentation confirms **Hostinger VPS backups and snapshots are NOT encrypted at rest** (in-transit encryption only), making application/OS-level `age`/AES-256-GCM encryption with an offline Owner private key mandatory before off-VPS retention.
+- **Architectural Recommendation:** **Option B — Dedicated Hostinger KVM 1 VPS (`mum2` Mumbai 2, India)** running CRM V2 (Nginx TLS -> single Nitro Node 22 server + local MariaDB 11.4 + `/var/lib/scaleflow-crm/private-proofs` via existing `hostinger-private-fs` driver + off-VPS `age`-encrypted backups + future bounded `systemd` automation worker), leaving CRM V1 untouched on Business. Option A rejected (`NOT PROVEN` & hits 5-app cap); Option C rejected (`SameSite=Lax` + `Sec-Fetch-Site === "same-origin"` CSRF incompatibility & excess split complexity).
+- **Next Gate (B11C):** Requires explicit Owner approval to provision KVM 1 VPS (`mum2`), verify paid daily backup add-on fee in hPanel checkout (currently `Unknown`), and execute all **20 staging durability tests (`NOT YET EXECUTED`)** before setting `PROOF_PRODUCTION_DURABLE_CONFIRMED=true`.
+- **Full Decision Document:** See [docs/crm-b11b-hostinger-storage-decision-gate.md](./crm-b11b-hostinger-storage-decision-gate.md).
 
 
