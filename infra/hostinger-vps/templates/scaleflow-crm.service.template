@@ -1,0 +1,51 @@
+# Scale Flow Sales OS 3.0 — Systemd Service Template (B11C-PRE)
+# TARGET PATH ON VPS: /etc/systemd/system/scaleflow-crm.service
+# Runs compiled Nitro Node.js server strictly on 127.0.0.1:3000 as unprivileged user `crmapp`.
+
+[Unit]
+Description=Scale Flow CRM V2 (Nitro SSR + API Server)
+After=network-online.target mariadb.service
+Wants=network-online.target mariadb.service
+
+[Service]
+Type=simple
+User=crmapp
+Group=crmapp
+WorkingDirectory=/opt/scaleflow-crm/current
+EnvironmentFile=/etc/scaleflow-crm/crm.env
+Environment=NODE_OPTIONS=--max-old-space-size=1024
+ExecStart=/usr/bin/node /opt/scaleflow-crm/current/.output/server/index.mjs
+
+Restart=on-failure
+RestartSec=5s
+StartLimitIntervalSec=120
+StartLimitBurst=5
+TimeoutStartSec=30s
+TimeoutStopSec=20s
+KillSignal=SIGTERM
+
+# Resource caps aligned to 4 GB KVM 1 baseline (verify under staging load test)
+MemoryHigh=1200M
+MemoryMax=1536M
+LimitNOFILE=65536
+
+# Operational logs routed cleanly into /var/log/scaleflow-crm/
+StandardOutput=append:/var/log/scaleflow-crm/app.log
+StandardError=append:/var/log/scaleflow-crm/app-error.log
+
+# Hardened OS sandboxing: runtime cannot mutate releases, /etc, or home directories
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+CapabilityBoundingSet=
+ReadOnlyPaths=/opt/scaleflow-crm /etc/scaleflow-crm
+ReadWritePaths=/var/lib/scaleflow-crm /var/log/scaleflow-crm
+
+[Install]
+WantedBy=multi-user.target

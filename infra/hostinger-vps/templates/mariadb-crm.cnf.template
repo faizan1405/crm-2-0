@@ -1,0 +1,28 @@
+# Scale Flow Sales OS 3.0 — MariaDB 11.4 Configuration Drop-in Template (B11C-PRE)
+# TARGET PATH ON VPS: /etc/mysql/mariadb.conf.d/60-scaleflow-crm.cnf
+# Note: Sizing values below are initial baselines for 4 GB KVM 1 (verify in B11C staging tests).
+
+[mysqld]
+# Bind strictly to IPv4 loopback; never expose port 3306 publicly
+bind-address = 127.0.0.1
+port = 3306
+skip-name-resolve = 1
+
+# Charset & UTC timezone matching Drizzle + mysql2pool (`timezone: "Z"`)
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+default-time-zone = '+00:00'
+
+# Memory & connection baseline for 1 vCPU / 4 GB RAM co-located host (Node + MariaDB + Nginx)
+max_connections = 60
+innodb_buffer_pool_size = 768M
+innodb_log_file_size = 128M
+innodb_flush_log_at_trx_commit = 1
+innodb_flush_method = O_DIRECT
+innodb_file_per_table = 1
+
+# Operational visibility (directory /var/log/scaleflow-crm/mariadb owned by mysql:adm 0750)
+slow_query_log = 1
+slow_query_log_file = /var/log/scaleflow-crm/mariadb/slow.log
+long_query_time = 1
+log_error = /var/log/scaleflow-crm/mariadb/error.log

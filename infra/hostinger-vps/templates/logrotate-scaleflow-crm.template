@@ -1,0 +1,41 @@
+# Scale Flow Sales OS 3.0 — Logrotate Template (B11C-PRE)
+# TARGET PATH ON VPS: /etc/logrotate.d/scaleflow-crm
+
+/var/log/scaleflow-crm/app.log /var/log/scaleflow-crm/app-error.log /var/log/scaleflow-crm/backup.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    create 0640 crmapp crmapp
+}
+
+/var/log/scaleflow-crm/nginx-access.log /var/log/scaleflow-crm/nginx-error.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 www-data adm
+    sharedscripts
+    postrotate
+        [ -s /run/nginx.pid ] && kill -USR1 "$(cat /run/nginx.pid)" 2>/dev/null || true
+    endscript
+}
+
+/var/log/scaleflow-crm/mariadb/slow.log /var/log/scaleflow-crm/mariadb/error.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 mysql adm
+    sharedscripts
+    postrotate
+        [ -x /usr/bin/mariadb-admin ] && /usr/bin/mariadb-admin flush-logs logs 2>/dev/null || true
+    endscript
+}

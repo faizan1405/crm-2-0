@@ -252,4 +252,17 @@ Following B4A Quotation Backend completion:
 - **Next Gate (B11C):** Requires explicit Owner approval to provision KVM 1 VPS (`mum2`), verify paid daily backup add-on fee in hPanel checkout (currently `Unknown`), and execute all **20 staging durability tests (`NOT YET EXECUTED`)** before setting `PROOF_PRODUCTION_DURABLE_CONFIRMED=true`.
 - **Full Decision Document:** See [docs/crm-b11b-hostinger-storage-decision-gate.md](./crm-b11b-hostinger-storage-decision-gate.md).
 
+---
+
+## 12. Checkpoint B11C-PRE Addendum (11 Nov 2026) — Hostinger VPS Deployment Preparation & Safety Gate
+
+- **Branch:** `feat/b11c-pre-vps-deployment-preparation` (branched from `feat/b11b-hostinger-storage-decision-gate` / `c1f627c`)
+- **Scope:** Strictly **LOCAL PREPARATION ONLY** — zero VPS purchases, zero DNS edits, zero Hostinger changes, zero uploads/deploys, zero customer-data/CRM V1/browser-local mutations.
+- **Prepared Infrastructure Package (`infra/hostinger-vps/`):**
+  - **Templates (`infra/hostinger-vps/templates/`):** Secret-free `crm.env.example` (fail-closed `PROOF_PRODUCTION_DURABLE_CONFIRMED=false`, `DEV_LEAD_PILOT=false`, `127.0.0.1` binds), hardened `nginx-scaleflow-crm.conf.template`, `scaleflow-crm.service.template` (`ProtectSystem=strict`, unprivileged `crmapp`, 4 GB baseline memory caps), `mariadb-crm.cnf.template` (MariaDB 11.4 loopback `127.0.0.1:3306`, UTC `+00:00`, `768M` baseline buffer pool), and `logrotate-scaleflow-crm.template`.
+  - **Guarded Scripts (`infra/hostinger-vps/scripts/01..08` + `lib-common.sh`):** Fail closed without `ALLOW_REAL_VPS_CHANGES=true` + Ubuntu root check + explicit typed confirmation phrases; hard-block CRM V1 domain `crm.joinscaleflow.in`; enforce `age` public-key-only backup encryption with offline Owner private keys and `0` plaintext remnants; implement clean-target restore & `crm_payment_proofs` `(id, storage_key, sha256_hash, file_size)` reconciliation.
+  - **Sizing & Unresolved Backup Warning:** Explicitly documents the 1 vCPU / 4 GB KVM 1 spec as an **unverified planning baseline** until B11C staging tests run, and marks the reliable off-VPS encrypted backup destination as an **unresolved Owner decision** (explicitly noting a switchable Windows laptop cannot be assumed reliable for unattended retention).
+- **Staging Durability Harness (`scripts/b11c-staging-durability-harness.mjs`):** Prepared locally with `--plan` (`NOT_YET_EXECUTED`) covering all **20 staging tests**, blocking unapproved live runs and blocking `crm.joinscaleflow.in`.
+- **Full Preparation Runbook:** See [docs/crm-b11c-pre-vps-deployment-prep.md](./crm-b11c-pre-vps-deployment-prep.md).
+
 
