@@ -13,6 +13,7 @@ import {
   crmId,
   inrDecimal,
   istDateChar,
+  longBlob,
   utcDateTime,
   versionCol,
 } from "./conventions.server";
@@ -767,6 +768,34 @@ export const crmPaymentProofs = mysqlTable(
     index("idx_crm_payment_proofs_sha256").on(table.sha256Hash),
     index("idx_crm_payment_proofs_storage_key").on(table.storageKey),
     index("idx_crm_payment_proofs_storage_status").on(table.ownerUserId, table.storageStatus),
+  ],
+);
+
+/**
+ * B11C-BUSINESS (Option B): Chunked MariaDB binary BLOB storage for private payment proofs.
+ * Stores validated payment receipts as <= 1 MiB LONGBLOB chunks so inserts/reads remain
+ * safely under Hostinger Business MySQL's 16 MB max_allowed_packet and survive redeploys + DB backups.
+ */
+export const crmPaymentProofBlobs = mysqlTable(
+  "crm_payment_proof_blobs",
+  {
+    id: crmId("id").primaryKey(),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    storageKey: varchar("storage_key", { length: 255 }).notNull(),
+    chunkIndex: int("chunk_index").notNull(),
+    chunkCount: int("chunk_count").notNull(),
+    chunkSize: int("chunk_size").notNull(),
+    totalByteSize: int("total_byte_size").notNull(),
+    totalSha256: char("total_sha256", { length: 64 }).notNull(),
+    mimeType: varchar("mime_type", { length: 64 }).notNull(),
+    blobData: longBlob("blob_data").notNull(),
+    createdAt: utcDateTime("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("uq_crm_proof_blobs_key_chunk").on(table.storageKey, table.chunkIndex),
+    index("idx_crm_proof_blobs_owner_key").on(table.ownerUserId, table.storageKey),
   ],
 );
 
@@ -1682,6 +1711,7 @@ export const crmFinanceSchema = {
   crmPayments,
   crmFinanceEvents,
   crmPaymentProofs,
+  crmPaymentProofBlobs,
 } as const;
 
 export const crmQuotationSchema = {

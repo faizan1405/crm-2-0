@@ -12,6 +12,12 @@ import {
   type ServerEnv,
 } from "../config/env.server";
 import { CrmServiceError } from "../crm/errors.server";
+import type { CrmDatabase } from "../db/index.server";
+import {
+  MariadbBlobProofStorage,
+  MARIADB_PROOF_CHUNK_BYTES,
+  splitBufferIntoProofChunks,
+} from "./mariadbBlobProofStorage.server";
 import {
   MAX_PROOF_BYTES,
   sniffProofKind,
@@ -20,7 +26,14 @@ import {
 } from "./proofValidation.server";
 
 export type ProofStorageDriverKind =
-  "local-fs" | "object-storage" | "hostinger-private-fs" | "disposable-test" | "disabled";
+  | "local-fs"
+  | "object-storage"
+  | "hostinger-private-fs"
+  | "mariadb-blob"
+  | "disposable-test"
+  | "disabled";
+
+export { MariadbBlobProofStorage, MARIADB_PROOF_CHUNK_BYTES, splitBufferIntoProofChunks };
 
 export interface StoredProofDescriptor {
   storageKey: string;
@@ -1106,6 +1119,7 @@ export function getProofStorageBackend(options?: {
   driver?: ProofStorageDriverKind;
   baseDir?: string;
   env?: ServerEnv;
+  db?: CrmDatabase | null;
 }): ProofStorageBackend {
   const rawNodeEnv =
     options?.env?.NODE_ENV ??
@@ -1138,6 +1152,13 @@ export function getProofStorageBackend(options?: {
     instance = new DisabledProofStorage();
   } else if (rawDriver === "object-storage") {
     instance = new ObjectStorageProofStorage();
+  } else if (rawDriver === "mariadb-blob") {
+    instance = new MariadbBlobProofStorage({
+      db: options?.db,
+      nodeEnv: rawNodeEnv,
+      productionDurableConfirmed: prodConfirmed,
+      env: options?.env,
+    });
   } else if (rawDriver === "disposable-test") {
     instance = new DisposableTestProofStorage(baseDir, {
       ...process.env,

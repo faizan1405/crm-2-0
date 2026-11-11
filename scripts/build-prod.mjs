@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
@@ -18,13 +19,47 @@ if (!isExplicitDevMode) {
   env["NODE_ENV"] = "production";
 }
 
-const result = spawnSync(process.execPath, [viteBinPath, "build", ...args], {
-  stdio: "inherit",
-  env,
-});
-
-if (result.error) {
-  throw result.error;
+async function bundleStandaloneCronRunner(cronSrc, cronOut) {
+  const { rolldown } = require("rolldown");
+  const bundle = await rolldown({
+    input: cronSrc,
+    platform: "node",
+    external: /^node:/,
+  });
+  try {
+    await bundle.write({
+      file: cronOut,
+      format: "esm",
+    });
+  } finally {
+    await bundle.close();
+  }
 }
 
-process.exit(result.status ?? 1);
+async function main() {
+  const result = spawnSync(process.execPath, [viteBinPath, "build", ...args], {
+    stdio: "inherit",
+    env,
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  if ((result.status ?? 1) === 0 && !isExplicitDevMode) {
+    const cronSrc = path.resolve(process.cwd(), "scripts/run-automation-cron.mjs");
+    const outServerDir = path.resolve(process.cwd(), ".output/server");
+    if (fs.existsSync(cronSrc) && fs.existsSync(outServerDir)) {
+      // Nitro strips mysql2 from .output/server/node_modules, so bundle the
+      // Hostinger cron CLI with rolldown to guarantee standalone execution.
+      await bundleStandaloneCronRunner(cronSrc, path.join(outServerDir, "run-cron.mjs"));
+    }
+  }
+
+  process.exit(result.status ?? 1);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

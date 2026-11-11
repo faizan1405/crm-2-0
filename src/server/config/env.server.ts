@@ -40,7 +40,14 @@ export const serverEnvSchema = z.object({
   PROOF_STORAGE_DRIVER: z.preprocess(
     emptyToUndefined,
     z
-      .enum(["local-fs", "object-storage", "hostinger-private-fs", "disposable-test", "disabled"])
+      .enum([
+        "local-fs",
+        "object-storage",
+        "hostinger-private-fs",
+        "mariadb-blob",
+        "disposable-test",
+        "disabled",
+      ])
       .default("local-fs"),
   ),
   PROOF_STORAGE_DIR: z.preprocess(
@@ -50,6 +57,15 @@ export const serverEnvSchema = z.object({
   PROOF_PRODUCTION_DURABLE_CONFIRMED: z.preprocess(
     emptyToUndefined,
     z.enum(["true", "false"]).optional(),
+  ),
+  PROOF_DB_MAX_BLOB_BYTES: z.preprocess(
+    emptyToUndefined,
+    z.coerce
+      .number()
+      .int()
+      .min(1024)
+      .max(10 * 1024 * 1024)
+      .optional(),
   ),
   PROOF_TEST_STORAGE_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().max(1000).optional()),
 
@@ -308,6 +324,7 @@ function readEnvSnapshot(
     PROOF_STORAGE_DRIVER: raw["PROOF_STORAGE_DRIVER"],
     PROOF_STORAGE_DIR: raw["PROOF_STORAGE_DIR"],
     PROOF_PRODUCTION_DURABLE_CONFIRMED: raw["PROOF_PRODUCTION_DURABLE_CONFIRMED"],
+    PROOF_DB_MAX_BLOB_BYTES: raw["PROOF_DB_MAX_BLOB_BYTES"],
     PROOF_TEST_STORAGE_ALLOWLIST: raw["PROOF_TEST_STORAGE_ALLOWLIST"],
     SESSION_COOKIE_NAME: raw["SESSION_COOKIE_NAME"],
     SESSION_IDLE_TTL_SECONDS: raw["SESSION_IDLE_TTL_SECONDS"],
@@ -427,6 +444,7 @@ export interface ProofStorageEnvAssessment {
   status:
     | "dev_local_only"
     | "production_verified_private_dir"
+    | "production_verified_mariadb_blob"
     | "blocked_disabled"
     | "blocked_object_storage_unconfigured"
     | "blocked_unsafe_path"
@@ -453,9 +471,13 @@ function isAbsolutePathCrossPlatform(dirPath: string): boolean {
 export function assessProofStorageEnv(env: ServerEnv): ProofStorageEnvAssessment {
   const driver = env.PROOF_STORAGE_DRIVER;
   const rawDir = env.PROOF_STORAGE_DIR.trim();
-  const unsafePublicOrBuildPath = UNSAFE_PUBLIC_OR_BUILD_DIR_REGEX.test(rawDir);
-  const isDefaultEphemeralDir =
-    rawDir === ".data/private-proofs" || DEFAULT_EPHEMERAL_DIR_REGEX.test(rawDir);
+  const isDbBlobDriver = driver === "mariadb-blob";
+  const unsafePublicOrBuildPath = isDbBlobDriver
+    ? false
+    : UNSAFE_PUBLIC_OR_BUILD_DIR_REGEX.test(rawDir);
+  const isDefaultEphemeralDir = isDbBlobDriver
+    ? false
+    : rawDir === ".data/private-proofs" || DEFAULT_EPHEMERAL_DIR_REGEX.test(rawDir);
   const reasons: string[] = [];
 
   if (unsafePublicOrBuildPath) {
@@ -531,6 +553,55 @@ export function assessProofStorageEnv(env: ServerEnv): ProofStorageEnvAssessment
       };
     }
 
+    if (isDbBlobDriver) {
+      const dbConfig = getDatabaseConnectionConfig(env);
+      if (!dbConfig.configured) {
+        return {
+          driver,
+          configured: false,
+          writable: false,
+          productionReady: false,
+          failClosed: true,
+          unsafePublicOrBuildPath: false,
+          isDefaultEphemeralDir: false,
+          status: "blocked_durability_unverified",
+          blockedCode: "storage_not_configured",
+          reasons: [
+            "MariaDB proof storage requires database connection configuration (DATABASE_URL or DB_NAME/DB_USER).",
+          ],
+        };
+      }
+
+      if (env.PROOF_PRODUCTION_DURABLE_CONFIRMED !== "true") {
+        return {
+          driver,
+          configured: false,
+          writable: false,
+          productionReady: false,
+          failClosed: true,
+          unsafePublicOrBuildPath: false,
+          isDefaultEphemeralDir: false,
+          status: "blocked_durability_unverified",
+          blockedCode: "storage_durability_blocked",
+          reasons: [
+            "MariaDB BLOB proof storage in production requires live staging & Hostinger backup/restore verification (PROOF_PRODUCTION_DURABLE_CONFIRMED is not 'true'). Production uploads fail closed.",
+          ],
+        };
+      }
+
+      return {
+        driver,
+        configured: true,
+        writable: true,
+        productionReady: true,
+        failClosed: false,
+        unsafePublicOrBuildPath: false,
+        isDefaultEphemeralDir: false,
+        status: "production_verified_mariadb_blob",
+        reasons: ["Explicitly confirmed chunked MariaDB LONGBLOB private proof storage active."],
+      };
+    }
+
     if (isDefaultEphemeralDir || !isAbsolutePathCrossPlatform(rawDir)) {
       return {
         driver,
@@ -588,9 +659,11 @@ export function assessProofStorageEnv(env: ServerEnv): ProofStorageEnvAssessment
     isDefaultEphemeralDir,
     status: "dev_local_only",
     reasons: [
-      isDefaultEphemeralDir
-        ? "Development/test local proof storage active; ephemeral .data fallback is forbidden in production."
-        : "Development/test local proof storage active; Hostinger production durability remains unverified.",
+      isDbBlobDriver
+        ? "Development/test MariaDB BLOB proof storage active; Hostinger live staging & backup/restore verification still required before production."
+        : isDefaultEphemeralDir
+          ? "Development/test local proof storage active; ephemeral .data fallback is forbidden in production."
+          : "Development/test local proof storage active; Hostinger production durability remains unverified.",
     ],
   };
 }

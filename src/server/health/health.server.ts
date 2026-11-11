@@ -70,7 +70,8 @@ export async function getHealthStatus(now: Date = new Date()): Promise<HealthRes
       },
       storage: {
         driver: safe.proofStorageDriver,
-        isolationSafe: !storageCheck.unsafePublicOrBuildPath,
+        isolationSafe:
+          safe.proofStorageDriver === "mariadb-blob" || !storageCheck.unsafePublicOrBuildPath,
         productionReady: storageEnv.productionReady,
         failClosed: storageEnv.failClosed,
         durabilityStatus: storageEnv.status,

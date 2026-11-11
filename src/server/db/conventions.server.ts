@@ -1,4 +1,4 @@
-import { char, datetime, decimal, int, varchar } from "drizzle-orm/mysql-core";
+import { char, customType, datetime, decimal, int, varchar } from "drizzle-orm/mysql-core";
 
 export const MYSQL_COMPATIBILITY_PROFILE = {
   targetEngines: ["MySQL 8.0+", "MariaDB 10.6+"] as const,
@@ -32,6 +32,21 @@ export function inrDecimal(name: string) {
 /** Optimistic concurrency column matching existing `version` semantics (`projects.ts`, `crossTab.ts`). */
 export function versionCol(name = "version") {
   return int(name).notNull().default(1);
+}
+
+/** Binary LONGBLOB column for optional MariaDB-backed payment proof storage. */
+export function longBlob(name: string) {
+  return customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({
+    dataType() {
+      return "longblob";
+    },
+    toDriver(value: Buffer) {
+      return value;
+    },
+    fromDriver(value: Buffer | Uint8Array) {
+      return Buffer.isBuffer(value) ? value : Buffer.from(value);
+    },
+  })(name);
 }
 
 /** Standard audit timestamps required on durable CRM tables. */

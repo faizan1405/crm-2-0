@@ -2170,7 +2170,7 @@ export async function handleCrmApiRequest(
               headerKey: request.headers.get("idempotency-key"),
               bodyKey: upload.payload.idempotencyKey,
             });
-            const storageBackend = getProofStorageBackend({ env });
+            const storageBackend = getProofStorageBackend({ env, db: auth.db });
 
             const res = await replacePaymentProofRecord(
               auth.db,
@@ -2201,7 +2201,7 @@ export async function handleCrmApiRequest(
             if (!auth.ok) return auth.response;
 
             const proofIdParam = parsedUrl.searchParams.get("proofId") || undefined;
-            const storageBackend = getProofStorageBackend({ env });
+            const storageBackend = getProofStorageBackend({ env, db: auth.db });
             const downloadRes = await readPaymentProofContent(auth.db, auth.userId, paymentId, {
               proofId: proofIdParam,
               storageBackend,
@@ -2248,7 +2248,7 @@ export async function handleCrmApiRequest(
 
             const proofIdParam = parsedUrl.searchParams.get("proofId") || undefined;
             const persistParam = parsedUrl.searchParams.get("persist") === "1";
-            const storageBackend = getProofStorageBackend({ env });
+            const storageBackend = getProofStorageBackend({ env, db: auth.db });
             const verification = await verifyPaymentProofStorage(auth.db, auth.userId, paymentId, {
               proofId: proofIdParam,
               storageBackend,
@@ -2301,7 +2301,7 @@ export async function handleCrmApiRequest(
               headerKey: request.headers.get("idempotency-key"),
               bodyKey: upload.payload.idempotencyKey,
             });
-            const storageBackend = getProofStorageBackend({ env });
+            const storageBackend = getProofStorageBackend({ env, db: auth.db });
 
             const res = await attachPaymentProofRecord(
               auth.db,
@@ -2344,7 +2344,7 @@ export async function handleCrmApiRequest(
               headerKey: request.headers.get("idempotency-key"),
               bodyKey: upload.payload.idempotencyKey,
             });
-            const storageBackend = getProofStorageBackend({ env });
+            const storageBackend = getProofStorageBackend({ env, db: auth.db });
 
             const res = await replacePaymentProofRecord(
               auth.db,
@@ -4497,7 +4497,7 @@ export async function handleCrmApiRequest(
         const auth = await requireAuthenticatedOwnerDb(request, env);
         if (!auth.ok) return auth.response;
 
-        const storageBackend = getProofStorageBackend({ env });
+        const storageBackend = getProofStorageBackend({ env, db: auth.db });
         const summary = storageBackend.healthSummary();
         const consistency = await inspectOwnerProofStorageConsistency(auth.db, auth.userId, {
           storageBackend,
