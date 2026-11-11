@@ -19,8 +19,17 @@ if (!isExplicitDevMode) {
   env["NODE_ENV"] = "production";
 }
 
+function loadRolldown() {
+  try {
+    return require("rolldown");
+  } catch {
+    const viteRequire = createRequire(vitePkgPath);
+    return viteRequire("rolldown");
+  }
+}
+
 async function bundleStandaloneCronRunner(cronSrc, cronOut) {
-  const { rolldown } = require("rolldown");
+  const { rolldown } = loadRolldown();
   const bundle = await rolldown({
     input: cronSrc,
     platform: "node",

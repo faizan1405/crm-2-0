@@ -1,0 +1,58 @@
+{
+  "capturedAtUtc": "2026-11-11T17:54:00Z",
+  "purpose": "Pre-staging baseline rollback snapshot for Hostinger Business staging site before B11C-BUSINESS-LIVE deployment",
+  "website": {
+    "domain": "khaki-butterfly-345144.hostingersite.com",
+    "username": "u256504187",
+    "order_id": 1010060772,
+    "vhost_type": "addon",
+    "website_type": "nodejs",
+    "root_directory": "/home/u256504187/domains/khaki-butterfly-345144.hostingersite.com/public_html"
+  },
+  "previousDeployment": {
+    "buildUuid": "01a1bfe8-38d6-700c-8823-b662c3a4f2ed",
+    "state": "completed",
+    "createdAt": "2026-11-09T10:43:49Z",
+    "lastDeployedAt": "2026-11-09T10:47:19Z",
+    "gitSource": {
+      "installation_uuid": "01a12183-5031-7122-844d-51c745fa9d67",
+      "is_enabled": true,
+      "owner": "faizan1405",
+      "repository": "CRM_2.0",
+      "branch": "main",
+      "directory": "",
+      "checkedOutCommit": "04ad8f4",
+      "commitMessage": "Initial commit"
+    },
+    "buildSettings": {
+      "node_version": 22,
+      "app_type": "nitro",
+      "root_directory": null,
+      "output_directory": ".output",
+      "build_script": "build",
+      "entry_file": "server/index.mjs",
+      "package_manager": "npm"
+    },
+    "environmentVariables": [],
+    "cronJobs": [],
+    "htaccessSummary": "PassengerNodejs /opt/alt/alt-nodejs22/root/bin/node; PassengerStartupFile server/index.mjs; TOKIO_WORKER_THREADS 2",
+    "healthPreCheck": {
+      "url": "https://khaki-butterfly-345144.hostingersite.com/api/v1/health",
+      "httpStatus": 404,
+      "note": "Old 04ad8f4 initial frontend-only build had no backend API routes"
+    }
+  },
+  "rollbackInstructions": {
+    "restorePreviousGitBuild": "Invoke hosting_nodejs_start-build (or hosting_deploy) on domain khaki-butterfly-345144.hostingersite.com with source_type='git', owner='faizan1405', repository='CRM_2.0', branch='main', installation_uuid='01a12183-5031-7122-844d-51c745fa9d67', and restore empty env_vars=[] via hosting_nodejs_replace-environment-variables.",
+    "untouchedTargets": [
+      "crm.joinscaleflow.in",
+      "minddesk.joinscaleflow.in",
+      "darkgray-louse-574826.hostingersite.com",
+      "u256504187_mhtest",
+      "u256504187_minddesk_v2",
+      "u256504187_minddesk_test",
+      "u256504187_minddesk",
+      "GitHub faizan1405/CRM_2.0 branch main"
+    ]
+  }
+}
