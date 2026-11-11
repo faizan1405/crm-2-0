@@ -317,6 +317,7 @@ import {
   simulateAutomationRuleRecord,
   getAutomationDefinitions,
 } from "../crm/automationService.server";
+import { executeAutomationRuleRecord } from "../crm/automationExecution.server";
 import { getDatabase, type CrmDatabase } from "../db/index.server";
 
 const CRM_API_HEADERS: Record<string, string> = {
@@ -4740,6 +4741,35 @@ export async function handleCrmApiRequest(
             auth.userId,
             ruleId,
             parsedBody.data as any,
+          );
+
+          return jsonResponse(result, 200);
+        }
+
+        // POST /api/v1/automations/:id/execute-test
+        if (action === "execute-test") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const idemHeader = request.headers.get("idempotency-key");
+          const inputData = {
+            ...(parsedBody.data as any),
+            ...(idemHeader && !(parsedBody.data as any).idempotencyKey ? { idempotencyKey: idemHeader } : {}),
+          };
+
+          const result = await executeAutomationRuleRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            ruleId,
+            inputData,
           );
 
           return jsonResponse(result, 200);

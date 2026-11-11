@@ -155,3 +155,37 @@ Following B4A Quotation Backend completion:
   - **Storage Durability Audit:** Flagged `ObjectStorageProofStorage` local-fs fallback as a production blocker requiring genuine S3/R2 provisioning prior to production cutover.
   - **Test Suite:** 113 test files passing, 1,085 automated tests passing (45 new B7A tests across 5 test suites covering 30 mandatory foundation scenarios).
 - **Scope Deferred to B7B:** Production-facing Data Vault UI, live backup download endpoint, interactive restore wizard, and live migration execution. See [docs/crm-b7a-data-vault-backup-foundation.md](./crm-b7a-data-vault-backup-foundation.md).
+
+---
+
+## 8. Checkpoint B10C Addendum (11 Nov 2026) — Safe Internal Automation Execution Engine & Reliability Verification
+
+- **Branch:** `feat/b10c-safe-internal-automation-execution`
+- **Database Migrations:** Forward migration `0013_b10c_automation_execution.sql` applied additively to `crm_automation_runs`:
+  - `execution_key VARCHAR(128)`: SHA-256 deterministic hash of `(ownerUserId:sourceEventId:ruleId:ruleVersion:actionIndex:targetId:customTagId)`.
+  - `rule_version INT`: Snapshot of the rule version at time of execution authorization.
+  - `causation_id VARCHAR(128)`: Traceability identifier for event lineage.
+  - `depth INT NOT NULL DEFAULT 0`: Depth tracker enforcing `MAX_EXECUTION_DEPTH = 3`.
+  - Unique Constraint: `uq_crm_auto_runs_owner_exec_key` on `(owner_user_id, execution_key)` guaranteeing O(1) deduplication and zero duplicate executions.
+  - Total MariaDB Tables: **48 tables** (cleanly verified via Drizzle kit check).
+- **Approved Internal Actions Supported:**
+  1. `followup`: Creates pending synthetic follow-up in `crm_follow_ups` (`op_id = executionKey`, `active_lead_lock = leadId`, IST date/time calculated, `nextFollowUpAt` updated on `crm_leads`, `crm_lead_activities` logged). Preserves zero lead stage change, zero deal creation, and zero fabricated call log.
+  2. `reminder`: Creates pending CRM reminder in `crm_internal_reminders` (`reminder_key = rem_<hash>`, `origin = 'automation'`, `status = 'open'`). Explicit invariant: non-delivery strictly verified (no SMS, WhatsApp, push, or email sent).
+  3. `tag`: Links active tag in `crm_lead_tags` (`uq_crm_lead_tags_lead_tag` prevents duplicates). Rejects non-existent or archived tags with HTTP 400 `validation_error`.
+- **Simulation vs. Execution Write Boundaries:**
+  - `simulateAutomationRuleRecord` writes ONLY audit records to `crm_automation_runs` (`is_simulation: 1`, `outcome: "simulated"`, `executed_actions_json: "[]"`) and updates `last_evaluated_at` on `crm_automation_rules`. Zero writes to `crm_leads`, `crm_follow_ups`, `crm_internal_reminders`, `crm_deals`, `crm_payments`, `crm_call_logs`, or `crm_whatsapp_logs`.
+  - `executeAutomationRuleRecord` writes business records atomically alongside `crm_automation_runs` (`is_simulation: 0`, `outcome: "succeeded"`), populating `execution_key` and created record IDs.
+- **Reliability & Idempotency Guarantees:**
+  - Idempotent Replay: Identical events or reused HTTP idempotency keys return `{ outcome: "skipped", replayed: true }` without duplicate business mutations.
+  - Atomic Rollback: Injected failures trigger clean rollback across all business tables. Failed runs log to `crm_automation_runs` with `outcome = "failed"` and `execution_key = null` to permit subsequent corrected retries.
+  - Deadlock Recovery: MariaDB InnoDB `ER_LOCK_DEADLOCK` (errno 1213) handled with automatic exponential jitter retries (up to 3 retries).
+  - Recursion Guard: Executions exceeding depth 3 are rejected with HTTP 400 `automation_validation_error`.
+- **Environment & Runtime Feasibility:**
+  - Development Test Harness Only: Execution is gated behind `POST /api/v1/automations/:id/execute-test`, requiring Owner authentication, CSRF/Origin validation, and `isLeadPilotAvailable(env) === true`.
+  - Unattended Background Engine Deferred: No cron, polling daemon, or background scheduler activated in B10C. Hostinger shared runtime feasibility remains unverified for durable long-running daemons.
+  - Isolation: Browser-local storage (`scale-flow-crm-2-demo`), IndexedDB proofs (`scale-flow-payment-proofs`), Hostinger production, and CRM V1 remain 100% untouched.
+- **Verification Evidence:**
+  - 1,347 Vitest unit & integration tests passing across 133 test files.
+  - 60/60 real MariaDB 11.4 + compiled Nitro HTTP verification scenarios passing (`scratch/b10c-execution-results.json`).
+  - Stress, concurrency, server restart recovery, and MariaDB index explain plan tests passing (`scratch/run-b10c-stress-restart.mjs`).
+

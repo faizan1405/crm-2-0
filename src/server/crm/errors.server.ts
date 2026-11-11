@@ -119,3 +119,14 @@ export function isMysqlDuplicateKeyError(error: unknown): boolean {
   }
   return false;
 }
+
+export function isMysqlDeadlockError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const e = error as { code?: unknown; errno?: unknown; cause?: unknown; message?: unknown };
+  if (e.code === "ER_LOCK_DEADLOCK" || e.errno === 1213) return true;
+  if (typeof e.message === "string" && e.message.includes("Deadlock found")) return true;
+  if (e.cause && typeof e.cause === "object") {
+    return isMysqlDeadlockError(e.cause);
+  }
+  return false;
+}

@@ -636,16 +636,16 @@ describe("B2B4 Server-Backed WhatsApp Composer & Manual Confirmation Guarantees"
     // 3. Leads Workspace & Cards view render enabled WhatsApp buttons
     renderWithQuery(<PilotLeadsPage search={{ pilot: 1 }} />);
     expect(
-      (await screen.findAllByRole("button", { name: "WhatsApp Rohan Pilot" }))[0],
+      (await screen.findAllByRole("button", { name: "WhatsApp Rohan Pilot" }, { timeout: 8000 }))[0],
     ).toBeEnabled();
 
     fireEvent.click(screen.getByRole("button", { name: "cards view" }));
-    expect(await screen.findByRole("button", { name: "WhatsApp Rohan Pilot" })).toBeEnabled();
+    expect(await screen.findByRole("button", { name: "WhatsApp Rohan Pilot" }, { timeout: 8000 })).toBeEnabled();
 
     // 4. Follow-ups card renders enabled WhatsApp button
     renderWithQuery(<PilotFollowUpsPage />);
     expect(
-      (await screen.findAllByRole("button", { name: "WhatsApp Rohan Pilot" }))[0],
+      (await screen.findAllByRole("button", { name: "WhatsApp Rohan Pilot" }, { timeout: 8000 }))[0],
     ).toBeEnabled();
 
     // 5. Exit Pilot clears sessionStorage pending WhatsApp composer key

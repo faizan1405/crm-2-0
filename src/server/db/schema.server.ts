@@ -1568,7 +1568,7 @@ export const crmAutomationRuleRevisions = mysqlTable(
 );
 
 /**
- * B10A: Automation runs and dry-run simulation audit history.
+ * B10A/B10C: Automation runs, dry-run simulation, and live execution audit history.
  */
 export const crmAutomationRuns = mysqlTable(
   "crm_automation_runs",
@@ -1580,8 +1580,10 @@ export const crmAutomationRuns = mysqlTable(
     ruleId: crmId("rule_id")
       .notNull()
       .references(() => crmAutomationRules.id, { onDelete: "cascade" }),
+    executionKey: varchar("execution_key", { length: 128 }),
+    ruleVersion: int("rule_version"),
     triggerType: varchar("trigger_type", { length: 48 }).notNull(),
-    outcome: varchar("outcome", { length: 24 }).notNull(), // "evaluated" | "triggered" | "skipped" | "failed" | "simulated" | "disabled"
+    outcome: varchar("outcome", { length: 24 }).notNull(), // "evaluated" | "triggered" | "skipped" | "failed" | "simulated" | "disabled" | "succeeded"
     isSimulation: boolean("is_simulation").notNull().default(false),
     leadId: crmId("lead_id"),
     projectId: crmId("project_id"),
@@ -1590,10 +1592,13 @@ export const crmAutomationRuns = mysqlTable(
     plannedActionsJson: text("planned_actions_json").notNull(),
     executedActionsJson: text("executed_actions_json").notNull(),
     executionError: varchar("execution_error", { length: 255 }),
+    causationId: varchar("causation_id", { length: 128 }),
+    depth: int("depth").notNull().default(0),
     actorUserId: crmId("actor_user_id").references(() => crmUsers.id, { onDelete: "set null" }),
     createdAt: utcDateTime("created_at").notNull(),
   },
   (table) => [
+    uniqueIndex("uq_crm_auto_runs_owner_exec_key").on(table.ownerUserId, table.executionKey),
     index("idx_crm_auto_runs_owner_rule").on(table.ownerUserId, table.ruleId),
     index("idx_crm_auto_runs_owner_created").on(table.ownerUserId, table.createdAt),
     index("idx_crm_auto_runs_owner_sim").on(table.ownerUserId, table.isSimulation),
