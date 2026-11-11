@@ -428,14 +428,16 @@ export const VAULT_ENTITIES_INVENTORY: VaultInventoryItem[] = [
   {
     number: 30,
     name: "Automation Rules",
-    tableName: null,
-    hasSchema: false,
+    tableName:
+      "crm_automation_rules, crm_automation_rule_revisions, crm_automation_runs, crm_internal_reminders",
+    hasSchema: true,
     includedInExporter: false,
     hasBinaryCoverage: false,
     hasRestoreMapping: false,
     verifiedByLiveRestore: false,
     status: "unsupported",
-    description: "Browser-side trigger automation rules (LocalStorage only, deferred to B8).",
+    description:
+      "Owner automation rules, audit revisions, simulation runs, and internal reminders (MariaDB schema & simulation engine implemented in B10A; backup export, restore mapping, and unattended production execution deferred).",
   },
   {
     number: 31,

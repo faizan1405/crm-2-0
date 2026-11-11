@@ -85,6 +85,13 @@
       "when": 1794380686302,
       "tag": "0011_b9a_smart_inbox_relationships",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1794388591045,
+      "tag": "0012_b10a_automation_rules",
+      "breakpoints": true
     }
   ]
 }

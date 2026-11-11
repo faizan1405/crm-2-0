@@ -306,6 +306,17 @@ import {
   listWhatsAppLogs,
   listWhatsAppLogsForLead,
 } from "../crm/whatsappService.server";
+import {
+  listAutomationRulesRecord,
+  getAutomationRuleRecord,
+  createAutomationRuleRecord,
+  updateAutomationRuleRecord,
+  duplicateAutomationRuleRecord,
+  archiveAutomationRuleRecord,
+  getAutomationRuleRevisionsRecord,
+  simulateAutomationRuleRecord,
+  getAutomationDefinitions,
+} from "../crm/automationService.server";
 import { getDatabase, type CrmDatabase } from "../db/index.server";
 
 const CRM_API_HEADERS: Record<string, string> = {
@@ -957,7 +968,8 @@ export async function handleCrmApiRequest(
     !pathname.startsWith("/api/v1/tags") &&
     !pathname.startsWith("/api/v1/saved-views") &&
     !pathname.startsWith("/api/v1/inbox") &&
-    !pathname.startsWith("/api/v1/vault")
+    !pathname.startsWith("/api/v1/vault") &&
+    !pathname.startsWith("/api/v1/automations")
   ) {
     return null;
   }
@@ -4480,6 +4492,260 @@ export async function handleCrmApiRequest(
           },
           403,
         );
+      }
+
+      return null;
+    }
+
+    if (resource === "automations") {
+      if (!isLeadPilotAvailable(env)) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "PILOT_DISABLED",
+              message: "Development Automation Rules Pilot is disabled in production environments.",
+            },
+          },
+          404,
+        );
+      }
+
+      // GET /api/v1/automations/definitions
+      if (segments.length === 4 && segments[3] === "definitions") {
+        if (request.method !== "GET") return methodNotAllowed(["GET"]);
+        const auth = await requireAuthenticatedOwnerDb(request, env);
+        if (!auth.ok) return auth.response;
+
+        return jsonResponse({ ok: true, ...getAutomationDefinitions() }, 200);
+      }
+
+      // /api/v1/automations (collection routes)
+      if (segments.length === 3) {
+        // GET /api/v1/automations
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const query = searchParamsObject(parsedUrl);
+          const result = await listAutomationRulesRecord(auth.db, auth.userId, {
+            status: query["status"] ?? null,
+            subject: query["subject"] ?? null,
+            triggerType: query["triggerType"] ?? null,
+            search: query["search"] ?? null,
+            page: query["page"] ? Number(query["page"]) : 1,
+            pageSize: query["pageSize"] ? Number(query["pageSize"]) : 20,
+          });
+
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
+
+        // POST /api/v1/automations
+        if (request.method === "POST") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: typeof parsedBody.data["idempotencyKey"] === "string" ? parsedBody.data["idempotencyKey"] : null,
+          });
+
+          const result = await createAutomationRuleRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            parsedBody.data as any,
+            { idempotencyKey: idemKey },
+          );
+
+          return jsonResponse(
+            result,
+            201,
+            result.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        return methodNotAllowed(["GET", "POST"]);
+      }
+
+      // Sub-resource or member routes
+      if (segments.length === 4) {
+        const ruleId = segments[3]!;
+
+        // GET /api/v1/automations/:id
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const rule = await getAutomationRuleRecord(auth.db, auth.userId, ruleId);
+          return jsonResponse({ ok: true, rule }, 200);
+        }
+
+        // PUT /api/v1/automations/:id
+        if (request.method === "PUT") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: typeof parsedBody.data["idempotencyKey"] === "string" ? parsedBody.data["idempotencyKey"] : null,
+          });
+
+          const result = await updateAutomationRuleRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            ruleId,
+            parsedBody.data as any,
+            { idempotencyKey: idemKey },
+          );
+
+          return jsonResponse(
+            result,
+            200,
+            result.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        // DELETE /api/v1/automations/:id
+        if (request.method === "DELETE") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          let expectedVersion: number | undefined;
+          let bodyIdemKey: string | null = null;
+          if (hasRequestBodyHint(request)) {
+            const parsedBody = await parseJsonObject(request, { allowEmpty: true });
+            if (parsedBody.ok) {
+              if (typeof parsedBody.data["expectedVersion"] === "number") {
+                expectedVersion = parsedBody.data["expectedVersion"];
+              } else if (typeof parsedBody.data["version"] === "number") {
+                expectedVersion = parsedBody.data["version"];
+              }
+              if (typeof parsedBody.data["idempotencyKey"] === "string") {
+                bodyIdemKey = parsedBody.data["idempotencyKey"];
+              }
+            }
+          }
+          if (expectedVersion === undefined) {
+            const urlVer = parsedUrl.searchParams.get("expectedVersion") ?? parsedUrl.searchParams.get("version");
+            if (urlVer) expectedVersion = Number(urlVer);
+          }
+
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: bodyIdemKey,
+          });
+
+          const result = await archiveAutomationRuleRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            ruleId,
+            expectedVersion,
+            { idempotencyKey: idemKey },
+          );
+
+          return jsonResponse(
+            result,
+            200,
+            result.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        return methodNotAllowed(["GET", "PUT", "DELETE"]);
+      }
+
+      if (segments.length === 5) {
+        const ruleId = segments[3]!;
+        const action = segments[4];
+
+        // POST /api/v1/automations/:id/duplicate
+        if (action === "duplicate") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          let bodyIdemKey: string | null = null;
+          if (hasRequestBodyHint(request)) {
+            const parsedBody = await parseJsonObject(request, { allowEmpty: true });
+            if (parsedBody.ok && typeof parsedBody.data["idempotencyKey"] === "string") {
+              bodyIdemKey = parsedBody.data["idempotencyKey"];
+            }
+          }
+
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: bodyIdemKey,
+          });
+
+          const result = await duplicateAutomationRuleRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            ruleId,
+            { idempotencyKey: idemKey },
+          );
+
+          return jsonResponse(
+            result,
+            201,
+            result.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        // GET /api/v1/automations/:id/revisions
+        if (action === "revisions") {
+          if (request.method !== "GET") return methodNotAllowed(["GET"]);
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const revisions = await getAutomationRuleRevisionsRecord(auth.db, auth.userId, ruleId);
+          return jsonResponse({ ok: true, revisions }, 200);
+        }
+
+        // POST /api/v1/automations/:id/simulate
+        if (action === "simulate") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const result = await simulateAutomationRuleRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            ruleId,
+            parsedBody.data as any,
+          );
+
+          return jsonResponse(result, 200);
+        }
+
+        return null;
       }
 
       return null;

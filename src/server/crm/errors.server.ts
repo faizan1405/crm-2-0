@@ -60,6 +60,11 @@ export type CrmErrorCode =
   | "unsupported_metric"
   | "candidate_not_found"
   | "relationship_not_found"
+  | "automation_rule_not_found"
+  | "automation_rule_conflict"
+  | "automation_rule_archived"
+  | "automation_validation_error"
+  | "automation_simulation_error"
   | "crm_unavailable";
 
 export interface CrmErrorPayload {
