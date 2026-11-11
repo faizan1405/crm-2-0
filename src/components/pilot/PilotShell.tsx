@@ -23,6 +23,7 @@ import {
   Settings,
   SlidersHorizontal,
   Inbox,
+  Workflow,
 } from "lucide-react";
 import { logoutOwner, useResolvedAuthState } from "@/lib/auth/authClient";
 import { setLeadPilotSessionOptIn } from "@/lib/api/pilotGate";
@@ -46,6 +47,7 @@ const PILOT_LINKS = [
   { to: "/my-performance" as const, label: "My Performance (Pilot)", icon: Target, pilot: true },
   { to: "/settings" as const, label: "Settings (Pilot)", icon: Settings, pilot: true },
   { to: "/crm-config" as const, label: "CRM Config (Pilot)", icon: SlidersHorizontal, pilot: true },
+  { to: "/automation" as const, label: "Automations (Pilot)", icon: Workflow, pilot: true },
   { to: "/data-vault" as const, label: "Data Vault (Pilot)", icon: Archive, pilot: true },
   { to: "/leads/bin" as const, label: "Waste & deleted", icon: Trash2, pilot: true },
 ];

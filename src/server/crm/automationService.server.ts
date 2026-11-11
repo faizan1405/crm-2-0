@@ -133,10 +133,18 @@ export async function listAutomationRulesRecord(
   },
 ): Promise<{
   rules: ParsedAutomationRule[];
+  items: ParsedAutomationRule[];
   total: number;
   page: number;
   pageSize: number;
   totalPages: number;
+  stats?: {
+    total: number;
+    draft: number;
+    enabled: number;
+    paused: number;
+    archived: number;
+  };
 }> {
   const page = Math.max(1, query.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, query.pageSize ?? 20));
@@ -168,6 +176,25 @@ export async function listAutomationRulesRecord(
   const total = Number(totalRes?.count ?? 0);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
+  const [statsRes] = await db
+    .select({
+      total: sql<number>`count(*)`,
+      draft: sql<number>`coalesce(sum(case when status = 'draft' then 1 else 0 end), 0)`,
+      enabled: sql<number>`coalesce(sum(case when status = 'enabled' then 1 else 0 end), 0)`,
+      paused: sql<number>`coalesce(sum(case when status = 'paused' then 1 else 0 end), 0)`,
+      archived: sql<number>`coalesce(sum(case when status = 'archived' then 1 else 0 end), 0)`,
+    })
+    .from(crmAutomationRules)
+    .where(eq(crmAutomationRules.ownerUserId, ownerUserId));
+
+  const stats = {
+    total: Number(statsRes?.total ?? 0),
+    draft: Number(statsRes?.draft ?? 0),
+    enabled: Number(statsRes?.enabled ?? 0),
+    paused: Number(statsRes?.paused ?? 0),
+    archived: Number(statsRes?.archived ?? 0),
+  };
+
   const rows = await db
     .select()
     .from(crmAutomationRules)
@@ -176,12 +203,16 @@ export async function listAutomationRulesRecord(
     .limit(pageSize)
     .offset(offset);
 
+  const parsedRules = rows.map(parseRuleRow);
+
   return {
-    rules: rows.map(parseRuleRow),
+    rules: parsedRules,
+    items: parsedRules,
     total,
     page,
     pageSize,
     totalPages,
+    stats,
   };
 }
 

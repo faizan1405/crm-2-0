@@ -3,6 +3,9 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AlertTriangle, Archive, Copy, FlaskConical, History, Info, Pause, Pencil, Play, Plus, RefreshCw, Search, Workflow } from "lucide-react";
 import { Shell, selectCls, Empty } from "@/components/crm/Shell";
+import { AppShellSkeleton } from "@/components/crm/ShellPrimitives";
+import { PilotAutomationPage } from "@/components/pilot/PilotAutomationPage";
+import { parsePilotSearch, useLeadPilotState } from "@/lib/api/pilotHook";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +18,27 @@ import { formatDateTime } from "@/lib/crm/format";
 import { LEAD_SOURCES, LEAD_STATUSES, STATUS_LABEL, type LeadPriority, type LeadSource, type LeadStatus } from "@/lib/crm/types";
 import { ACTIONS_FOR, LEAD_TRIGGERS, PROJECT_RULE_TEMPLATES, PROJECT_TRIGGERS, TRIGGER_KIND, isProjectTrigger, type RuleSubject, ACTION_LABEL, RULE_TEMPLATES, TRIGGER_LABEL, planRule, ruleConflicts, ruleError, type ActionType, type AutomationRule, type RulePlan, type RunOutcome, type TriggerType } from "@/lib/crm/automation";
 
+export type AutomationSearch = {
+  pilot?: 1 | 0;
+  status?: string;
+  subject?: string;
+  triggerType?: string;
+  search?: string;
+  page?: number;
+};
+
 export const Route = createFileRoute("/automation")({
+  validateSearch: (s: Record<string, unknown>): AutomationSearch => {
+    const pilotObj = parsePilotSearch(s);
+    return {
+      ...(typeof s["status"] === "string" ? { status: s["status"] } : {}),
+      ...(typeof s["subject"] === "string" ? { subject: s["subject"] } : {}),
+      ...(typeof s["triggerType"] === "string" ? { triggerType: s["triggerType"] } : {}),
+      ...(typeof s["search"] === "string" ? { search: s["search"] } : {}),
+      ...(typeof s["page"] === "number" ? { page: s["page"] } : {}),
+      ...(pilotObj.pilot !== undefined ? { pilot: pilotObj.pilot } : {}),
+    };
+  },
   head: () => ({
     meta: [
       { title: "Automation Studio · Scale Flow CRM" },
@@ -26,8 +49,21 @@ export const Route = createFileRoute("/automation")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: AutomationPage,
+  component: AutomationEntry,
 });
+
+function AutomationEntry() {
+  const search = Route.useSearch();
+  const { pilotActive, pilotResolved } = useLeadPilotState(search.pilot);
+
+  if (pilotActive) {
+    return <PilotAutomationPage search={search as Record<string, unknown>} />;
+  }
+  if (!pilotResolved) {
+    return <AppShellSkeleton />;
+  }
+  return <AutomationPage />;
+}
 
 const STATUS_TONE: Record<AutomationRule["status"], string> = { enabled: "bg-success/15 text-success", paused: "bg-warning/15 text-warning", draft: "bg-secondary text-muted-foreground", archived: "bg-secondary text-muted-foreground" };
 const STATUS_TEXT: Record<AutomationRule["status"], string> = { enabled: "Enabled", paused: "Paused", draft: "Disabled · draft", archived: "Archived" };
