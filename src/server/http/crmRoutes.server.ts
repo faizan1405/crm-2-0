@@ -90,6 +90,7 @@ import {
   verifyPaymentProofStorage,
 } from "../crm/proofService.server";
 import { getProofStorageBackend } from "../storage/proofStorage.server";
+import { MAX_PROOF_BYTES } from "../storage/proofValidation.server";
 import {
   archiveQuotationRecord,
   changeQuotationStatusRecord,
@@ -340,6 +341,109 @@ const CRM_API_HEADERS: Record<string, string> = {
 };
 
 const MAX_CRM_JSON_BYTES = 64 * 1024;
+const MAX_PROOF_MULTIPART_OVERHEAD_BYTES = 256 * 1024; // 256 KiB multipart boundaries, headers & fields headroom
+const MAX_PROOF_MULTIPART_BODY_BYTES = MAX_PROOF_BYTES + MAX_PROOF_MULTIPART_OVERHEAD_BYTES;
+
+export { MAX_PROOF_BYTES, MAX_PROOF_MULTIPART_BODY_BYTES, MAX_PROOF_MULTIPART_OVERHEAD_BYTES };
+
+type BoundedBodyResult =
+  | { ok: true; buffer: Buffer }
+  | {
+      ok: false;
+      reason: "body_too_large" | "invalid_content_length" | "truncated_body" | "stream_error";
+      message: string;
+    };
+
+async function readRequestBodyBounded(
+  request: Request,
+  maxBodyBytes: number,
+): Promise<BoundedBodyResult> {
+  const clHeader = request.headers.get("content-length");
+  let declaredBytes: number | null = null;
+  if (clHeader !== null) {
+    const trimmed = clHeader.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      return {
+        ok: false,
+        reason: "invalid_content_length",
+        message: "Invalid Content-Length header.",
+      };
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isSafeInteger(parsed) || parsed < 0) {
+      return {
+        ok: false,
+        reason: "invalid_content_length",
+        message: "Invalid Content-Length header.",
+      };
+    }
+    if (parsed > maxBodyBytes) {
+      return {
+        ok: false,
+        reason: "body_too_large",
+        message: `Request body exceeds maximum allowed size (${maxBodyBytes} bytes).`,
+      };
+    }
+    declaredBytes = parsed;
+  }
+
+  if (!request.body) {
+    if (declaredBytes !== null && declaredBytes > 0) {
+      return {
+        ok: false,
+        reason: "truncated_body",
+        message: "Request body was empty despite non-zero Content-Length.",
+      };
+    }
+    return { ok: true, buffer: Buffer.alloc(0) };
+  }
+
+  const reader = request.body.getReader();
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value && value.byteLength > 0) {
+        totalBytes += value.byteLength;
+        if (totalBytes > maxBodyBytes) {
+          await reader.cancel("Request body exceeds maximum allowed size").catch(() => undefined);
+          return {
+            ok: false,
+            reason: "body_too_large",
+            message: `Request body exceeds maximum allowed size (${maxBodyBytes} bytes).`,
+          };
+        }
+        chunks.push(Buffer.from(value.buffer, value.byteOffset, value.byteLength));
+      }
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      reason: "stream_error",
+      message: "Unable to read request body: " + (err instanceof Error ? err.message : String(err)),
+    };
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (
+    declaredBytes !== null &&
+    !request.headers.get("content-encoding") &&
+    totalBytes !== declaredBytes
+  ) {
+    return {
+      ok: false,
+      reason: "truncated_body",
+      message: "Request body was truncated or did not match declared Content-Length.",
+    };
+  }
+
+  const buffer = totalBytes === 0 ? Buffer.alloc(0) : Buffer.concat(chunks, totalBytes);
+  return { ok: true, buffer };
+}
 
 function jsonResponse(
   body: unknown,
@@ -395,39 +499,27 @@ async function parseJsonObject(
   request: Request,
   options: { allowEmpty?: boolean } = {},
 ): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; response: Response }> {
-  const contentLength = request.headers.get("content-length");
-  if (contentLength && Number(contentLength) > MAX_CRM_JSON_BYTES) {
+  const bodyRead = await readRequestBodyBounded(request, MAX_CRM_JSON_BYTES);
+  if (!bodyRead.ok) {
     return {
       ok: false,
       response: jsonResponse(
-        { ok: false, error: { code: "validation_error", message: "Request body is too large." } },
+        {
+          ok: false,
+          error: {
+            code: "validation_error",
+            message:
+              bodyRead.reason === "body_too_large"
+                ? "Request body is too large."
+                : "Unable to read request body.",
+          },
+        },
         400,
       ),
     };
   }
 
-  let rawText: string;
-  try {
-    rawText = await request.text();
-  } catch {
-    return {
-      ok: false,
-      response: jsonResponse(
-        { ok: false, error: { code: "validation_error", message: "Unable to read request body." } },
-        400,
-      ),
-    };
-  }
-
-  if (Buffer.byteLength(rawText, "utf8") > MAX_CRM_JSON_BYTES) {
-    return {
-      ok: false,
-      response: jsonResponse(
-        { ok: false, error: { code: "validation_error", message: "Request body is too large." } },
-        400,
-      ),
-    };
-  }
+  const rawText = bodyRead.buffer.toString("utf8");
 
   if (!rawText.trim()) {
     if (options.allowEmpty) {
@@ -486,36 +578,174 @@ function parseOptionalVersionInput(raw: unknown): number | undefined {
   return Number.isFinite(num) ? num : -1;
 }
 
-const MAX_PROOF_BYTES = 10 * 1024 * 1024; // 10 MiB
+interface ParsedMultipartResult {
+  fields: Map<string, string>;
+  files: Map<string, { fileName: string; contentType?: string; buffer: Buffer }>;
+}
 
-async function parseProofUploadRequest(
-  request: Request,
-): Promise<{ ok: true; payload: ParsedProofUpload } | { ok: false; response: Response }> {
-  const clHeader = request.headers.get("content-length");
-  if (clHeader && Number(clHeader) > MAX_PROOF_BYTES) {
-    return {
-      ok: false,
-      response: jsonResponse(
-        {
-          ok: false,
-          error: {
-            code: "file_too_large",
-            message: "Payment proof file exceeds the 10 MiB size limit.",
-          },
-        },
-        400,
-      ),
-    };
+const CRLF_BUF = Buffer.from("\r\n", "latin1");
+const DOUBLE_DASH_BUF = Buffer.from("--", "latin1");
+const HEADER_END_BUF = Buffer.from("\r\n\r\n", "latin1");
+
+function parseMultipartFormData(body: Buffer, contentTypeHeader: string): ParsedMultipartResult {
+  const boundaryMatch = /;\s*boundary=(?:"([^"]+)"|([^\s;]+))/i.exec(contentTypeHeader);
+  const boundary = (boundaryMatch?.[1] ?? boundaryMatch?.[2] ?? "").trim();
+  if (!boundary || boundary.length > 70) {
+    throw new Error("Missing or invalid multipart boundary.");
   }
 
-  const contentType = (request.headers.get("content-type") ?? "").toLowerCase();
+  const dashBoundary = Buffer.from(`--${boundary}`, "latin1");
+  const nextBoundaryMarker = Buffer.from(`\r\n--${boundary}`, "latin1");
 
-  // 1. Multipart form data
-  if (contentType.startsWith("multipart/form-data")) {
+  let cursor = body.indexOf(dashBoundary);
+  if (cursor === -1) {
+    throw new Error("Multipart opening boundary not found.");
+  }
+  cursor += dashBoundary.length;
+
+  if (body.subarray(cursor, cursor + 2).equals(DOUBLE_DASH_BUF)) {
+    throw new Error("Multipart request contains no form parts.");
+  }
+  if (!body.subarray(cursor, cursor + 2).equals(CRLF_BUF)) {
+    throw new Error("Malformed multipart opening boundary.");
+  }
+  cursor += 2;
+
+  const fields = new Map<string, string>();
+  const files = new Map<string, { fileName: string; contentType?: string; buffer: Buffer }>();
+
+  while (true) {
+    const headerEnd = body.indexOf(HEADER_END_BUF, cursor);
+    if (headerEnd === -1) {
+      throw new Error("Truncated multipart part headers.");
+    }
+
+    const rawHeaders = body.subarray(cursor, headerEnd).toString("utf8");
+    const dataStart = headerEnd + 4;
+    const nextBoundaryIdx = body.indexOf(nextBoundaryMarker, dataStart);
+    if (nextBoundaryIdx === -1) {
+      throw new Error("Truncated multipart payload: closing boundary missing.");
+    }
+
+    const partBuffer = body.subarray(dataStart, nextBoundaryIdx);
+    let fieldName = "";
+    let fileName: string | undefined;
+    let partContentType: string | undefined;
+
+    for (const line of rawHeaders.split("\r\n")) {
+      const colonIdx = line.indexOf(":");
+      if (colonIdx === -1) continue;
+      const headerName = line.slice(0, colonIdx).trim().toLowerCase();
+      const headerVal = line.slice(colonIdx + 1).trim();
+
+      if (headerName === "content-disposition") {
+        const nameMatch = /;\s*name="([^"]*)"|;\s*name=([^\s;]+)/i.exec(headerVal);
+        fieldName = (nameMatch?.[1] ?? nameMatch?.[2] ?? "").trim();
+        const fileNameMatch = /;\s*filename="([^"]*)"|;\s*filename=([^\s;]+)/i.exec(headerVal);
+        if (fileNameMatch) {
+          fileName = fileNameMatch[1] ?? fileNameMatch[2] ?? "payment-proof";
+        } else {
+          const extMatch = /;\s*filename\*\s*=\s*UTF-8''([^\s;]+)/i.exec(headerVal);
+          if (extMatch?.[1]) {
+            fileName = decodeURIComponent(extMatch[1]);
+          }
+        }
+      } else if (headerName === "content-type") {
+        partContentType = headerVal.split(";")[0]?.trim() || undefined;
+      }
+    }
+
+    if (fieldName) {
+      if (fileName !== undefined) {
+        files.set(fieldName, {
+          fileName: fileName || "payment-proof",
+          ...(partContentType ? { contentType: partContentType } : {}),
+          buffer: partBuffer,
+        });
+      } else {
+        fields.set(fieldName, partBuffer.toString("utf8"));
+      }
+    }
+
+    const afterMarker = nextBoundaryIdx + nextBoundaryMarker.length;
+    if (body.subarray(afterMarker, afterMarker + 2).equals(DOUBLE_DASH_BUF)) {
+      break;
+    }
+    if (body.subarray(afterMarker, afterMarker + 2).equals(CRLF_BUF)) {
+      cursor = afterMarker + 2;
+      continue;
+    }
+    throw new Error("Malformed multipart boundary delimiter sequence.");
+  }
+
+  return { fields, files };
+}
+
+export async function parseProofUploadRequest(
+  request: Request,
+): Promise<{ ok: true; payload: ParsedProofUpload } | { ok: false; response: Response }> {
+  const rawContentType = request.headers.get("content-type") ?? "";
+  const contentType = rawContentType.toLowerCase();
+
+  // 1. Multipart form data — bounded request ceiling permits an exact 10 MiB file + framing overhead
+  if (/^multipart\/form-data(?:\s*;|$)/i.test(rawContentType.trim())) {
+    const bodyRead = await readRequestBodyBounded(request, MAX_PROOF_MULTIPART_BODY_BYTES);
+    if (!bodyRead.ok) {
+      if (bodyRead.reason === "body_too_large") {
+        return {
+          ok: false,
+          response: jsonResponse(
+            {
+              ok: false,
+              error: {
+                code: "file_too_large",
+                message:
+                  "Payment proof upload request exceeds the 10 MiB file and multipart overhead limit.",
+                details: {
+                  maxFileBytes: MAX_PROOF_BYTES,
+                  maxRequestBodyBytes: MAX_PROOF_MULTIPART_BODY_BYTES,
+                },
+              },
+            },
+            413,
+          ),
+        };
+      }
+      return {
+        ok: false,
+        response: jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "validation_error",
+              message: bodyRead.message,
+            },
+          },
+          400,
+        ),
+      };
+    }
+
+    if (bodyRead.buffer.byteLength === 0) {
+      return {
+        ok: false,
+        response: jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "validation_error",
+              message: "Multipart upload body is empty.",
+            },
+          },
+          400,
+        ),
+      };
+    }
+
     try {
-      const formData = await request.formData();
-      const fileEntry = formData.get("file") ?? formData.get("proof");
-      if (!fileEntry || typeof fileEntry === "string") {
+      const parsedMultipart = parseMultipartFormData(bodyRead.buffer, rawContentType);
+      const filePart = parsedMultipart.files.get("file") ?? parsedMultipart.files.get("proof");
+      if (!filePart) {
         return {
           ok: false,
           response: jsonResponse(
@@ -531,21 +761,15 @@ async function parseProofUploadRequest(
         };
       }
 
-      const file = fileEntry as unknown as {
-        name?: string;
-        type?: string;
-        arrayBuffer: () => Promise<ArrayBuffer>;
-      };
-      const originalFileName = file.name || "payment-proof";
-      const formMimeVal = formData.get("mimeType");
+      const originalFileName = filePart.fileName || "payment-proof";
+      const formMimeVal = parsedMultipart.fields.get("mimeType");
       const declaredMimeType =
-        typeof formMimeVal === "string" && formMimeVal.trim()
+        formMimeVal && formMimeVal.trim()
           ? formMimeVal.trim()
-          : typeof file.type === "string" && file.type.trim()
-            ? file.type.trim()
+          : filePart.contentType && filePart.contentType.trim()
+            ? filePart.contentType.trim()
             : undefined;
-      const arrayBuffer = await file.arrayBuffer();
-      const fileBuffer = Buffer.from(arrayBuffer);
+      const fileBuffer = filePart.buffer;
 
       if (fileBuffer.length === 0) {
         return {
@@ -579,16 +803,16 @@ async function parseProofUploadRequest(
         };
       }
 
-      const reasonVal = formData.get("reason");
-      const reason =
-        typeof reasonVal === "string" && reasonVal.trim() ? reasonVal.trim() : undefined;
-      const idKeyVal = formData.get("idempotencyKey");
+      const reasonVal = parsedMultipart.fields.get("reason");
+      const reason = reasonVal && reasonVal.trim() ? reasonVal.trim() : undefined;
+      const idKeyVal = parsedMultipart.fields.get("idempotencyKey");
       const idempotencyKey =
-        typeof idKeyVal === "string" && idKeyVal.trim()
+        idKeyVal && idKeyVal.trim()
           ? idKeyVal.trim()
           : (request.headers.get("idempotency-key") ?? undefined);
       const expectedProofVersion = parseOptionalVersionInput(
-        formData.get("expectedProofVersion") ?? request.headers.get("x-expected-proof-version"),
+        parsedMultipart.fields.get("expectedProofVersion") ??
+          request.headers.get("x-expected-proof-version"),
       );
 
       return {
@@ -728,8 +952,38 @@ async function parseProofUploadRequest(
 
   // 3. Raw binary stream
   try {
-    const arrayBuffer = await request.arrayBuffer();
-    const fileBuffer = Buffer.from(arrayBuffer);
+    const bodyRead = await readRequestBodyBounded(request, MAX_PROOF_BYTES);
+    if (!bodyRead.ok) {
+      if (bodyRead.reason === "body_too_large") {
+        return {
+          ok: false,
+          response: jsonResponse(
+            {
+              ok: false,
+              error: {
+                code: "file_too_large",
+                message: "Payment proof file exceeds the 10 MiB size limit.",
+              },
+            },
+            400,
+          ),
+        };
+      }
+      return {
+        ok: false,
+        response: jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "validation_error",
+              message: bodyRead.message,
+            },
+          },
+          400,
+        ),
+      };
+    }
+    const fileBuffer = bodyRead.buffer;
 
     if (fileBuffer.length === 0) {
       return {
