@@ -119,6 +119,31 @@ export const serverEnvSchema = z.object({
     (value) => emptyToUndefined(value),
     z.coerce.number().int().min(1).max(3600).optional(),
   ),
+
+  // B11C-LAUNCH-HARDENING Database capacity threshold overrides & backup public recipient key
+  MARIADB_QUOTA_MIB: z.preprocess(
+    (value) => emptyToUndefined(value),
+    z.coerce.number().int().min(10).max(1_048_576).optional(),
+  ),
+  MARIADB_WARNING_MIB: z.preprocess(
+    (value) => emptyToUndefined(value),
+    z.coerce.number().int().min(1).max(1_048_576).optional(),
+  ),
+  MARIADB_HARD_STOP_MIB: z.preprocess(
+    (value) => emptyToUndefined(value),
+    z.coerce.number().int().min(1).max(1_048_576).optional(),
+  ),
+  MARIADB_CAPACITY_SAFETY_MARGIN_MIB: z.preprocess(
+    (value) => emptyToUndefined(value),
+    z.coerce.number().int().min(0).max(1024).optional(),
+  ),
+  BACKUP_AGE_PUBLIC_KEY: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .regex(/^age1[023456789acdefghjklmnpqrstuvwxyz]{58}$/)
+      .optional(),
+  ),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
@@ -133,6 +158,43 @@ export function getAutomationTestRateLimitPolicy(
   return {
     maxRequests: env.AUTOMATION_TEST_RATE_LIMIT_MAX ?? 60,
     windowSeconds: env.AUTOMATION_TEST_RATE_LIMIT_WINDOW_SECONDS ?? 60,
+  };
+}
+
+export interface MariadbQuotaPolicy {
+  quotaMiB: number;
+  warningThresholdMiB: number;
+  hardStopThresholdMiB: number;
+  safetyMarginMiB: number;
+}
+
+/** Resolved MariaDB storage capacity enforcement policy (50% warn, 70% hard-stop, 16 MiB safety margin). */
+export function getMariadbQuotaPolicyFromEnv(
+  env?: Partial<
+    Pick<
+      ServerEnv,
+      | "MARIADB_QUOTA_MIB"
+      | "MARIADB_WARNING_MIB"
+      | "MARIADB_HARD_STOP_MIB"
+      | "MARIADB_CAPACITY_SAFETY_MARGIN_MIB"
+    >
+  >,
+): MariadbQuotaPolicy {
+  const quotaMiB = env?.MARIADB_QUOTA_MIB ?? 3072;
+  const hardStopThresholdMiB = Math.min(
+    quotaMiB,
+    env?.MARIADB_HARD_STOP_MIB ?? Math.floor(quotaMiB * 0.7),
+  );
+  const warningThresholdMiB = Math.min(
+    hardStopThresholdMiB,
+    env?.MARIADB_WARNING_MIB ?? Math.floor(quotaMiB * 0.5),
+  );
+  const safetyMarginMiB = Math.min(hardStopThresholdMiB, env?.MARIADB_CAPACITY_SAFETY_MARGIN_MIB ?? 16);
+  return {
+    quotaMiB,
+    warningThresholdMiB,
+    hardStopThresholdMiB,
+    safetyMarginMiB,
   };
 }
 
@@ -339,6 +401,11 @@ function readEnvSnapshot(
     AUTOMATION_TEST_DB_ALLOWLIST: raw["AUTOMATION_TEST_DB_ALLOWLIST"],
     AUTOMATION_TEST_RATE_LIMIT_MAX: raw["AUTOMATION_TEST_RATE_LIMIT_MAX"],
     AUTOMATION_TEST_RATE_LIMIT_WINDOW_SECONDS: raw["AUTOMATION_TEST_RATE_LIMIT_WINDOW_SECONDS"],
+    MARIADB_QUOTA_MIB: raw["MARIADB_QUOTA_MIB"],
+    MARIADB_WARNING_MIB: raw["MARIADB_WARNING_MIB"],
+    MARIADB_HARD_STOP_MIB: raw["MARIADB_HARD_STOP_MIB"],
+    MARIADB_CAPACITY_SAFETY_MARGIN_MIB: raw["MARIADB_CAPACITY_SAFETY_MARGIN_MIB"],
+    BACKUP_AGE_PUBLIC_KEY: raw["BACKUP_AGE_PUBLIC_KEY"],
   };
 }
 

@@ -19,6 +19,7 @@ import {
   useCreatePaymentMutation,
   useUploadProofMutation,
 } from "@/lib/api/financeApi";
+import { formatApiErrorMessage } from "@/lib/api/errors";
 import type { DealDto, PaymentMethodApi, PaymentTypeApi } from "@/lib/api/schemas";
 
 const METHODS: PaymentMethodApi[] = ["UPI", "Bank Transfer", "Cash", "Card", "Cheque"];
@@ -74,8 +75,8 @@ export function PilotPaymentDialog({ deal, onClose }: PilotPaymentDialogProps) {
         toast.success("Payment proof attached successfully");
         onClose();
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Proof upload failed";
-        toast.error(`Proof upload failed: ${msg}. You can retry or attach later.`);
+        const msg = formatApiErrorMessage(err, "Proof upload failed");
+        toast.error(`Proof upload failed: ${msg}`, { duration: 8000 });
       } finally {
         setBusy(false);
       }
@@ -122,7 +123,7 @@ export function PilotPaymentDialog({ deal, onClose }: PilotPaymentDialogProps) {
         } catch (proofErr: unknown) {
           // Payment is safely committed, only proof failed!
           setSavedPaymentId(res.payment.id);
-          const msg = proofErr instanceof Error ? proofErr.message : "Upload error";
+          const msg = formatApiErrorMessage(proofErr, "Upload error");
           toast.error(
             `Payment recorded, but proof upload failed (${msg}). Tap "Retry proof" or attach later from payment history.`,
             { duration: 8000 },
@@ -132,7 +133,7 @@ export function PilotPaymentDialog({ deal, onClose }: PilotPaymentDialogProps) {
         onClose();
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to record payment";
+      const msg = formatApiErrorMessage(err, "Failed to record payment");
       toast.error(msg);
     } finally {
       setBusy(false);

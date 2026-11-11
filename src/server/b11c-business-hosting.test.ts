@@ -395,6 +395,48 @@ function createInMemoryRelationalDb() {
         },
       };
     },
+    async execute(queryObj: unknown): Promise<[Record<string, unknown>[], undefined]> {
+      const sqlStr = DIALECT.sqlToQuery(
+        queryObj as Parameters<typeof DIALECT.sqlToQuery>[0],
+      ).sql;
+      if (/GET_LOCK/i.test(sqlStr)) {
+        return [[{ acquired: 1 }], undefined];
+      }
+      if (/RELEASE_LOCK/i.test(sqlStr)) {
+        return [[{ released: 1 }], undefined];
+      }
+      if (/INFORMATION_SCHEMA\.TABLES/i.test(sqlStr)) {
+        const blobRows = tables.get("crm_payment_proof_blobs") ?? [];
+        let blobBytes = 0;
+        for (const r of blobRows) {
+          blobBytes += Number(r["chunkSize"] ?? r["chunk_size"] ?? 0);
+        }
+        return [
+          [
+            {
+              tableName: "crm_payment_proofs",
+              logicalBytes: (tables.get("crm_payment_proofs") ?? []).length * 1024 + 16384,
+              dataFreeBytes: 0,
+            },
+            {
+              tableName: "crm_payment_proof_blobs",
+              logicalBytes: blobBytes,
+              dataFreeBytes: 0,
+            },
+          ],
+          undefined,
+        ];
+      }
+      if (/crm_payment_proof_blobs/i.test(sqlStr)) {
+        const blobRows = tables.get("crm_payment_proof_blobs") ?? [];
+        let total = 0;
+        for (const r of blobRows) {
+          total += Number(r["chunkSize"] ?? r["chunk_size"] ?? 0);
+        }
+        return [[{ blobChunkCount: blobRows.length, blobPayloadBytes: total }], undefined];
+      }
+      return [[], undefined];
+    },
     async transaction<T>(fn: (tx: CrmDatabase) => Promise<T>): Promise<T> {
       const backup = snapshotTables();
       try {
@@ -651,17 +693,22 @@ describe("Checkpoint B11C-BUSINESS — Hostinger Business Feasibility Prototypes
   });
 
   describe("3. Step 3 Hostinger Cron Compatibility, Timezones & Zero Duplicate Follow-ups", () => {
-    it("enforces Hostinger 255-char command ceiling and reveals why compact cd command is required", () => {
+    it("enforces Hostinger 255-char command ceiling, verified usr/bin/node path, and zero shell operators", () => {
       const stagingCmd = buildHostingerCronCommand({
         username: "u256504187",
         domain: "khaki-butterfly-345144.hostingersite.com",
         nodeMajor: "22",
       });
-      // Compact `cd .../hbuilds && ...` saves ~80+ characters compared to repeating full hbuilds path twice
+      // Direct command omits `cd &&` and `--env-file=` because run-cron.mjs auto-loads `../../../config/.env`
       expect(stagingCmd.fitsHostinger255Limit).toBe(true);
+      expect(stagingCmd.usesShellOperators).toBe(false);
+      expect(stagingCmd.autoDiscoversEnv).toBe(true);
+      expect(stagingCmd.nodeBinary).toBe("/opt/alt/alt-nodejs22/root/usr/bin/node");
+      expect(stagingCmd.command).toBe(stagingCmd.compactCommand);
+      expect(stagingCmd.command).not.toContain("&&");
+      expect(stagingCmd.command).not.toContain("cd ");
       expect(stagingCmd.compactLength).toBeLessThanOrEqual(HOSTINGER_CRON_MAX_COMMAND_CHARS);
       expect(stagingCmd.compactLength).toBeLessThan(stagingCmd.naiveAbsoluteLength);
-      expect(stagingCmd.compactCommand).toContain("--env-file=config/.env");
 
       const stagingWithOwnerCmd = buildHostingerCronCommand({
         username: "u256504187",
@@ -669,7 +716,7 @@ describe("Checkpoint B11C-BUSINESS — Hostinger Business Feasibility Prototypes
         nodeMajor: "22",
         args: ["--dry-run", "--owner=usr_owner_main"],
       });
-      // Adding even one CLI flag overflows naive dual-path Hostinger command (>255), while compact stays under!
+      // Adding even one CLI flag overflows legacy `--env-file=` absolute command (>255), while direct stays well under!
       expect(stagingWithOwnerCmd.naiveFitsHostinger255Limit).toBe(false);
       expect(stagingWithOwnerCmd.naiveAbsoluteLength).toBeGreaterThan(
         HOSTINGER_CRON_MAX_COMMAND_CHARS,
@@ -680,6 +727,7 @@ describe("Checkpoint B11C-BUSINESS — Hostinger Business Feasibility Prototypes
         username: "u256504187",
         domain: "khaki-butterfly-345144.hostingersite.com",
       });
+      expect(cliSpec.command).toBe(stagingCmd.command);
       expect(cliSpec.compactCommand).toBe(stagingCmd.compactCommand);
 
       expect(() =>

@@ -11,6 +11,13 @@ import {
 } from "../db/schema.server";
 import { toMysqlUtcDateTime } from "../db/utc.server";
 import { getProofStorageBackend, type ProofStorageBackend } from "../storage/proofStorage.server";
+import type { MariadbQuotaPolicy } from "../config/env.server";
+import {
+  enforceMariadbProofQuota,
+  markMariadbQuotaCheckedInScope,
+  withMariadbCapacityWriteLock,
+  type MariadbCapacityLogEvent,
+} from "../storage/mariadbCapacity.server";
 import { toIstParts } from "./dates.server";
 import { CrmServiceError } from "./errors.server";
 import { hashIdempotentRequest, runWithIdempotency } from "./idempotency.server";
@@ -46,6 +53,37 @@ function assertProofStorageOperational(storage: ProofStorageBackend): void {
   }
 }
 
+interface CapacityHookableStorage extends ProofStorageBackend {
+  resolveCapacityOptions?: () => {
+    policy: MariadbQuotaPolicy;
+    retainHistoricalBlobs: boolean;
+    onCapacityEvent?: ((entry: MariadbCapacityLogEvent) => void) | undefined;
+  };
+}
+
+function resolveMariadbCapacitySettings(
+  storage: ProofStorageBackend,
+  options?: {
+    quotaPolicy?: MariadbQuotaPolicy | undefined;
+    retainHistoricalBlobs?: boolean | undefined;
+    onCapacityEvent?: ((entry: MariadbCapacityLogEvent) => void) | undefined;
+  },
+) {
+  const isMariadb = storage.driver === "mariadb-blob";
+  const hookable = storage as CapacityHookableStorage;
+  const fromStorage =
+    isMariadb && typeof hookable.resolveCapacityOptions === "function"
+      ? hookable.resolveCapacityOptions()
+      : undefined;
+
+  return {
+    isMariadb,
+    policy: options?.quotaPolicy ?? fromStorage?.policy,
+    retainHistoricalBlobs: options?.retainHistoricalBlobs ?? fromStorage?.retainHistoricalBlobs ?? true,
+    onCapacityEvent: options?.onCapacityEvent ?? fromStorage?.onCapacityEvent,
+  };
+}
+
 export async function attachPaymentProofRecord(
   db: CrmDatabase,
   ownerUserId: string,
@@ -57,6 +95,8 @@ export async function attachPaymentProofRecord(
     now?: Date | undefined;
     storageBackend?: ProofStorageBackend | undefined;
     hooks?: { afterPrimaryWrite?: () => void } | undefined;
+    quotaPolicy?: MariadbQuotaPolicy | undefined;
+    onCapacityEvent?: ((entry: MariadbCapacityLogEvent) => void) | undefined;
   },
 ): Promise<{
   status: number;
@@ -93,74 +133,91 @@ export async function attachPaymentProofRecord(
 
   let newlyPersistedKey: string | null = null;
 
+  const capacitySettings = resolveMariadbCapacitySettings(storage, options);
+
   try {
-    const result = await runWithIdempotency<{
-      ok: true;
-      proof: PaymentProofDto;
-      auditEvent: FinanceEventDto;
-    }>(db, { ownerUserId, scope, idemKey, requestHash, now }, async (tx) => {
-      // Step 2: Lock the payment row
-      const paymentRows = await tx
-        .select()
-        .from(crmPayments)
-        .where(and(eq(crmPayments.id, paymentId), eq(crmPayments.ownerUserId, ownerUserId)))
-        .limit(1)
-        .for("update");
-      const payment = paymentRows[0];
-      if (!payment) {
-        throw new CrmServiceError(404, "not_found", "Payment not found.");
-      }
+    const runAttachTransaction = () =>
+      runWithIdempotency<{
+        ok: true;
+        proof: PaymentProofDto;
+        auditEvent: FinanceEventDto;
+      }>(db, { ownerUserId, scope, idemKey, requestHash, now }, async (tx) => {
+        // Step 2: Lock the payment row
+        const paymentRows = await tx
+          .select()
+          .from(crmPayments)
+          .where(and(eq(crmPayments.id, paymentId), eq(crmPayments.ownerUserId, ownerUserId)))
+          .limit(1)
+          .for("update");
+        const payment = paymentRows[0];
+        if (!payment) {
+          throw new CrmServiceError(404, "not_found", "Payment not found.");
+        }
 
-      if (payment.voided) {
-        throw new CrmServiceError(
-          409,
-          "payment_already_voided",
-          "Cannot attach proof to a voided payment; voided transactions are immutable historical records.",
-          { conflict: { paymentId: payment.id, status: payment.status } },
-        );
-      }
+        if (payment.voided) {
+          throw new CrmServiceError(
+            409,
+            "payment_already_voided",
+            "Cannot attach proof to a voided payment; voided transactions are immutable historical records.",
+            { conflict: { paymentId: payment.id, status: payment.status } },
+          );
+        }
 
-      // Step 3: Lock the deal row
-      const dealRows = await tx
-        .select()
-        .from(crmDeals)
-        .where(and(eq(crmDeals.id, payment.dealId), eq(crmDeals.ownerUserId, ownerUserId)))
-        .limit(1)
-        .for("update");
-      const deal = dealRows[0];
-      if (!deal || deal.status === "cancelled") {
-        throw new CrmServiceError(
-          409,
-          "deal_cancelled",
-          "Cannot attach proof to a payment on a cancelled deal.",
-          { conflict: { dealId: payment.dealId } },
-        );
-      }
+        // Step 3: Lock the deal row
+        const dealRows = await tx
+          .select()
+          .from(crmDeals)
+          .where(and(eq(crmDeals.id, payment.dealId), eq(crmDeals.ownerUserId, ownerUserId)))
+          .limit(1)
+          .for("update");
+        const deal = dealRows[0];
+        if (!deal || deal.status === "cancelled") {
+          throw new CrmServiceError(
+            409,
+            "deal_cancelled",
+            "Cannot attach proof to a payment on a cancelled deal.",
+            { conflict: { dealId: payment.dealId } },
+          );
+        }
 
-      // Step 4: Check if an active proof already exists
-      const existingActiveRows = await tx
-        .select()
-        .from(crmPaymentProofs)
-        .where(
-          and(
-            eq(crmPaymentProofs.ownerUserId, ownerUserId),
-            eq(crmPaymentProofs.paymentId, paymentId),
-            eq(crmPaymentProofs.activePaymentLock, paymentId),
-          ),
-        )
-        .limit(1)
-        .for("update");
+        // Step 4: Check if an active proof already exists
+        const existingActiveRows = await tx
+          .select()
+          .from(crmPaymentProofs)
+          .where(
+            and(
+              eq(crmPaymentProofs.ownerUserId, ownerUserId),
+              eq(crmPaymentProofs.paymentId, paymentId),
+              eq(crmPaymentProofs.activePaymentLock, paymentId),
+            ),
+          )
+          .limit(1)
+          .for("update");
 
-      if (existingActiveRows[0]) {
-        throw new CrmServiceError(
-          409,
-          "proof_already_exists",
-          "Payment already has an active proof attachment. Use replace or remove to update.",
-          { conflict: { paymentId, proofId: existingActiveRows[0].id } },
-        );
-      }
+        if (existingActiveRows[0]) {
+          throw new CrmServiceError(
+            409,
+            "proof_already_exists",
+            "Payment already has an active proof attachment. Use replace or remove to update.",
+            { conflict: { paymentId, proofId: existingActiveRows[0].id } },
+          );
+        }
 
-      // Step 5: Move staged file to permanent private storage and verify persisted integrity
+        // Step 4.5: Fail-closed MariaDB capacity limit enforcement under serialized write lock
+        if (capacitySettings.isMariadb) {
+          await enforceMariadbProofQuota({
+            db,
+            operation: "upload",
+            paymentId,
+            incomingBytes: staged.byteSize,
+            retainHistoricalBlobs: capacitySettings.retainHistoricalBlobs,
+            policy: capacitySettings.policy,
+            onCapacityEvent: capacitySettings.onCapacityEvent,
+          });
+          markMariadbQuotaCheckedInScope(db);
+        }
+
+        // Step 5: Move staged file to permanent private storage and verify persisted integrity
       const proofId = generateServerId("proof");
       const persisted = await storage.persistStagedProof({
         ownerUserId,
@@ -268,6 +325,10 @@ export async function attachPaymentProofRecord(
       };
     });
 
+    const result = capacitySettings.isMariadb
+      ? await withMariadbCapacityWriteLock(db, runAttachTransaction)
+      : await runAttachTransaction();
+
     if (result.replayed) {
       await storage.deleteTemp(staged.tempKey).catch(() => undefined);
     }
@@ -296,6 +357,9 @@ export async function replacePaymentProofRecord(
     now?: Date | undefined;
     storageBackend?: ProofStorageBackend | undefined;
     hooks?: { afterPrimaryWrite?: () => void } | undefined;
+    quotaPolicy?: MariadbQuotaPolicy | undefined;
+    retainHistoricalBlobs?: boolean | undefined;
+    onCapacityEvent?: ((entry: MariadbCapacityLogEvent) => void) | undefined;
   },
 ): Promise<{
   status: number;
@@ -333,14 +397,16 @@ export async function replacePaymentProofRecord(
   });
 
   let newlyPersistedKey: string | null = null;
+  const capacitySettings = resolveMariadbCapacitySettings(storage, options);
 
   try {
-    const result = await runWithIdempotency<{
-      ok: true;
-      proof: PaymentProofDto;
-      previousProof: PaymentProofDto;
-      auditEvent: FinanceEventDto;
-    }>(db, { ownerUserId, scope, idemKey, requestHash, now }, async (tx) => {
+    const runReplaceTransaction = () =>
+      runWithIdempotency<{
+        ok: true;
+        proof: PaymentProofDto;
+        previousProof: PaymentProofDto;
+        auditEvent: FinanceEventDto;
+      }>(db, { ownerUserId, scope, idemKey, requestHash, now }, async (tx) => {
       // Step 2: Lock the payment row
       const paymentRows = await tx
         .select()
@@ -420,6 +486,21 @@ export async function replacePaymentProofRecord(
             },
           },
         );
+      }
+
+      // Step 4.5: Fail-closed MariaDB capacity limit enforcement under serialized write lock
+      if (capacitySettings.isMariadb) {
+        await enforceMariadbProofQuota({
+          db,
+          operation: "replace",
+          paymentId,
+          incomingBytes: staged.byteSize,
+          existingProofBytes: oldProof.fileSize,
+          retainHistoricalBlobs: capacitySettings.retainHistoricalBlobs,
+          policy: capacitySettings.policy,
+          onCapacityEvent: capacitySettings.onCapacityEvent,
+        });
+        markMariadbQuotaCheckedInScope(db);
       }
 
       // Step 5: Move new staged file to permanent private storage and verify persisted integrity
@@ -572,6 +653,10 @@ export async function replacePaymentProofRecord(
         },
       };
     });
+
+    const result = capacitySettings.isMariadb
+      ? await withMariadbCapacityWriteLock(db, runReplaceTransaction)
+      : await runReplaceTransaction();
 
     if (result.replayed) {
       await storage.deleteTemp(staged.tempKey).catch(() => undefined);

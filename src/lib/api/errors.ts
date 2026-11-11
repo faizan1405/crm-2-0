@@ -210,6 +210,18 @@ export function formatApiErrorMessage(
   fallback = "Could not complete request. Nothing was saved.",
 ): string {
   if (isApiError(error)) {
+    if (error.status === 507 || error.code === "storage_quota_exceeded") {
+      const used =
+        typeof error.details?.["usedMiB"] === "number" ? error.details["usedMiB"] : undefined;
+      const quota =
+        typeof error.details?.["quotaMiB"] === "number" ? error.details["quotaMiB"] : undefined;
+      const usageSummary =
+        used !== undefined && quota !== undefined ? ` (${used} MiB / ${quota} MiB used)` : "";
+      return `Payment proof storage limit reached${usageSummary}. New receipt uploads are paused to protect CRM database stability; existing proofs and payment recording continue working.`;
+    }
+    if (error.code === "storage_capacity_unavailable") {
+      return "Unable to verify payment proof storage capacity safely right now. Proof uploads are temporarily paused while payment records remain unaffected.";
+    }
     if (
       error.status === 503 ||
       error.code === "crm_unavailable" ||

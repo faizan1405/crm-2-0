@@ -75,6 +75,12 @@ export function computeCronWindowContext(
 }
 
 export interface HostingerCronCommandSpec {
+  command: string;
+  length: number;
+  headroomChars: number;
+  nodeBinary: string;
+  usesShellOperators: boolean;
+  autoDiscoversEnv: boolean;
   compactCommand: string;
   compactLength: number;
   fitsHostinger255Limit: boolean;
@@ -85,10 +91,12 @@ export interface HostingerCronCommandSpec {
 
 const SAFE_SHELL_TOKEN_RE = /^[A-Za-z0-9._/-]+$/;
 const SAFE_CLI_FLAG_RE = /^--[A-Za-z0-9][A-Za-z0-9=_-]*$/;
+const SHELL_OPERATOR_RE = /(?:&&|\|\||[;|&><`$()\n\r])/;
 
 /**
  * Builds and validates Hostinger cron command strings against Hostinger Business Web Hosting's
- * 255-character command length cap and `--env-file` `hbuilds` directory layout.
+ * verified `/opt/alt/alt-nodejs<major>/root/usr/bin/node` binary path, no-shell-operator panel
+ * execution rules, and 255-character command length cap.
  */
 export function buildHostingerCronCommand(params: {
   username: string;
@@ -110,22 +118,34 @@ export function buildHostingerCronCommand(params: {
     throw new CrmServiceError(400, "validation_error", "Invalid relative cron script path.");
   }
   for (const arg of args) {
-    if (!SAFE_CLI_FLAG_RE.test(arg)) {
+    if (!SAFE_CLI_FLAG_RE.test(arg) || SHELL_OPERATOR_RE.test(arg)) {
       throw new CrmServiceError(400, "validation_error", `Unsafe cron CLI argument: ${arg}`);
     }
   }
 
   const hbuildsRoot = `/home/${username}/domains/${domain}/hbuilds`;
-  const nodeBin = `/opt/alt/alt-nodejs${nodeMajor}/root/bin/node`;
+  const nodeBinary = `/opt/alt/alt-nodejs${nodeMajor}/root/usr/bin/node`;
   const argsSuffix = args.length > 0 ? ` ${args.join(" ")}` : "";
 
-  const compactCommand = `cd ${hbuildsRoot} && ${nodeBin} --env-file=config/.env current/nodejs/${scriptRelPath}${argsSuffix}`;
-  const naiveAbsoluteCommand = `${nodeBin} --env-file=${hbuildsRoot}/config/.env ${hbuildsRoot}/current/nodejs/${scriptRelPath}${argsSuffix}`;
+  // Direct Node execution (no `cd &&`, no `--env-file`): run-cron.mjs securely auto-loads
+  // `../../../config/.env` relative to `import.meta.url` across release symlinks.
+  const command = `${nodeBinary} ${hbuildsRoot}/current/nodejs/${scriptRelPath}${argsSuffix}`;
+  const naiveAbsoluteCommand = `${nodeBinary} --env-file=${hbuildsRoot}/config/.env ${hbuildsRoot}/current/nodejs/${scriptRelPath}${argsSuffix}`;
+
+  if (SHELL_OPERATOR_RE.test(command)) {
+    throw new CrmServiceError(400, "validation_error", "Cron command cannot contain shell operators.");
+  }
 
   return {
-    compactCommand,
-    compactLength: compactCommand.length,
-    fitsHostinger255Limit: compactCommand.length <= HOSTINGER_CRON_MAX_COMMAND_CHARS,
+    command,
+    length: command.length,
+    headroomChars: HOSTINGER_CRON_MAX_COMMAND_CHARS - command.length,
+    nodeBinary,
+    usesShellOperators: false,
+    autoDiscoversEnv: true,
+    compactCommand: command,
+    compactLength: command.length,
+    fitsHostinger255Limit: command.length <= HOSTINGER_CRON_MAX_COMMAND_CHARS,
     naiveAbsoluteCommand,
     naiveAbsoluteLength: naiveAbsoluteCommand.length,
     naiveFitsHostinger255Limit: naiveAbsoluteCommand.length <= HOSTINGER_CRON_MAX_COMMAND_CHARS,

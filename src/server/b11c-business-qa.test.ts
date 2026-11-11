@@ -357,6 +357,48 @@ function createQaRelationalDb() {
         },
       };
     },
+    async execute(queryObj: unknown): Promise<[Record<string, unknown>[], undefined]> {
+      const sqlStr = DIALECT.sqlToQuery(
+        queryObj as Parameters<typeof DIALECT.sqlToQuery>[0],
+      ).sql;
+      if (/GET_LOCK/i.test(sqlStr)) {
+        return [[{ acquired: 1 }], undefined];
+      }
+      if (/RELEASE_LOCK/i.test(sqlStr)) {
+        return [[{ released: 1 }], undefined];
+      }
+      if (/INFORMATION_SCHEMA\.TABLES/i.test(sqlStr)) {
+        const blobRows = tables.get("crm_payment_proof_blobs") ?? [];
+        let blobBytes = 0;
+        for (const r of blobRows) {
+          blobBytes += Number(r["chunkSize"] ?? r["chunk_size"] ?? 0);
+        }
+        return [
+          [
+            {
+              tableName: "crm_payment_proofs",
+              logicalBytes: (tables.get("crm_payment_proofs") ?? []).length * 1024 + 16384,
+              dataFreeBytes: 0,
+            },
+            {
+              tableName: "crm_payment_proof_blobs",
+              logicalBytes: blobBytes,
+              dataFreeBytes: 0,
+            },
+          ],
+          undefined,
+        ];
+      }
+      if (/crm_payment_proof_blobs/i.test(sqlStr)) {
+        const blobRows = tables.get("crm_payment_proof_blobs") ?? [];
+        let total = 0;
+        for (const r of blobRows) {
+          total += Number(r["chunkSize"] ?? r["chunk_size"] ?? 0);
+        }
+        return [[{ blobChunkCount: blobRows.length, blobPayloadBytes: total }], undefined];
+      }
+      return [[], undefined];
+    },
     async transaction<T>(fn: (tx: CrmDatabase) => Promise<T>): Promise<T> {
       const backup = snapshotTables();
       try {

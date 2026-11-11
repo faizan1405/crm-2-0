@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatApiErrorMessage } from "@/lib/api/errors";
 import { formatBytes, proofLabel } from "@/lib/crm/attachments";
 import { formatDate } from "@/lib/crm/format";
 import {
@@ -99,8 +100,7 @@ export function PilotProofViewer({ payment, onClose }: PilotProofViewerProps) {
       setReason("");
       setSelectedProofId(null);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to replace proof";
-      toast.error(msg);
+      toast.error(formatApiErrorMessage(err, "Failed to replace proof"), { duration: 8000 });
     }
   };
 
@@ -115,8 +115,7 @@ export function PilotProofViewer({ payment, onClose }: PilotProofViewerProps) {
       setReason("");
       onClose();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to remove proof";
-      toast.error(msg);
+      toast.error(formatApiErrorMessage(err, "Failed to remove proof"));
     }
   };
 

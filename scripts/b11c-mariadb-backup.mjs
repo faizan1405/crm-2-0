@@ -11,10 +11,22 @@
 
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { createConnection } from "mysql2/promise";
+import {
+  assertBackupProducerEnvHasNoPrivateKey,
+  assertSafeBackupFilePath,
+  decryptFileWithAgeX25519,
+  encryptFileWithAgeX25519,
+  evaluateEncryptedBackupHealth,
+  generateAgeX25519KeyPair,
+  gunzipFile,
+  gzipFileDeterministic,
+  hashFileSha256,
+} from "./b11c-backup-crypto.mjs";
 
 export const PROTECTED_DB_PATTERNS = [
   /^crm_?v?1$/i,
@@ -780,16 +792,294 @@ export async function verifyRestoredBackup(connOrConfig, manifestPath) {
   }
 }
 
+function removeDirBestEffort(dirPath) {
+  if (!dirPath) return;
+  try {
+    if (fs.existsSync(dirPath)) {
+      for (const entry of fs.readdirSync(dirPath)) {
+        const full = path.join(dirPath, entry);
+        try {
+          const stat = fs.lstatSync(full);
+          if (stat.isDirectory()) {
+            removeDirBestEffort(full);
+          } else {
+            // Best-effort zero-overwrite small staging artifacts before unlink
+            if (stat.isFile() && stat.size > 0 && stat.size <= 32 * 1024 * 1024) {
+              const fd = fs.openSync(full, "r+");
+              try {
+                fs.writeSync(fd, Buffer.alloc(Math.min(stat.size, 65_536), 0), 0);
+              } finally {
+                fs.closeSync(fd);
+              }
+            }
+            fs.unlinkSync(full);
+          }
+        } catch {
+          // Ignore individual cleanup errors; recursive rm below finishes
+        }
+      }
+      fs.rmSync(dirPath, { recursive: true, force: true });
+    }
+  } catch {
+    // Ignore cleanup errors
+  }
+}
+
+/**
+ * Packages an exported `.sql` file and `.manifest.json` into a standard age v1 X25519 encrypted
+ * `.sql.gz.age` + `.manifest.json.age` + secret-free `.meta.json` bundle, cleaning all plaintext temp
+ * gzip intermediates deterministically.
+ */
+export async function packageEncryptedBackupBundle({
+  sqlPath,
+  manifestPath,
+  outAgePath,
+  recipientPublicKey,
+  stagingRoot = os.tmpdir(),
+  env = process.env,
+}) {
+  assertBackupProducerEnvHasNoPrivateKey(env);
+  const safeSql = assertSafeBackupFilePath(sqlPath, "source sql");
+  const safeManifestPath = assertSafeBackupFilePath(manifestPath, "source manifest");
+  const safeOutAge = assertSafeBackupFilePath(outAgePath, "encrypted archive output");
+
+  const manifest = JSON.parse(fs.readFileSync(safeManifestPath, "utf8"));
+  const dumpSha256 = manifest.dumpSha256 ?? (await hashFileSha256(safeSql));
+  const dumpStat = fs.statSync(safeSql);
+
+  const stageDir = fs.mkdtempSync(path.join(stagingRoot, "sf-crm-gz-"));
+  if (process.platform !== "win32") {
+    try {
+      fs.chmodSync(stageDir, 0o700);
+    } catch {}
+  }
+
+  try {
+    const tempGzPath = path.join(stageDir, "backup.sql.gz");
+    const gz = await gzipFileDeterministic(safeSql, tempGzPath);
+    const encPayload = await encryptFileWithAgeX25519({
+      inputPath: tempGzPath,
+      outputPath: safeOutAge,
+      recipientPublicKey,
+    });
+    const manifestAgePath = `${safeOutAge}.manifest.age`;
+    await encryptFileWithAgeX25519({
+      inputPath: safeManifestPath,
+      outputPath: manifestAgePath,
+      recipientPublicKey,
+    });
+
+    const meta = {
+      format: "age-v1-gzip-sql",
+      createdAtUtc: new Date().toISOString(),
+      recipientPublicKey: encPayload.recipientPublicKey,
+      encryptedArchiveName: path.basename(safeOutAge),
+      encryptedBytes: encPayload.encryptedBytes,
+      encryptedSha256: encPayload.encryptedSha256,
+      gzipBytes: gz.byteSize,
+      gzipSha256: gz.sha256,
+      dumpFileBytes: dumpStat.size,
+      dumpSha256,
+      tableCount: manifest.tableCount,
+      totalRows: manifest.totalRows,
+      proofCount: manifest.proofCount,
+      proofBlobChunkCount: manifest.proofBlobChunkCount,
+    };
+
+    const metaPath = `${safeOutAge}.meta.json`;
+    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), { encoding: "utf8", mode: 0o600 });
+
+    return {
+      outAgePath: safeOutAge,
+      manifestAgePath,
+      metaPath,
+      meta,
+    };
+  } finally {
+    removeDirBestEffort(stageDir);
+  }
+}
+
+/**
+ * Exports a consistent-snapshot MariaDB backup directly through gzip + age v1 encryption
+ * inside an isolated `0o700` temp workspace, removing all temporary plaintext files on exit.
+ */
+export async function exportEncryptedMariaDbBackup({
+  connectionConfig,
+  outAgePath,
+  recipientPublicKey,
+  maxInsertBytes = DEFAULT_MAX_INSERT_BYTES,
+  stagingRoot = os.tmpdir(),
+  env = process.env,
+}) {
+  assertBackupProducerEnvHasNoPrivateKey(env);
+  const safeOutAge = assertSafeBackupFilePath(outAgePath, "encrypted backup output");
+
+  const stageDir = fs.mkdtempSync(path.join(stagingRoot, "sf-crm-export-"));
+  if (process.platform !== "win32") {
+    try {
+      fs.chmodSync(stageDir, 0o700);
+    } catch {}
+  }
+
+  try {
+    const tempSqlPath = path.join(stageDir, "dump.sql");
+    const tempManifestPath = path.join(stageDir, "dump.manifest.json");
+    const manifest = await exportMariaDbBackup({
+      connectionConfig,
+      outSqlPath: tempSqlPath,
+      outManifestPath: tempManifestPath,
+      maxInsertBytes,
+    });
+    const packaged = await packageEncryptedBackupBundle({
+      sqlPath: tempSqlPath,
+      manifestPath: tempManifestPath,
+      outAgePath: safeOutAge,
+      recipientPublicKey,
+      stagingRoot: stageDir,
+      env,
+    });
+    return {
+      ...packaged,
+      manifestSummary: {
+        tableCount: manifest.tableCount,
+        totalRows: manifest.totalRows,
+        proofCount: manifest.proofCount,
+        proofBlobChunkCount: manifest.proofBlobChunkCount,
+        dumpFileBytes: manifest.dumpFileBytes,
+        dumpSha256: manifest.dumpSha256,
+      },
+    };
+  } finally {
+    removeDirBestEffort(stageDir);
+  }
+}
+
+/**
+ * Decrypts & gunzips an encrypted backup archive inside a temporary `0o700` staging directory,
+ * verifies dump + manifest integrity hashes, invokes `onVerifiedPlaintext({ sqlPath, manifestPath, manifest })`,
+ * and securely purges all temporary plaintext files before returning.
+ */
+export async function withDecryptedBackupBundle(
+  { inAgePath, secretKey, stagingRoot = os.tmpdir() },
+  onVerifiedPlaintext,
+) {
+  const safeInAge = assertSafeBackupFilePath(inAgePath, "encrypted archive");
+  const manifestAgePath = `${safeInAge}.manifest.age`;
+  const metaPath = `${safeInAge}.meta.json`;
+
+  const stageDir = fs.mkdtempSync(path.join(stagingRoot, "sf-crm-dec-"));
+  if (process.platform !== "win32") {
+    try {
+      fs.chmodSync(stageDir, 0o700);
+    } catch {}
+  }
+
+  try {
+    let expectedMeta = null;
+    if (fs.existsSync(metaPath)) {
+      expectedMeta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+      const actualEncSha = await hashFileSha256(safeInAge);
+      if (expectedMeta.encryptedSha256 && expectedMeta.encryptedSha256 !== actualEncSha) {
+        throw new Error(
+          `Encrypted archive SHA-256 mismatch: expected ${expectedMeta.encryptedSha256}, got ${actualEncSha}.`,
+        );
+      }
+    }
+
+    const tempGzPath = path.join(stageDir, "payload.sql.gz");
+    const tempSqlPath = path.join(stageDir, "payload.sql");
+    const decGz = await decryptFileWithAgeX25519({
+      inputPath: safeInAge,
+      outputPath: tempGzPath,
+      secretKey,
+    });
+
+    const gzSha256 = await hashFileSha256(tempGzPath);
+    if (expectedMeta?.gzipSha256 && expectedMeta.gzipSha256 !== gzSha256) {
+      throw new Error("Compressed payload SHA-256 mismatch against backup metadata.");
+    }
+
+    const ungz = await gunzipFile(tempGzPath, tempSqlPath);
+    if (expectedMeta?.dumpSha256 && expectedMeta.dumpSha256 !== ungz.sha256) {
+      throw new Error(
+        `Decrypted SQL SHA-256 mismatch: expected ${expectedMeta.dumpSha256}, got ${ungz.sha256}.`,
+      );
+    }
+
+    let tempManifestPath = null;
+    let manifest = null;
+    if (fs.existsSync(manifestAgePath)) {
+      tempManifestPath = path.join(stageDir, "manifest.json");
+      await decryptFileWithAgeX25519({
+        inputPath: manifestAgePath,
+        outputPath: tempManifestPath,
+        secretKey,
+      });
+      manifest = JSON.parse(fs.readFileSync(tempManifestPath, "utf8"));
+      if (manifest.dumpSha256 !== ungz.sha256) {
+        throw new Error(
+          `Decrypted SQL SHA-256 (${ungz.sha256}) does not match encrypted manifest dumpSha256 (${manifest.dumpSha256}).`,
+        );
+      }
+    }
+
+    return await onVerifiedPlaintext({
+      sqlPath: tempSqlPath,
+      manifestPath: tempManifestPath,
+      manifest,
+      sqlSha256: ungz.sha256,
+      sqlByteSize: ungz.byteSize,
+      gzipSha256: gzSha256,
+      encryptedByteSize: fs.statSync(safeInAge).size,
+      decryptedTempDir: stageDir,
+    });
+  } finally {
+    removeDirBestEffort(stageDir);
+  }
+}
+
+/**
+ * Decrypts, verifies integrity hashes, enforces clean empty non-production target safety,
+ * restores into a clean disposable DB, verifies all tables + payment proofs, and purges plaintext.
+ */
+export async function restoreEncryptedMariaDbBackup({
+  targetConfig,
+  inAgePath,
+  secretKey,
+  sourceDbName = "",
+  confirmCleanTarget = false,
+  stagingRoot = os.tmpdir(),
+}) {
+  return withDecryptedBackupBundle({ inAgePath, secretKey, stagingRoot }, async (ctx) => {
+    if (!ctx.manifestPath || !ctx.manifest) {
+      throw new Error("Encrypted manifest (.manifest.age) is required for clean-target restore.");
+    }
+    return restoreMariaDbBackup({
+      targetConfig,
+      inSqlPath: ctx.sqlPath,
+      manifestPath: ctx.manifestPath,
+      sourceDbName: sourceDbName || ctx.manifest.sourceDatabase,
+      confirmCleanTarget,
+    });
+  });
+}
+
 function parseCliArgs(argv) {
   const args = {
     mode: "help",
     outSql: "",
     outManifest: "",
+    outAge: "",
     inSql: "",
+    inAge: "",
     manifest: "",
+    backupDir: "",
     sourceDbName: "",
+    recipientKey: "",
     confirmCleanTarget: false,
     usedMiB: undefined,
+    maxAgeHours: 26,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -798,13 +1088,23 @@ function parseCliArgs(argv) {
     else if (a === "--restore") args.mode = "restore";
     else if (a === "--verify") args.mode = "verify";
     else if (a === "--capacity") args.mode = "capacity";
+    else if (a === "--keygen") args.mode = "keygen";
+    else if (a === "--export-encrypted") args.mode = "export-encrypted";
+    else if (a === "--restore-encrypted") args.mode = "restore-encrypted";
+    else if (a === "--verify-encrypted") args.mode = "verify-encrypted";
+    else if (a === "--check-backup-health") args.mode = "check-backup-health";
     else if (a === "--confirm-clean-target") args.confirmCleanTarget = true;
     else if (a === "--out-sql" && argv[i + 1]) args.outSql = argv[++i];
     else if (a === "--out-manifest" && argv[i + 1]) args.outManifest = argv[++i];
+    else if (a === "--out-age" && argv[i + 1]) args.outAge = argv[++i];
     else if (a === "--in-sql" && argv[i + 1]) args.inSql = argv[++i];
+    else if (a === "--in-age" && argv[i + 1]) args.inAge = argv[++i];
     else if (a === "--manifest" && argv[i + 1]) args.manifest = argv[++i];
+    else if (a === "--backup-dir" && argv[i + 1]) args.backupDir = argv[++i];
     else if (a === "--source-db" && argv[i + 1]) args.sourceDbName = argv[++i];
+    else if (a === "--recipient" && argv[i + 1]) args.recipientKey = argv[++i];
     else if (a === "--used-mib" && argv[i + 1]) args.usedMiB = Number(argv[++i]);
+    else if (a === "--max-age-hours" && argv[i + 1]) args.maxAgeHours = Number(argv[++i]);
   }
   return args;
 }
@@ -816,9 +1116,107 @@ async function main() {
       JSON.stringify({
         ok: true,
         usage:
-          "node scripts/b11c-mariadb-backup.mjs [--export --out-sql <path> --out-manifest <path> | --restore --in-sql <path> --manifest <path> --source-db <name> --confirm-clean-target | --verify --manifest <path> | --capacity --used-mib <n>]",
+          "node scripts/b11c-mariadb-backup.mjs [--keygen | --export-encrypted --out-age <path> | --restore-encrypted --in-age <path> --confirm-clean-target | --verify-encrypted --in-age <path> | --check-backup-health --backup-dir <dir> | --export ... | --restore ... | --verify ... | --capacity --used-mib <n>]",
       }),
     );
+    return;
+  }
+
+  if (args.mode === "keygen") {
+    const pair = generateAgeX25519KeyPair();
+    console.log(
+      JSON.stringify(
+        {
+          ok: true,
+          mode: "keygen",
+          publicKey: pair.publicKey,
+          secretKey: pair.secretKey,
+          publicKeyFingerprintSha256: pair.publicKeyFingerprintSha256,
+          custodyWarning:
+            "Store secretKey offline ONLY (e.g. Bitwarden/1Password + printed vault sheet). Never save secretKey on Hostinger or in .env files.",
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
+  if (args.mode === "check-backup-health") {
+    if (!args.backupDir) throw new Error("--backup-dir is required for --check-backup-health");
+    const health = await evaluateEncryptedBackupHealth({
+      backupDir: args.backupDir,
+      maxAgeHours: Number.isFinite(args.maxAgeHours) ? args.maxAgeHours : 26,
+    });
+    console.log(JSON.stringify(health, null, 2));
+    if (!health.ok) process.exit(1);
+    return;
+  }
+
+  if (args.mode === "export-encrypted") {
+    if (!args.outAge) throw new Error("--out-age is required for --export-encrypted");
+    const recipientPublicKey = args.recipientKey || process.env["BACKUP_AGE_PUBLIC_KEY"] || "";
+    const cfg = parseConnectionConfigFromEnv("SOURCE_DB");
+    const result = await exportEncryptedMariaDbBackup({
+      connectionConfig: cfg,
+      outAgePath: args.outAge,
+      recipientPublicKey,
+      env: process.env,
+    });
+    console.log(
+      JSON.stringify(
+        {
+          ok: true,
+          mode: "export-encrypted",
+          outAgePath: result.outAgePath,
+          metaPath: result.metaPath,
+          meta: result.meta,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
+  if (args.mode === "verify-encrypted") {
+    if (!args.inAge) throw new Error("--in-age is required for --verify-encrypted");
+    const secretKey = process.env["BACKUP_AGE_SECRET_KEY"] || "";
+    if (!secretKey) {
+      throw new Error("BACKUP_AGE_SECRET_KEY env var is required in restore/verify shell only.");
+    }
+    const verified = await withDecryptedBackupBundle(
+      { inAgePath: args.inAge, secretKey },
+      async (ctx) => ({
+        ok: true,
+        mode: "verify-encrypted",
+        sqlByteSize: ctx.sqlByteSize,
+        sqlSha256: ctx.sqlSha256,
+        gzipSha256: ctx.gzipSha256,
+        tableCount: ctx.manifest?.tableCount ?? null,
+        proofCount: ctx.manifest?.proofCount ?? null,
+      }),
+    );
+    console.log(JSON.stringify(verified, null, 2));
+    return;
+  }
+
+  if (args.mode === "restore-encrypted") {
+    if (!args.inAge) throw new Error("--in-age is required for --restore-encrypted");
+    const secretKey = process.env["BACKUP_AGE_SECRET_KEY"] || "";
+    if (!secretKey) {
+      throw new Error("BACKUP_AGE_SECRET_KEY env var is required in restore/verify shell only.");
+    }
+    const cfg = parseConnectionConfigFromEnv("TARGET_DB");
+    const result = await restoreEncryptedMariaDbBackup({
+      targetConfig: cfg,
+      inAgePath: args.inAge,
+      secretKey,
+      sourceDbName: args.sourceDbName,
+      confirmCleanTarget: args.confirmCleanTarget,
+    });
+    console.log(JSON.stringify(result, null, 2));
+    if (!result.ok) process.exit(1);
     return;
   }
 

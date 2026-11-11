@@ -22,6 +22,7 @@ import { Empty, selectCls } from "@/components/crm/Shell";
 import { cn } from "@/lib/utils";
 import { formatDate, formatINR, formatINRCompact, formatPct, dayKey } from "@/lib/crm/format";
 import { checkProofFile } from "@/lib/crm/attachments";
+import { formatApiErrorMessage } from "@/lib/api/errors";
 import {
   useDealsQuery,
   useOwnerFinanceSummaryQuery,
@@ -527,8 +528,7 @@ function PilotPaymentRow({ payment: p }: { payment: PaymentDto }) {
       });
       toast.success("Payment proof attached successfully");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to upload proof";
-      toast.error(msg);
+      toast.error(formatApiErrorMessage(err, "Failed to upload proof"), { duration: 8000 });
     }
   };
 

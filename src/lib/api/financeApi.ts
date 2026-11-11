@@ -468,17 +468,12 @@ export async function uploadPaymentProof(params: {
     body: formData,
   });
 
-  const rawJson: unknown = await res.json();
   if (!res.ok) {
-    const { ApiError } = await import("./errors");
-    const parsedErr = (rawJson as { error?: { code?: string; message?: string } })?.error;
-    throw new ApiError({
-      message: parsedErr?.message ?? `Upload failed with status ${res.status}`,
-      status: res.status,
-      code: parsedErr?.code ?? "upload_error",
-    });
+    const { parseApiErrorResponse } = await import("./errors");
+    throw await parseApiErrorResponse(res);
   }
 
+  const rawJson: unknown = await res.json();
   return proofAttachResponseSchema.parse(rawJson);
 }
 
@@ -511,17 +506,12 @@ export async function replacePaymentProof(params: {
     body: formData,
   });
 
-  const rawJson: unknown = await res.json();
   if (!res.ok) {
-    const { ApiError } = await import("./errors");
-    const parsedErr = (rawJson as { error?: { code?: string; message?: string } })?.error;
-    throw new ApiError({
-      message: parsedErr?.message ?? `Replace failed with status ${res.status}`,
-      status: res.status,
-      code: parsedErr?.code ?? "replace_error",
-    });
+    const { parseApiErrorResponse } = await import("./errors");
+    throw await parseApiErrorResponse(res);
   }
 
+  const rawJson: unknown = await res.json();
   return proofReplaceResponseSchema.parse(rawJson);
 }
 

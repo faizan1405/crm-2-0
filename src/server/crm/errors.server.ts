@@ -33,6 +33,8 @@ export type CrmErrorCode =
   | "storage_error"
   | "storage_not_configured"
   | "storage_durability_blocked"
+  | "storage_quota_exceeded"
+  | "storage_capacity_unavailable"
   | "duplicate_quotation"
   | "quotation_not_found"
   | "deal_not_found"
@@ -78,13 +80,13 @@ export interface CrmErrorPayload {
 }
 
 export class CrmServiceError extends Error {
-  readonly status: 400 | 403 | 404 | 409 | 500 | 503;
+  readonly status: 400 | 403 | 404 | 409 | 500 | 503 | 507;
   readonly code: CrmErrorCode;
   readonly details: Record<string, unknown> | undefined;
   readonly conflict: Record<string, unknown> | undefined;
 
   constructor(
-    status: 400 | 403 | 404 | 409 | 500 | 503,
+    status: 400 | 403 | 404 | 409 | 500 | 503 | 507,
     code: CrmErrorCode,
     message: string,
     options?: {

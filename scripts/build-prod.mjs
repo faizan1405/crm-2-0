@@ -39,6 +39,7 @@ async function bundleStandaloneCronRunner(cronSrc, cronOut) {
     await bundle.write({
       file: cronOut,
       format: "esm",
+      codeSplitting: false,
     });
   } finally {
     await bundle.close();

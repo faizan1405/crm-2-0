@@ -11,6 +11,16 @@ import {
   type ServerEnv,
 } from "../config/env.server";
 import { CrmServiceError } from "../crm/errors.server";
+import {
+  enforceMariadbProofQuota,
+  isMariadbQuotaCheckedInScope,
+  measureMariadbCapacityFromDb,
+  resolveMariadbQuotaPolicy,
+  withMariadbCapacityWriteLock,
+  type MariadbCapacityLogEvent,
+  type MariadbUsageMeasurement,
+} from "./mariadbCapacity.server";
+import type { MariadbQuotaPolicy } from "../config/env.server";
 import { getDatabase, type CrmDatabase } from "../db/index.server";
 import { crmPaymentProofBlobs } from "../db/schema.server";
 import { toMysqlUtcDateTime } from "../db/utc.server";
@@ -57,6 +67,9 @@ export interface MariadbBlobProofStorageOptions {
   chunkBytes?: number | undefined;
   tempTtlMs?: number | undefined;
   env?: ServerEnv | undefined;
+  quotaPolicy?: MariadbQuotaPolicy | undefined;
+  retainHistoricalBlobs?: boolean | undefined;
+  onCapacityEvent?: ((entry: MariadbCapacityLogEvent) => void) | undefined;
 }
 
 /**
@@ -151,6 +164,28 @@ export class MariadbBlobProofStorage implements ProofStorageBackend {
   private resolveDb(): CrmDatabase | null {
     if (this.explicitDb !== undefined) return this.explicitDb;
     return getDatabase();
+  }
+
+  /** Returns resolved MariaDB quota policy and telemetry options configured for this backend. */
+  resolveCapacityOptions(): {
+    policy: MariadbQuotaPolicy;
+    env: ServerEnv | undefined;
+    retainHistoricalBlobs: boolean;
+    onCapacityEvent: ((entry: MariadbCapacityLogEvent) => void) | undefined;
+  } {
+    return {
+      policy: this.options.quotaPolicy ?? resolveMariadbQuotaPolicy(this.options.env),
+      env: this.options.env,
+      retainHistoricalBlobs: this.options.retainHistoricalBlobs ?? true,
+      onCapacityEvent: this.options.onCapacityEvent,
+    };
+  }
+
+  /** Measures live MariaDB storage usage fail-closed using configured quota thresholds. */
+  async inspectCapacity(): Promise<MariadbUsageMeasurement> {
+    const db = this.requireDbAndWritable();
+    const { policy, env } = this.resolveCapacityOptions();
+    return measureMariadbCapacityFromDb(db, { policy, env });
   }
 
   private computeEnvAssessment(): ProofStorageEnvAssessment {
@@ -337,40 +372,56 @@ export class MariadbBlobProofStorage implements ProofStorageBackend {
       throw new CrmServiceError(400, "storage_error", "Invalid payment proof storage key.");
     }
 
-    const existing = await db
-      .select({ id: crmPaymentProofBlobs.id })
-      .from(crmPaymentProofBlobs)
-      .where(eq(crmPaymentProofBlobs.storageKey, storageKey))
-      .limit(1);
-
-    if (existing[0]) {
-      throw new CrmServiceError(
-        409,
-        "storage_error",
-        "Target private proof storage key already exists in MariaDB; refusing overwrite.",
-      );
-    }
-
     const chunks = splitBufferIntoProofChunks(staged.buffer, this.chunkBytes);
     const nowUtc = toMysqlUtcDateTime(new Date());
+    const capOpts = this.resolveCapacityOptions();
 
-    await db.transaction(async (tx) => {
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i]!;
-        await tx.insert(crmPaymentProofBlobs).values({
-          id: generateServerId("pblob"),
-          ownerUserId: params.ownerUserId,
-          storageKey,
-          chunkIndex: i,
-          chunkCount: chunks.length,
-          chunkSize: chunk.byteLength,
-          totalByteSize: staged.byteSize,
-          totalSha256: staged.sha256,
-          mimeType: staged.descriptor.mimeType,
-          blobData: chunk,
-          createdAt: nowUtc,
+    await withMariadbCapacityWriteLock(db, async () => {
+      if (!isMariadbQuotaCheckedInScope(db)) {
+        await enforceMariadbProofQuota({
+          db,
+          operation: "upload",
+          paymentId: params.proofId,
+          incomingBytes: staged.byteSize,
+          retainHistoricalBlobs: capOpts.retainHistoricalBlobs,
+          env: capOpts.env,
+          policy: capOpts.policy,
+          onCapacityEvent: capOpts.onCapacityEvent,
         });
       }
+
+      const existing = await db
+        .select({ id: crmPaymentProofBlobs.id })
+        .from(crmPaymentProofBlobs)
+        .where(eq(crmPaymentProofBlobs.storageKey, storageKey))
+        .limit(1);
+
+      if (existing[0]) {
+        throw new CrmServiceError(
+          409,
+          "storage_error",
+          "Target private proof storage key already exists in MariaDB; refusing overwrite.",
+        );
+      }
+
+      await db.transaction(async (tx) => {
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i]!;
+          await tx.insert(crmPaymentProofBlobs).values({
+            id: generateServerId("pblob"),
+            ownerUserId: params.ownerUserId,
+            storageKey,
+            chunkIndex: i,
+            chunkCount: chunks.length,
+            chunkSize: chunk.byteLength,
+            totalByteSize: staged.byteSize,
+            totalSha256: staged.sha256,
+            mimeType: staged.descriptor.mimeType,
+            blobData: chunk,
+            createdAt: nowUtc,
+          });
+        }
+      });
     });
 
     this.stagedUploads.delete(params.tempKey);
