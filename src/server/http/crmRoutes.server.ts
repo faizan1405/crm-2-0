@@ -269,6 +269,27 @@ import {
   updateTagBodySchema,
 } from "../crm/customFieldsValidation.server";
 import {
+  getInboxQueueRecord,
+  setInboxReviewStatusRecord,
+  setLeadDuplicateFlagRecord,
+  scanDuplicateCandidatesRecord,
+  listDuplicateCandidatesRecord,
+  getDuplicateCandidateRecord,
+  decideDuplicateCandidateRecord,
+  getLeadRelationshipsRecord,
+  deleteLeadRelationshipRecord,
+  getReviewHistoryRecord,
+} from "../crm/inboxService.server";
+import {
+  inboxQueueQuerySchema,
+  inboxReviewBodySchema,
+  inboxFlagBodySchema,
+  dupCandidatesQuerySchema,
+  dupCandidateDecisionBodySchema,
+  dupScanBodySchema,
+  reviewHistoryQuerySchema,
+} from "../crm/inboxValidation.server";
+import {
   archiveGoalBodySchema,
   changeGoalStatusBodySchema,
   goalProgressQuerySchema,
@@ -935,6 +956,7 @@ export async function handleCrmApiRequest(
     !pathname.startsWith("/api/v1/custom-fields") &&
     !pathname.startsWith("/api/v1/tags") &&
     !pathname.startsWith("/api/v1/saved-views") &&
+    !pathname.startsWith("/api/v1/inbox") &&
     !pathname.startsWith("/api/v1/vault")
   ) {
     return null;
@@ -1005,6 +1027,20 @@ export async function handleCrmApiRequest(
 
         const input = bulkTagLeadsBodySchema.parse(parsedBody.data);
         const result = await bulkTagLeadsRecord(auth.db, auth.userId, input);
+        return jsonResponse(result, 200);
+      }
+
+      // DELETE /api/v1/leads/relationships/:key
+      if (segments.length === 5 && segments[3] === "relationships") {
+        if (request.method !== "DELETE") return methodNotAllowed(["DELETE"]);
+        const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
+        if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+        const auth = await requireAuthenticatedOwnerDb(request, env);
+        if (!auth.ok) return auth.response;
+
+        const pairKey = decodeURIComponent(segments[4] ?? "");
+        const result = await deleteLeadRelationshipRecord(auth.db, auth.userId, auth.userId, pairKey);
         return jsonResponse(result, 200);
       }
 
@@ -1352,6 +1388,17 @@ export async function handleCrmApiRequest(
           }
 
           return methodNotAllowed(["GET", "POST"]);
+        }
+
+        // GET /api/v1/leads/:id/relationships
+        if (subresource === "relationships") {
+          if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const result = await getLeadRelationshipsRecord(auth.db, auth.userId, leadId);
+          return jsonResponse({ ok: true, ...result }, 200);
         }
       }
 
@@ -4142,6 +4189,178 @@ export async function handleCrmApiRequest(
 
         const res = await duplicateSavedViewRecord(auth.db, auth.userId, viewId);
         return jsonResponse(res, 201);
+      }
+
+      return null;
+    }
+
+    if (resource === "inbox") {
+      // GET /api/v1/inbox
+      if (segments.length === 3) {
+        if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+        const auth = await requireAuthenticatedOwnerDb(request, env);
+        if (!auth.ok) return auth.response;
+
+        const query = inboxQueueQuerySchema.parse(searchParamsObject(parsedUrl));
+        const result = await getInboxQueueRecord(auth.db, auth.userId, query);
+        return jsonResponse({ ok: true, ...result }, 200);
+      }
+
+      if (segments.length === 4) {
+        const sub = segments[3];
+
+        // POST /api/v1/inbox/review
+        if (sub === "review") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = inboxReviewBodySchema.parse(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+          const result = await setInboxReviewStatusRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            { ...input, idempotencyKey: idemKey ?? undefined },
+          );
+          return jsonResponse(
+            result.body,
+            result.status,
+            result.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        // POST /api/v1/inbox/flag
+        if (sub === "flag") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = inboxFlagBodySchema.parse(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+          const result = await setLeadDuplicateFlagRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            { ...input, idempotencyKey: idemKey ?? undefined },
+          );
+          return jsonResponse(
+            result.body,
+            result.status,
+            result.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        // POST /api/v1/inbox/scan
+        if (sub === "scan") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const result = await scanDuplicateCandidatesRecord(auth.db, auth.userId);
+          return jsonResponse(result, 200);
+        }
+
+        // GET /api/v1/inbox/candidates
+        if (sub === "candidates") {
+          if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const query = dupCandidatesQuerySchema.parse(searchParamsObject(parsedUrl));
+          const result = await listDuplicateCandidatesRecord(auth.db, auth.userId, query);
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
+
+        // GET /api/v1/inbox/review-history
+        if (sub === "review-history") {
+          if (request.method !== "GET") return methodNotAllowed(["GET"]);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const query = reviewHistoryQuerySchema.parse(searchParamsObject(parsedUrl));
+          const result = await getReviewHistoryRecord(auth.db, auth.userId, query);
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
+      }
+
+      if (segments.length === 5 && segments[3] === "candidates") {
+        const idSeg = decodeIdSegment(segments[4] ?? "");
+        if (!idSeg.ok) return idSeg.response;
+        const candidateId = idSeg.value;
+
+        // GET /api/v1/inbox/candidates/:id
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const result = await getDuplicateCandidateRecord(auth.db, auth.userId, candidateId);
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
+
+        return methodNotAllowed(["GET"]);
+      }
+
+      if (segments.length === 6 && segments[3] === "candidates" && segments[5] === "decision") {
+        const idSeg = decodeIdSegment(segments[4] ?? "");
+        if (!idSeg.ok) return idSeg.response;
+        const candidateId = idSeg.value;
+
+        // POST /api/v1/inbox/candidates/:id/decision
+        if (request.method === "POST") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const input = dupCandidateDecisionBodySchema.parse(parsedBody.data);
+          const idemKey = resolveEffectiveIdempotencyKey({
+            headerKey: request.headers.get("idempotency-key"),
+            bodyKey: input.idempotencyKey,
+          });
+          const result = await decideDuplicateCandidateRecord(
+            auth.db,
+            auth.userId,
+            auth.userId,
+            candidateId,
+            { ...input, idempotencyKey: idemKey ?? undefined },
+          );
+          return jsonResponse(
+            result.body,
+            result.status,
+            result.replayed ? { "x-idempotency-replayed": "true" } : undefined,
+          );
+        }
+
+        return methodNotAllowed(["POST"]);
       }
 
       return null;

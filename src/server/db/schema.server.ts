@@ -1372,6 +1372,139 @@ export const crmSalesGoalRevisions = mysqlTable(
   ],
 );
 
+/**
+ * B9A: Smart Lead Inbox intake review metadata (mirrors src/lib/crm/inbox.ts InboxMeta).
+ */
+export const crmLeadInboxItems = mysqlTable(
+  "crm_lead_inbox_items",
+  {
+    id: crmId("id").primaryKey(),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    leadId: crmId("lead_id")
+      .notNull()
+      .references(() => crmLeads.id, { onDelete: "cascade" }),
+    status: varchar("status", { length: 24 }).notNull().default("needs_review"),
+    reviewedAt: utcDateTime("reviewed_at"),
+    flaggedAt: utcDateTime("flagged_at"),
+    flagNote: varchar("flag_note", { length: 255 }),
+    version: versionCol("version"),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    uniqueIndex("uq_crm_lead_inbox_items_owner_lead").on(table.ownerUserId, table.leadId),
+    index("idx_crm_lead_inbox_items_owner_status").on(table.ownerUserId, table.status),
+    index("idx_crm_lead_inbox_items_owner_reviewed").on(table.ownerUserId, table.reviewedAt),
+  ],
+);
+
+/**
+ * B9A: Duplicate candidate pairs detected between leads (mirrors src/lib/crm/inbox.ts DupPair).
+ */
+export const crmDuplicateCandidates = mysqlTable(
+  "crm_duplicate_candidates",
+  {
+    id: crmId("id").primaryKey(),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    leadAId: crmId("lead_a_id")
+      .notNull()
+      .references(() => crmLeads.id, { onDelete: "cascade" }),
+    leadBId: crmId("lead_b_id")
+      .notNull()
+      .references(() => crmLeads.id, { onDelete: "cascade" }),
+    pairKey: varchar("pair_key", { length: 130 }).notNull(),
+    reasonsJson: varchar("reasons_json", { length: 255 }).notNull(),
+    strength: varchar("strength", { length: 16 }).notNull().default("suggested"),
+    status: varchar("status", { length: 24 }).notNull().default("pending"),
+    pairSignature: varchar("pair_signature", { length: 255 }).notNull(),
+    reopened: boolean("reopened").notNull().default(false),
+    decisionKind: varchar("decision_kind", { length: 24 }),
+    decisionNote: varchar("decision_note", { length: 255 }),
+    decidedAt: utcDateTime("decided_at"),
+    decidedByUserId: crmId("decided_by_user_id").references(() => crmUsers.id, { onDelete: "set null" }),
+    version: versionCol("version"),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    uniqueIndex("uq_crm_dup_candidates_owner_pair").on(table.ownerUserId, table.pairKey),
+    index("idx_crm_dup_candidates_owner_status").on(table.ownerUserId, table.status),
+    index("idx_crm_dup_candidates_owner_lead_a").on(table.ownerUserId, table.leadAId),
+    index("idx_crm_dup_candidates_owner_lead_b").on(table.ownerUserId, table.leadBId),
+  ],
+);
+
+/**
+ * B9A: Audited Lead Relationships (mirrors src/lib/crm/inbox.ts LeadRelation).
+ */
+export const crmLeadRelationships = mysqlTable(
+  "crm_lead_relationships",
+  {
+    id: crmId("id").primaryKey(),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    leadAId: crmId("lead_a_id")
+      .notNull()
+      .references(() => crmLeads.id, { onDelete: "cascade" }),
+    leadBId: crmId("lead_b_id")
+      .notNull()
+      .references(() => crmLeads.id, { onDelete: "cascade" }),
+    pairKey: varchar("pair_key", { length: 130 }).notNull(),
+    kind: varchar("kind", { length: 24 }).notNull(), // "separate" | "related"
+    signature: varchar("signature", { length: 255 }).notNull(),
+    note: varchar("note", { length: 255 }),
+    version: versionCol("version"),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    uniqueIndex("uq_crm_lead_rel_owner_pair").on(table.ownerUserId, table.pairKey),
+    index("idx_crm_lead_rel_owner_kind").on(table.ownerUserId, table.kind),
+    index("idx_crm_lead_rel_owner_lead_a").on(table.ownerUserId, table.leadAId),
+    index("idx_crm_lead_rel_owner_lead_b").on(table.ownerUserId, table.leadBId),
+  ],
+);
+
+/**
+ * B9A: Append-only audit history of Smart Inbox and relationship actions.
+ */
+export const crmLeadRelationshipHistory = mysqlTable(
+  "crm_lead_relationship_history",
+  {
+    id: crmId("id").primaryKey(),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    pairKey: varchar("pair_key", { length: 130 }),
+    leadAId: crmId("lead_a_id"),
+    leadBId: crmId("lead_b_id"),
+    candidateId: crmId("candidate_id"),
+    action: varchar("action", { length: 32 }).notNull(),
+    kind: varchar("kind", { length: 24 }),
+    previousKind: varchar("previous_kind", { length: 24 }),
+    signature: varchar("signature", { length: 255 }),
+    note: varchar("note", { length: 255 }),
+    actorUserId: crmId("actor_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    createdAt: utcDateTime("created_at").notNull(),
+  },
+  (table) => [
+    index("idx_crm_inbox_audit_owner_pair").on(table.ownerUserId, table.pairKey),
+    index("idx_crm_inbox_audit_owner_created").on(table.ownerUserId, table.createdAt),
+    index("idx_crm_inbox_audit_owner_action").on(table.ownerUserId, table.action),
+  ],
+);
+
+export const crmInboxSchema = {
+  crmLeadInboxItems,
+  crmDuplicateCandidates,
+  crmLeadRelationships,
+  crmLeadRelationshipHistory,
+} as const;
+
 export const b1aFoundationSchema = {
   crmSchemaMeta,
 } as const;
@@ -1435,6 +1568,7 @@ export const crmCoreSchema = {
   ...crmQuotationSchema,
   ...crmProjectsSchema,
   ...crmSettingsGoalsSchema,
+  ...crmInboxSchema,
 } as const;
 
 export const appSchema = {

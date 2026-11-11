@@ -78,6 +78,13 @@
       "when": 1794337631145,
       "tag": "0010_b8a_saved_views",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1794380686302,
+      "tag": "0011_b9a_smart_inbox_relationships",
+      "breakpoints": true
     }
   ]
 }

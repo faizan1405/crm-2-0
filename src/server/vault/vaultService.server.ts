@@ -440,15 +440,16 @@ export const VAULT_ENTITIES_INVENTORY: VaultInventoryItem[] = [
   {
     number: 31,
     name: "Smart Inbox & Lead Relations",
-    tableName: null,
-    hasSchema: false,
+    tableName:
+      "crm_lead_inbox_items, crm_duplicate_candidates, crm_lead_relationships, crm_lead_relationship_history",
+    hasSchema: true,
     includedInExporter: false,
     hasBinaryCoverage: false,
     hasRestoreMapping: false,
     verifiedByLiveRestore: false,
     status: "unsupported",
     description:
-      "Duplicate deduplication pairs and smart inbox metadata (LocalStorage only, deferred to B8).",
+      "Smart inbox review queue, duplicate detection candidate pairs, lead relationship links, and immutable audit history (MariaDB schema implemented in B9A; backup export & restore mapping pending).",
   },
 ];
 

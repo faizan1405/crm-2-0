@@ -58,6 +58,8 @@ export type CrmErrorCode =
   | "goal_already_archived"
   | "forbidden_setting_key"
   | "unsupported_metric"
+  | "candidate_not_found"
+  | "relationship_not_found"
   | "crm_unavailable";
 
 export interface CrmErrorPayload {
