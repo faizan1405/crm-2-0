@@ -1560,5 +1560,105 @@ describe("Checkpoint B11C-LAUNCH-HARDENING — Quota, Cron Reliability & Encrypt
       expect(missing.ok).toBe(false);
       expect(missing.code).toBe("backup_missing");
     });
+
+    it("10. validates bidirectional interoperability with standard age CLI (v1.3.2) when available", async () => {
+      const candidates = [
+        "C:/Users/Faizan/.gemini/antigravity/brain/36d9b8a9-80e0-40c3-b748-e219848179d9/scratch/age/age/age.exe",
+        "age.exe",
+        "age",
+      ];
+      let ageExePath: string | null = null;
+      for (const cand of candidates) {
+        try {
+          if (cand.includes("/") || cand.includes("\\")) {
+            if (fs.existsSync(cand)) {
+              ageExePath = cand;
+              break;
+            }
+          } else {
+            execFileSync(cand, ["--version"], { stdio: "ignore" });
+            ageExePath = cand;
+            break;
+          }
+        } catch {
+          // ignore candidate if missing or not executable
+        }
+      }
+
+      if (!ageExePath) {
+        // Skip if age CLI is not locally installed
+        return;
+      }
+
+      const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "sf-age-cli-interop-"));
+      tmpDirs.push(workDir);
+
+      const pair = generateAgeX25519KeyPair();
+      const plain = Buffer.from(
+        "Scale Flow CRM v2: standard age CLI interoperability verification payload.\n" +
+          "Ensuring RFC-compliant X25519 stanza + 64 KiB ChaCha20-Poly1305 STREAM interoperability.\n",
+        "utf8",
+      );
+      const plainPath = path.join(workDir, "plain.txt");
+      fs.writeFileSync(plainPath, plain);
+
+      // A. Our Encrypt -> age.exe Decrypt
+      const ourAgeFile = path.join(workDir, "our.age");
+      await encryptFileWithAgeX25519({
+        inputPath: plainPath,
+        outputPath: ourAgeFile,
+        recipientPublicKey: pair.publicKey,
+      });
+
+      const keyFile = path.join(workDir, "key.txt");
+      fs.writeFileSync(keyFile, `${pair.secretKey}\n`, "utf8");
+
+      const ageDecrypted = execFileSync(ageExePath, ["--decrypt", "-i", keyFile, ourAgeFile]);
+      expect(ageDecrypted.equals(plain)).toBe(true);
+
+      // B. age.exe Encrypt -> Our Decrypt
+      const cliAgeFile = path.join(workDir, "cli.age");
+      execFileSync(ageExePath, ["-r", pair.publicKey, "-o", cliAgeFile, plainPath]);
+
+      const ourDecryptedPath = path.join(workDir, "our_dec.txt");
+      await decryptFileWithAgeX25519({
+        inputPath: cliAgeFile,
+        outputPath: ourDecryptedPath,
+        secretKey: pair.secretKey,
+      });
+      const ourDecrypted = fs.readFileSync(ourDecryptedPath);
+      expect(ourDecrypted.equals(plain)).toBe(true);
+
+      // C. Multi-chunk payload (192 KiB spanning 3 STREAM chunks)
+      const multiChunkPlain = crypto.randomBytes(192 * 1024);
+      const multiPlainPath = path.join(workDir, "multi.bin");
+      fs.writeFileSync(multiPlainPath, multiChunkPlain);
+
+      const multiAgePath = path.join(workDir, "multi.age");
+      await encryptFileWithAgeX25519({
+        inputPath: multiPlainPath,
+        outputPath: multiAgePath,
+        recipientPublicKey: pair.publicKey,
+      });
+      const multiDecrypted = execFileSync(ageExePath, ["--decrypt", "-i", keyFile, multiAgePath]);
+      expect(multiDecrypted.equals(multiChunkPlain)).toBe(true);
+
+      // D. Wrong-key rejection in age.exe
+      const wrongPair = generateAgeX25519KeyPair();
+      const wrongKeyFile = path.join(workDir, "wrong_key.txt");
+      fs.writeFileSync(wrongKeyFile, `${wrongPair.secretKey}\n`, "utf8");
+      expect(() => {
+        execFileSync(ageExePath!, ["--decrypt", "-i", wrongKeyFile, ourAgeFile], { stdio: "pipe" });
+      }).toThrow();
+
+      // E. Tampered ciphertext rejection in age.exe
+      const tamperedBytes = Buffer.from(fs.readFileSync(ourAgeFile));
+      tamperedBytes[tamperedBytes.length - 10]! ^= 0x55;
+      const tamperedAgePath = path.join(workDir, "tampered.age");
+      fs.writeFileSync(tamperedAgePath, tamperedBytes);
+      expect(() => {
+        execFileSync(ageExePath!, ["--decrypt", "-i", keyFile, tamperedAgePath], { stdio: "pipe" });
+      }).toThrow();
+    });
   });
 });

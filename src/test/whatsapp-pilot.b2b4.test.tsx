@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within, cleanup } from "@testing-library/react";
 import { hydrateAuthFromSsr } from "@/lib/auth/authClient";
 import type { FollowUpDto, LeadActivityDto, LeadDto, WaMessageDto } from "@/lib/api/schemas";
 import { PilotLeadDetailPage } from "@/components/pilot/PilotLeadDetailPage";
@@ -520,9 +520,7 @@ describe("B2B4 Server-Backed WhatsApp Composer & Manual Confirmation Guarantees"
     expect(waPostCount).toBe(2);
   });
 
-  it(
-    "blocks invalid WhatsApp numbers, disables archived leads, renders across Leads & Follow-ups, and clears session pending key on exit",
-    async () => {
+  it("blocks invalid WhatsApp numbers, disables archived leads, renders across Leads & Follow-ups, and clears session pending key on exit", async () => {
     const activeLead = makeLead({ id: "lead_1", name: "Rohan Pilot", phone: "9811112233" });
     const landlineLead = makeLead({
       id: "lead_landline",
@@ -618,6 +616,7 @@ describe("B2B4 Server-Backed WhatsApp Composer & Manual Confirmation Guarantees"
     renderWithQuery(<PilotLeadDetailPage id="lead_arch" />);
     const archWaBtn = await screen.findByRole("button", { name: "WhatsApp Archived Lead" });
     expect(archWaBtn).toBeDisabled();
+    cleanup();
 
     // 2. Landline / non-WhatsApp phone shows invalid phone alert and disables Open in WhatsApp + Confirm
     renderWithQuery(<PilotLeadDetailPage id="lead_landline" />);
@@ -632,21 +631,30 @@ describe("B2B4 Server-Backed WhatsApp Composer & Manual Confirmation Guarantees"
       }),
     ).toBeDisabled();
     fireEvent.keyDown(landlineDialog, { key: "Escape" });
+    cleanup();
 
     // 3. Leads Workspace & Cards view render enabled WhatsApp buttons
     renderWithQuery(<PilotLeadsPage search={{ pilot: 1 }} />);
     expect(
-      (await screen.findAllByRole("button", { name: "WhatsApp Rohan Pilot" }, { timeout: 8000 }))[0],
+      (
+        await screen.findAllByRole("button", { name: "WhatsApp Rohan Pilot" }, { timeout: 8000 })
+      )[0],
     ).toBeEnabled();
 
     fireEvent.click(screen.getByRole("button", { name: "cards view" }));
-    expect(await screen.findByRole("button", { name: "WhatsApp Rohan Pilot" }, { timeout: 8000 })).toBeEnabled();
+    expect(
+      await screen.findByRole("button", { name: "WhatsApp Rohan Pilot" }, { timeout: 8000 }),
+    ).toBeEnabled();
+    cleanup();
 
     // 4. Follow-ups card renders enabled WhatsApp button
     renderWithQuery(<PilotFollowUpsPage />);
     expect(
-      (await screen.findAllByRole("button", { name: "WhatsApp Rohan Pilot" }, { timeout: 8000 }))[0],
+      (
+        await screen.findAllByRole("button", { name: "WhatsApp Rohan Pilot" }, { timeout: 8000 })
+      )[0],
     ).toBeEnabled();
+    cleanup();
 
     // 5. Exit Pilot clears sessionStorage pending WhatsApp composer key
     window.sessionStorage.setItem(
