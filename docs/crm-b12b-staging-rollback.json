@@ -1,0 +1,59 @@
+{
+  "checkpoint": "B12B-LIVE-STAGING-ACCEPTANCE",
+  "capturedAt": "2026-11-14T11:20:00Z",
+  "stagingSite": "khaki-butterfly-345144.hostingersite.com",
+  "hostingUsername": "u256504187",
+  "databaseName": "u256504187_crm_b11c_stg",
+  "startingGitCommit": "8244361b6ebde134fb409b9cce078ed6bc0b2616",
+  "startingGitBranch": "feat/b12b-live-staging-acceptance",
+  "preB12bLiveDeployment": {
+    "buildUuid": "01a1cbff-bb2f-7061-872b-b1509802c4ce",
+    "state": "completed",
+    "createdAt": "2026-11-11T19:04:56Z",
+    "updatedAt": "2026-11-11T19:08:07Z",
+    "options": {
+      "node_version": 22,
+      "app_type": "nitro",
+      "root_directory": null,
+      "output_directory": ".output",
+      "build_script": "build",
+      "entry_file": "server/index.mjs",
+      "package_manager": "npm",
+      "source_type": "archive",
+      "source_options": {
+        "archive_path": "b11c-staging-qa.zip"
+      }
+    }
+  },
+  "configuredEnvVarKeys": [
+    "NODE_ENV",
+    "DEV_LEAD_PILOT",
+    "APP_ORIGIN",
+    "BUSINESS_TIMEZONE",
+    "DB_HOST",
+    "DB_PORT",
+    "DB_NAME",
+    "DB_USER",
+    "DB_PASSWORD",
+    "DB_POOL_LIMIT",
+    "DB_SSL_MODE",
+    "PROOF_STORAGE_DRIVER",
+    "AI_PROVIDER",
+    "AUTH_TRUST_PROXY",
+    "AUTH_SECRET",
+    "SESSION_COOKIE_NAME"
+  ],
+  "rollbackInstructions": [
+    "To rollback to pre-B12B build 01a1cbff-bb2f-7061-872b-b1509802c4ce, re-upload b11c-staging-qa.zip and invoke hosting_nodejs_start-build on khaki-butterfly-345144.hostingersite.com."
+  ],
+  "untouchedTargets": [
+    "crm.joinscaleflow.in",
+    "joinscaleflow.in",
+    "minddesk.joinscaleflow.in",
+    "darkgray-louse-574826.hostingersite.com",
+    "u256504187_mhtest",
+    "u256504187_minddesk_v2",
+    "u256504187_minddesk_test",
+    "u256504187_minddesk"
+  ]
+}
