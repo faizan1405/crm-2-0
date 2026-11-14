@@ -6,9 +6,11 @@ import {
   DEFAULT_R2_REGION,
   parseS3ListObjectsV2Xml,
   resolveR2Config,
+  retryWithBackoff,
   signR2Request,
 } from "../../scripts/b12c-r2-client.mjs";
 import {
+  assertMetaJsonIsSecretFree,
   DEFAULT_RETENTION_DAYS,
   evaluateRetentionPruning,
   parseArchiveTimestamp,
@@ -388,6 +390,136 @@ describe("Checkpoint B12C — Cloudflare R2 Automated Encrypted Backups", () => 
       expect(report.backupAgeHours).toBe(28);
       expect(report.status).toBe("warning");
       expect(report.requiredOwnerAction).toMatch(/Backup is stale/i);
+    });
+  });
+
+  describe("5. B12D — S3 Protocol Hardening, Retries, Metadata Audit & Prefix Partitioning", () => {
+    it("strictly verifies .meta.json is secret-free and rejects credentials or PII", () => {
+      const cleanMeta = {
+        format: "age-v1-gzip-sql",
+        createdAtUtc: "2026-11-14T12:00:00.000Z",
+        recipientPublicKey: "age1cmre4vsnvanvvjnhvnmrwp6hxvady5ucah6e93wmnm980h2tyf0s5p4v3s",
+        encryptedArchiveName: "crm-v2-backup.sql.gz.age",
+        encryptedBytes: 17258336,
+        encryptedSha256: "49caef3c961674d98f51eb1ec6ba1354fc0f9debf79dc4cb2eb0be6eb16c9e11",
+        gzipBytes: 17253928,
+        gzipSha256: "240b71cad1b06a1396ce1fb13af642f7bfbca834277e4b1b4603a547154ae91d",
+        dumpFileBytes: 178511466,
+        dumpSha256: "8ca9dc888be822286c70c2e7caf7d7e225149fd0d199bdd77ea8aaefee665447",
+        tableCount: 49,
+        totalRows: 311,
+        proofCount: 23,
+        proofBlobChunkCount: 97,
+      };
+
+      // Clean metadata passes
+      expect(assertMetaJsonIsSecretFree(cleanMeta)).toBe(true);
+
+      // Metadata with password / credential leak fails closed
+      expect(() =>
+        assertMetaJsonIsSecretFree({ ...cleanMeta, dbPassword: "secretPassword123!" }),
+      ).toThrow(/Security policy violation/i);
+
+      // Metadata with connection URL leak fails closed
+      expect(() =>
+        assertMetaJsonIsSecretFree({ ...cleanMeta, databaseUrl: "mysql://user:pass@hstgr.io/db" }),
+      ).toThrow(/Security policy violation/i);
+
+      // Metadata with customer email leak fails closed
+      expect(() =>
+        assertMetaJsonIsSecretFree({ ...cleanMeta, sampleUser: "customer@example.com" }),
+      ).toThrow(/Security policy violation/i);
+
+      // Metadata with host leak fails closed
+      expect(() =>
+        assertMetaJsonIsSecretFree({ ...cleanMeta, host: "srv469.hstgr.io" }),
+      ).toThrow(/Security policy violation/i);
+    });
+
+    it("retries transient 5xx errors with exponential backoff and succeeds on subsequent try", async () => {
+      let attempts = 0;
+      const fn = vi.fn(async () => {
+        attempts++;
+        if (attempts < 3) {
+          throw new Error("503 Service Unavailable");
+        }
+        return "success_on_attempt_3";
+      });
+
+      const res = await retryWithBackoff(fn, { maxRetries: 3, baseDelayMs: 10 });
+      expect(res).toBe("success_on_attempt_3");
+      expect(attempts).toBe(3);
+    });
+
+    it("enforces conditional writes with If-None-Match to block overwriting existing backups", async () => {
+      const config = {
+        accountId: "test_account",
+        accessKeyId: "test_key",
+        secretAccessKey: "test_secret",
+        bucketName: "test-bucket",
+        region: "auto",
+        endpointOverride: "",
+      };
+      const client = new CloudflareR2Client(config);
+
+      const mockFetchPreconditionFailed = vi.fn<typeof fetch>(async (_url, init) => {
+        const headers = init?.headers as Record<string, string>;
+        expect(headers["if-none-match"]).toBe("*");
+        expect(headers["content-md5"]).toBeDefined();
+        return new Response("Precondition Failed", { status: 412 });
+      });
+
+      await expect(
+        client.putObject({
+          key: "backups/rolling/crm-v2-backup-1.sql.gz.age",
+          body: Buffer.from("data"),
+          ifNoneMatch: "*",
+          maxRetries: 1,
+          fetchImpl: mockFetchPreconditionFailed,
+        }),
+      ).rejects.toThrow(/412 Precondition Failed.*already exists/i);
+    });
+
+    it("never prunes pinned baselines even when rolling backups are pruned", () => {
+      const now = new Date("2026-11-14T12:00:00.000Z");
+      const mixedObjects = [
+        // 1. Pinned baseline (60 days old, MUST NEVER BE PRUNED)
+        {
+          key: "backups/pinned/latest-verified-baseline.sql.gz.age",
+          size: 17000000,
+          lastModified: "2026-09-14T12:00:00.000Z",
+          etag: "pinned",
+        },
+        // 2. Fresh rolling backup
+        {
+          key: "backups/rolling/crm-v2-backup-2026-11-14T10-00-00-000Z.sql.gz.age",
+          size: 17000000,
+          lastModified: "2026-11-14T10:00:00.000Z",
+          etag: "fresh",
+        },
+        // 3. Expired rolling backup (35 days old)
+        {
+          key: "backups/rolling/crm-v2-backup-2026-10-10T10-00-00-000Z.sql.gz.age",
+          size: 16000000,
+          lastModified: "2026-10-10T10:00:00.000Z",
+          etag: "expired",
+        },
+      ];
+
+      const result = evaluateRetentionPruning({
+        objects: mixedObjects,
+        retentionDays: 30,
+        now,
+      });
+
+      // Pinned backup must NOT be in candidatesToPrune!
+      for (const cand of result.candidatesToPrune) {
+        expect(cand.primaryKey).not.toContain("pinned");
+      }
+      expect(result.candidatesToPrune).toHaveLength(1);
+      expect(result.candidatesToPrune[0]!.primaryKey).toBe(
+        "backups/rolling/crm-v2-backup-2026-10-10T10-00-00-000Z.sql.gz.age",
+      );
     });
   });
 });

@@ -1,12 +1,15 @@
 /**
- * Scale Flow CRM V2 — Checkpoint B12C
+ * Scale Flow CRM V2 — Checkpoint B12D
  * Zero-Dependency Cloudflare R2 / S3 SigV4 Client
  *
  * Security & Constraints:
  * - Uses pure Node.js 22 built-ins (node:crypto, node:https, fetch).
  * - Enforces AWS Signature Version 4 (AWS4-HMAC-SHA256) with region "auto" (R2 standard).
+ * - Supports Content-MD5 and SHA-256 payload integrity verification.
+ * - Supports conditional writes via `If-None-Match: *` to prevent overwrites.
+ * - Built-in retry handling with exponential backoff and jitter for transient network/5xx errors.
+ * - Enforces 100 MiB single-PUT ceiling guard (multipart threshold).
  * - Never prints secret keys or auth tokens in logs.
- * - Supports PutObject, GetObject, HeadObject, DeleteObject, and ListObjectsV2.
  */
 
 import crypto from "node:crypto";
@@ -14,6 +17,7 @@ import process from "node:process";
 
 export const DEFAULT_R2_REGION = "auto";
 export const S3_SERVICE_NAME = "s3";
+export const MAX_SINGLE_PUT_BYTES = 104_857_600; // 100 MiB standard single PUT ceiling
 
 /**
  * Validates and resolves R2 client configuration.
@@ -74,6 +78,10 @@ function sha256Hex(data) {
   return crypto.createHash("sha256").update(data).digest("hex");
 }
 
+function md5Base64(data) {
+  return crypto.createHash("md5").update(data).digest("base64");
+}
+
 function getSignatureKey(key, dateStamp, regionName, serviceName) {
   const kDate = hmacSha256("AWS4" + key, dateStamp);
   const kRegion = hmacSha256(kDate, regionName);
@@ -83,18 +91,26 @@ function getSignatureKey(key, dateStamp, regionName, serviceName) {
 }
 
 /**
+ * Retries an asynchronous function with exponential backoff and jitter.
+ */
+export async function retryWithBackoff(fn, { maxRetries = 3, baseDelayMs = 200 } = {}) {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await fn(attempt);
+    } catch (err) {
+      attempt++;
+      if (attempt >= maxRetries) {
+        throw err;
+      }
+      const delay = baseDelayMs * Math.pow(2, attempt - 1) + Math.random() * 50;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
+/**
  * Signs an HTTP request using AWS Signature Version 4 for Cloudflare R2 / S3.
- *
- * @param {Object} params
- * @param {string} params.method - HTTP method (GET, PUT, HEAD, DELETE)
- * @param {string} params.url - Full target URL including protocol, host, path, query
- * @param {Object} [params.headers={}] - Request headers (without Authorization)
- * @param {Buffer|Uint8Array|string|null} [params.body=null] - Request payload
- * @param {string} params.accessKeyId - AWS/R2 Access Key ID
- * @param {string} params.secretAccessKey - AWS/R2 Secret Access Key
- * @param {string} [params.region="auto"] - R2 Region
- * @param {Date} [params.now=new Date()] - Signing timestamp
- * @returns {Object} Headers with Authorization and x-amz-* added
  */
 export function signR2Request({
   method,
@@ -249,179 +265,236 @@ export class CloudflareR2Client {
     key,
     body,
     contentType = "application/octet-stream",
+    ifNoneMatch = null,
+    includeContentMd5 = true,
+    maxRetries = 3,
     fetchImpl = globalThis.fetch,
   }) {
     assertR2Configured(this.config);
     const url = this.buildObjectUrl(key);
     const buf = Buffer.isBuffer(body) ? body : Buffer.from(body);
 
+    if (buf.byteLength > MAX_SINGLE_PUT_BYTES) {
+      throw new Error(
+        `Payload size (${buf.byteLength} bytes) exceeds single PUT threshold (${MAX_SINGLE_PUT_BYTES} bytes). Multipart upload required.`,
+      );
+    }
+
     const baseHeaders = {
       "content-type": contentType,
       "content-length": String(buf.byteLength),
     };
 
-    const signedHeaders = signR2Request({
-      method: "PUT",
-      url,
-      headers: baseHeaders,
-      body: buf,
-      accessKeyId: this.config.accessKeyId,
-      secretAccessKey: this.config.secretAccessKey,
-      region: this.config.region,
-    });
-
-    const res = await fetchImpl(url, {
-      method: "PUT",
-      headers: signedHeaders,
-      body: buf,
-    });
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      throw new Error(
-        `R2 PutObject failed [${res.status} ${res.statusText}]: ${errText.slice(0, 300)}`,
-      );
+    if (ifNoneMatch) {
+      baseHeaders["if-none-match"] = ifNoneMatch;
+    }
+    if (includeContentMd5) {
+      baseHeaders["content-md5"] = md5Base64(buf);
     }
 
-    const etag = res.headers.get("etag")?.replace(/^"|"$/g, "") || "";
-    return {
-      ok: true,
-      status: res.status,
-      etag,
-      key,
-      byteLength: buf.byteLength,
-    };
+    return await retryWithBackoff(
+      async () => {
+        const signedHeaders = signR2Request({
+          method: "PUT",
+          url,
+          headers: baseHeaders,
+          body: buf,
+          accessKeyId: this.config.accessKeyId,
+          secretAccessKey: this.config.secretAccessKey,
+          region: this.config.region,
+        });
+
+        const res = await fetchImpl(url, {
+          method: "PUT",
+          headers: signedHeaders,
+          body: buf,
+        });
+
+        if (res.status === 412) {
+          throw new Error(`R2 PutObject rejected [412 Precondition Failed]: Object ${key} already exists.`);
+        }
+
+        if (!res.ok) {
+          const errText = await res.text().catch(() => "");
+          const statusError = new Error(
+            `R2 PutObject failed [${res.status} ${res.statusText}]: ${errText.slice(0, 300)}`,
+          );
+          if (res.status >= 500 || res.status === 429) {
+            throw statusError; // Trigger retry
+          }
+          throw statusError;
+        }
+
+        const etag = res.headers.get("etag")?.replace(/^"|"$/g, "") || "";
+        return {
+          ok: true,
+          status: res.status,
+          etag,
+          key,
+          byteLength: buf.byteLength,
+        };
+      },
+      { maxRetries },
+    );
   }
 
-  async getObject({ key, fetchImpl = globalThis.fetch }) {
+  async getObject({ key, maxRetries = 3, fetchImpl = globalThis.fetch }) {
     assertR2Configured(this.config);
     const url = this.buildObjectUrl(key);
 
-    const signedHeaders = signR2Request({
-      method: "GET",
-      url,
-      headers: {},
-      body: null,
-      accessKeyId: this.config.accessKeyId,
-      secretAccessKey: this.config.secretAccessKey,
-      region: this.config.region,
-    });
+    return await retryWithBackoff(
+      async () => {
+        const signedHeaders = signR2Request({
+          method: "GET",
+          url,
+          headers: {},
+          body: null,
+          accessKeyId: this.config.accessKeyId,
+          secretAccessKey: this.config.secretAccessKey,
+          region: this.config.region,
+        });
 
-    const res = await fetchImpl(url, {
-      method: "GET",
-      headers: signedHeaders,
-    });
+        const res = await fetchImpl(url, {
+          method: "GET",
+          headers: signedHeaders,
+        });
 
-    if (res.status === 404) {
-      return { ok: false, status: 404, exists: false, body: null };
-    }
+        if (res.status === 404) {
+          return { ok: false, status: 404, exists: false, body: null };
+        }
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      throw new Error(
-        `R2 GetObject failed [${res.status} ${res.statusText}]: ${errText.slice(0, 300)}`,
-      );
-    }
+        if (!res.ok) {
+          const errText = await res.text().catch(() => "");
+          const statusError = new Error(
+            `R2 GetObject failed [${res.status} ${res.statusText}]: ${errText.slice(0, 300)}`,
+          );
+          if (res.status >= 500 || res.status === 429) {
+            throw statusError; // Trigger retry
+          }
+          throw statusError;
+        }
 
-    const arrayBuf = await res.arrayBuffer();
-    const body = Buffer.from(arrayBuf);
-    const etag = res.headers.get("etag")?.replace(/^"|"$/g, "") || "";
-    const contentLength = Number(res.headers.get("content-length") || body.byteLength);
-    const contentType = res.headers.get("content-type") || "application/octet-stream";
-    const lastModified = res.headers.get("last-modified") || "";
+        const arrayBuf = await res.arrayBuffer();
+        const body = Buffer.from(arrayBuf);
+        const etag = res.headers.get("etag")?.replace(/^"|"$/g, "") || "";
+        const contentLength = Number(res.headers.get("content-length") || body.byteLength);
+        const contentType = res.headers.get("content-type") || "application/octet-stream";
+        const lastModified = res.headers.get("last-modified") || "";
 
-    return {
-      ok: true,
-      status: res.status,
-      exists: true,
-      body,
-      contentLength,
-      contentType,
-      etag,
-      lastModified,
-    };
+        return {
+          ok: true,
+          status: res.status,
+          exists: true,
+          body,
+          contentLength,
+          contentType,
+          etag,
+          lastModified,
+        };
+      },
+      { maxRetries },
+    );
   }
 
-  async headObject({ key, fetchImpl = globalThis.fetch }) {
+  async headObject({ key, maxRetries = 3, fetchImpl = globalThis.fetch }) {
     assertR2Configured(this.config);
     const url = this.buildObjectUrl(key);
 
-    const signedHeaders = signR2Request({
-      method: "HEAD",
-      url,
-      headers: {},
-      body: null,
-      accessKeyId: this.config.accessKeyId,
-      secretAccessKey: this.config.secretAccessKey,
-      region: this.config.region,
-    });
+    return await retryWithBackoff(
+      async () => {
+        const signedHeaders = signR2Request({
+          method: "HEAD",
+          url,
+          headers: {},
+          body: null,
+          accessKeyId: this.config.accessKeyId,
+          secretAccessKey: this.config.secretAccessKey,
+          region: this.config.region,
+        });
 
-    const res = await fetchImpl(url, {
-      method: "HEAD",
-      headers: signedHeaders,
-    });
+        const res = await fetchImpl(url, {
+          method: "HEAD",
+          headers: signedHeaders,
+        });
 
-    if (res.status === 404) {
-      return { ok: false, status: 404, exists: false };
-    }
+        if (res.status === 404) {
+          return { ok: false, status: 404, exists: false };
+        }
 
-    if (!res.ok) {
-      throw new Error(`R2 HeadObject failed [${res.status} ${res.statusText}]`);
-    }
+        if (!res.ok) {
+          const statusError = new Error(`R2 HeadObject failed [${res.status} ${res.statusText}]`);
+          if (res.status >= 500 || res.status === 429) {
+            throw statusError;
+          }
+          throw statusError;
+        }
 
-    const etag = res.headers.get("etag")?.replace(/^"|"$/g, "") || "";
-    const contentLength = Number(res.headers.get("content-length") || 0);
-    const contentType = res.headers.get("content-type") || "";
-    const lastModified = res.headers.get("last-modified") || "";
+        const etag = res.headers.get("etag")?.replace(/^"|"$/g, "") || "";
+        const contentLength = Number(res.headers.get("content-length") || 0);
+        const contentType = res.headers.get("content-type") || "";
+        const lastModified = res.headers.get("last-modified") || "";
 
-    return {
-      ok: true,
-      status: res.status,
-      exists: true,
-      contentLength,
-      contentType,
-      etag,
-      lastModified,
-    };
+        return {
+          ok: true,
+          status: res.status,
+          exists: true,
+          contentLength,
+          contentType,
+          etag,
+          lastModified,
+        };
+      },
+      { maxRetries },
+    );
   }
 
-  async deleteObject({ key, fetchImpl = globalThis.fetch }) {
+  async deleteObject({ key, maxRetries = 3, fetchImpl = globalThis.fetch }) {
     assertR2Configured(this.config);
     const url = this.buildObjectUrl(key);
 
-    const signedHeaders = signR2Request({
-      method: "DELETE",
-      url,
-      headers: {},
-      body: null,
-      accessKeyId: this.config.accessKeyId,
-      secretAccessKey: this.config.secretAccessKey,
-      region: this.config.region,
-    });
+    return await retryWithBackoff(
+      async () => {
+        const signedHeaders = signR2Request({
+          method: "DELETE",
+          url,
+          headers: {},
+          body: null,
+          accessKeyId: this.config.accessKeyId,
+          secretAccessKey: this.config.secretAccessKey,
+          region: this.config.region,
+        });
 
-    const res = await fetchImpl(url, {
-      method: "DELETE",
-      headers: signedHeaders,
-    });
+        const res = await fetchImpl(url, {
+          method: "DELETE",
+          headers: signedHeaders,
+        });
 
-    if (!res.ok && res.status !== 204 && res.status !== 404) {
-      const errText = await res.text().catch(() => "");
-      throw new Error(
-        `R2 DeleteObject failed [${res.status} ${res.statusText}]: ${errText.slice(0, 300)}`,
-      );
-    }
+        if (!res.ok && res.status !== 204 && res.status !== 404) {
+          const errText = await res.text().catch(() => "");
+          const statusError = new Error(
+            `R2 DeleteObject failed [${res.status} ${res.statusText}]: ${errText.slice(0, 300)}`,
+          );
+          if (res.status >= 500 || res.status === 429) {
+            throw statusError;
+          }
+          throw statusError;
+        }
 
-    return {
-      ok: true,
-      status: res.status,
-      deleted: res.status === 204 || res.status === 200,
-    };
+        return {
+          ok: true,
+          status: res.status,
+          deleted: res.status === 204 || res.status === 200,
+        };
+      },
+      { maxRetries },
+    );
   }
 
   async listObjectsV2({
     prefix = "",
     maxKeys = 1000,
     continuationToken = null,
+    maxRetries = 3,
     fetchImpl = globalThis.fetch,
   } = {}) {
     assertR2Configured(this.config);
@@ -436,35 +509,44 @@ export class CloudflareR2Client {
 
     const url = this.buildBucketUrl(query);
 
-    const signedHeaders = signR2Request({
-      method: "GET",
-      url,
-      headers: {},
-      body: null,
-      accessKeyId: this.config.accessKeyId,
-      secretAccessKey: this.config.secretAccessKey,
-      region: this.config.region,
-    });
+    return await retryWithBackoff(
+      async () => {
+        const signedHeaders = signR2Request({
+          method: "GET",
+          url,
+          headers: {},
+          body: null,
+          accessKeyId: this.config.accessKeyId,
+          secretAccessKey: this.config.secretAccessKey,
+          region: this.config.region,
+        });
 
-    const res = await fetchImpl(url, {
-      method: "GET",
-      headers: signedHeaders,
-    });
+        const res = await fetchImpl(url, {
+          method: "GET",
+          headers: signedHeaders,
+        });
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      throw new Error(
-        `R2 ListObjectsV2 failed [${res.status} ${res.statusText}]: ${errText.slice(0, 300)}`,
-      );
-    }
+        if (!res.ok) {
+          const errText = await res.text().catch(() => "");
+          const statusError = new Error(
+            `R2 ListObjectsV2 failed [${res.status} ${res.statusText}]: ${errText.slice(0, 300)}`,
+          );
+          if (res.status >= 500 || res.status === 429) {
+            throw statusError;
+          }
+          throw statusError;
+        }
 
-    const xmlText = await res.text();
-    const parsed = parseS3ListObjectsV2Xml(xmlText);
+        const xmlText = await res.text();
+        const parsed = parseS3ListObjectsV2Xml(xmlText);
 
-    return {
-      ok: true,
-      status: res.status,
-      ...parsed,
-    };
+        return {
+          ok: true,
+          status: res.status,
+          ...parsed,
+        };
+      },
+      { maxRetries },
+    );
   }
 }

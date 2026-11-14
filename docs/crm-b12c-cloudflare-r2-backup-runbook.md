@@ -79,14 +79,18 @@ flowchart TD
 4. **Storage Class:** Select **Standard**.
 5. Click **Create Bucket**.
 
-### Step 3: Configure 30-Day Automatic Lifecycle Rule
+### Step 3: Configure 30-Day Automatic Lifecycle Rule (Scoped to Rolling Backups)
+> [!IMPORTANT]
+> To prevent Cloudflare from deleting your last remaining backup if backups pause for >30 days, the lifecycle rule is strictly scoped to prefix `backups/rolling/`. The pinned baseline under `backups/pinned/` has NO lifecycle rule and will NEVER be deleted automatically.
+
 1. Open the `scaleflow-crm-backups` bucket.
 2. Click the **Settings** tab.
 3. Scroll to **Lifecycle Rules** and click **Add rule**.
-4. **Rule Name:** `crm-backups-30-day-retention`
-5. **Rule Scope:** Select **Apply to all objects**.
-6. **Action:** Check **Delete objects after** and enter `30` days.
-7. Click **Save**.
+4. **Rule Name:** `crm-rolling-30-day-retention`
+5. **Rule Scope:** Select **Limit rule by prefix or tags**.
+6. **Prefix:** Enter `backups/rolling/` (DO NOT select all objects).
+7. **Action:** Check **Delete objects after** and enter `30` days.
+8. Click **Save**.
 
 ### Step 4: Verify Public Access is Strictly Disabled
 1. In the **Settings** tab of `scaleflow-crm-backups`, locate **Public access**.
@@ -115,6 +119,19 @@ Navigate to **R2 Object Storage** (overview) -> **Manage R2 API Tokens** -> **Cr
 - **Bucket Scoping:** Select **Specific bucket** -> `scaleflow-crm-backups`.
 - Click **Create API Token**.
 - Save this token alongside your offline private age key.
+
+### Step 6: Immutability, Bucket Lock & Overwrite Protection
+1. **Conditional Writes (`If-None-Match: *`):**
+   - The backup engine automatically sends `If-None-Match: *` with every archive upload.
+   - If an archive with that key already exists, Cloudflare R2 returns `412 Precondition Failed` and rejects the write. This prevents any accidental or malicious overwrite by a compromised upload token.
+2. **Cloudflare R2 Object Lock (Optional WORM):**
+   - Cloudflare R2 supports S3 Object Lock in Compliance and Governance modes.
+   - If enabled on the bucket, objects cannot be deleted by *anyone* (including the account owner) until their retention period expires.
+   - When using Object Lock, ensure the lock period (e.g. 30 days) matches or is shorter than the lifecycle deletion rule, so locked objects are deleted only after the lock expires.
+3. **Secret-Free Metadata Verification:**
+   - The engine validates every `.meta.json` with `assertMetaJsonIsSecretFree` before upload.
+   - Contains strictly cryptographic digests (SHA-256), byte sizes, table/row counts, format string, and public key.
+   - Never exposes database credentials, passwords, hostnames, connection URLs, or customer data.
 
 ---
 

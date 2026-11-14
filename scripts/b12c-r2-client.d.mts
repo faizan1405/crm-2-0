@@ -59,10 +59,16 @@ export interface DeleteObjectResult {
 
 export declare const DEFAULT_R2_REGION: string;
 export declare const S3_SERVICE_NAME: string;
+export declare const MAX_SINGLE_PUT_BYTES: number;
 
 export declare function resolveR2Config(env?: NodeJS.ProcessEnv): R2Config;
 export declare function assertR2Configured(config: R2Config): void;
 export declare function buildR2Endpoint(config: R2Config): string;
+export declare function retryWithBackoff<T>(
+  fn: (attempt: number) => Promise<T>,
+  options?: { maxRetries?: number; baseDelayMs?: number },
+): Promise<T>;
+
 export declare function signR2Request(params: {
   method: string;
   url: string;
@@ -90,24 +96,31 @@ export declare class CloudflareR2Client {
     key: string;
     body: Buffer | Uint8Array | string;
     contentType?: string;
+    ifNoneMatch?: string | null;
+    includeContentMd5?: boolean;
+    maxRetries?: number;
     fetchImpl?: typeof fetch;
   }): Promise<PutObjectResult>;
   getObject(params: {
     key: string;
+    maxRetries?: number;
     fetchImpl?: typeof fetch;
   }): Promise<GetObjectResult>;
   headObject(params: {
     key: string;
+    maxRetries?: number;
     fetchImpl?: typeof fetch;
   }): Promise<HeadObjectResult>;
   deleteObject(params: {
     key: string;
+    maxRetries?: number;
     fetchImpl?: typeof fetch;
   }): Promise<DeleteObjectResult>;
   listObjectsV2(params?: {
     prefix?: string;
     maxKeys?: number;
     continuationToken?: string | null;
+    maxRetries?: number;
     fetchImpl?: typeof fetch;
   }): Promise<ListObjectsV2Result>;
 }

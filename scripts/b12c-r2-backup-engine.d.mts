@@ -19,6 +19,7 @@ export interface R2BackupResult {
   archiveKey: string;
   manifestKey: string;
   metaKey: string;
+  pinnedKey: string | null;
   encryptedByteSize: number;
   tableCount: number;
   totalRows: number;
@@ -37,7 +38,10 @@ export interface R2BackupResult {
 
 export declare const DEFAULT_RETENTION_DAYS: number;
 export declare const BACKUP_PREFIX: string;
+export declare const ROLLING_BACKUP_PREFIX: string;
+export declare const PINNED_BACKUP_PREFIX: string;
 
+export declare function assertMetaJsonIsSecretFree(meta: unknown): boolean;
 export declare function parseArchiveTimestamp(key: string): Date | null;
 
 export declare function evaluateRetentionPruning(params: {
@@ -52,6 +56,7 @@ export declare function runR2AutomatedBackup(params: {
   recipientPublicKey?: string;
   retentionDays?: number;
   stagingRoot?: string;
+  pinBaseline?: boolean;
   env?: NodeJS.ProcessEnv;
   fetchImpl?: typeof fetch;
 }): Promise<R2BackupResult>;
