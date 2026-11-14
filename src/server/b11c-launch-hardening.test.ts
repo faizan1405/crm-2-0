@@ -144,6 +144,12 @@ interface HardeningDbOptions {
   corruptCapacityValue?: "NaN" | "empty_tables" | "null" | undefined;
   failGetLock?: boolean;
   asyncTickMs?: number;
+  sharedTables?: Map<string, Record<string, unknown>[]>;
+  sharedLock?: {
+    held: boolean;
+    queue?: Array<(acquired: boolean) => void>;
+    waitMode?: "wait" | "reject";
+  };
 }
 
 /**
@@ -151,9 +157,10 @@ interface HardeningDbOptions {
  * live chunk sums, optional stats lag, GET_LOCK contention, and transactional rollback.
  */
 function createHardeningRelationalDb(opts: HardeningDbOptions = {}) {
-  const tables = new Map<string, Record<string, unknown>[]>();
+  const tables = opts.sharedTables ?? new Map<string, Record<string, unknown>[]>();
   const colToPropByTable = new Map<string, Map<string, string>>();
-  let getLockHeld = false;
+  let localGetLockHeld = false;
+  const sharedLock = opts.sharedLock;
 
   const delayTick = async () => {
     if (opts.asyncTickMs && opts.asyncTickMs > 0) {
@@ -444,14 +451,43 @@ function createHardeningRelationalDb(opts: HardeningDbOptions = {}) {
       await delayTick();
       const sqlStr = DIALECT.sqlToQuery(queryObj as Parameters<typeof DIALECT.sqlToQuery>[0]).sql;
       if (/GET_LOCK/i.test(sqlStr)) {
-        if (opts.failGetLock || getLockHeld) {
+        if (opts.failGetLock) {
           return [[{ acquired: 0 }], undefined];
         }
-        getLockHeld = true;
+        if (sharedLock) {
+          if (sharedLock.held) {
+            if (sharedLock.waitMode === "wait") {
+              const acquired = await new Promise<boolean>((resolve) => {
+                sharedLock.queue = sharedLock.queue ?? [];
+                sharedLock.queue.push(resolve);
+              });
+              if (acquired) {
+                sharedLock.held = true;
+                return [[{ acquired: 1 }], undefined];
+              }
+              return [[{ acquired: 0 }], undefined];
+            }
+            return [[{ acquired: 0 }], undefined];
+          }
+          sharedLock.held = true;
+          return [[{ acquired: 1 }], undefined];
+        }
+        if (localGetLockHeld) {
+          return [[{ acquired: 0 }], undefined];
+        }
+        localGetLockHeld = true;
         return [[{ acquired: 1 }], undefined];
       }
       if (/RELEASE_LOCK/i.test(sqlStr)) {
-        getLockHeld = false;
+        if (sharedLock) {
+          sharedLock.held = false;
+          if (sharedLock.queue && sharedLock.queue.length > 0) {
+            const next = sharedLock.queue.shift()!;
+            next(true);
+          }
+        } else {
+          localGetLockHeld = false;
+        }
         return [[{ released: 1 }], undefined];
       }
       if (opts.failCapacityQuery) {
@@ -842,6 +878,133 @@ describe("Checkpoint B11C-LAUNCH-HARDENING — Quota, Cron Reliability & Encrypt
       expect(db.tables.get("crm_payment_proof_blobs") ?? []).toHaveLength(3);
       const usageAfter = await measureMariadbCapacityFromDb(db, { env: testEnv });
       expect(usageAfter.effectiveUsedMiB).toBeLessThan(2150);
+    });
+
+    it("7b. serializes concurrent competing uploads from independent database connections / processes via MariaDB GET_LOCK", async () => {
+      // Scenario A: Independent processes with lock queueing (Process 2 waits for lock, then sees capacity exceeded)
+      const sharedTablesA = new Map<string, Record<string, unknown>[]>();
+      const sharedLockA = { held: false, waitMode: "wait" as const };
+      const dbProc1 = createHardeningRelationalDb({
+        baseNonBlobInfoSchemaBytes: 2129 * MIB_BYTES, // 2129 + 16 = 2,145 MiB effective => ~5 MiB headroom left
+        simulateInfoSchemaLagOnBlobs: true,
+        asyncTickMs: 10,
+        sharedTables: sharedTablesA,
+        sharedLock: sharedLockA,
+      });
+      const dbProc2 = createHardeningRelationalDb({
+        baseNonBlobInfoSchemaBytes: 2129 * MIB_BYTES,
+        simulateInfoSchemaLagOnBlobs: true,
+        asyncTickMs: 10,
+        sharedTables: sharedTablesA,
+        sharedLock: sharedLockA,
+      });
+
+      // Seed via dbProc1
+      const { payment1Id: pA1, payment2Id: pA2 } = seedOwnerDealAndPayments(
+        dbProc1,
+        ownerA.id,
+        "xproc-a",
+      );
+      const storageA1 = new MariadbBlobProofStorage({ db: dbProc1, env: testEnv });
+      const storageA2 = new MariadbBlobProofStorage({ db: dbProc2, env: testEnv });
+
+      const pdf3MiB = buildValidPdfExactSize(3 * MIB_BYTES); // ~3.19 MiB each: ONE fits, TWO breach!
+      const resultsA = await Promise.allSettled([
+        attachPaymentProofRecord(
+          dbProc1,
+          ownerA.id,
+          ownerA.id,
+          pA1,
+          {
+            originalFileName: "proc1-proof.pdf",
+            declaredMimeType: "application/pdf",
+            streamOrBuffer: pdf3MiB,
+          },
+          { storageBackend: storageA1 },
+        ),
+        attachPaymentProofRecord(
+          dbProc2,
+          ownerA.id,
+          ownerA.id,
+          pA2,
+          {
+            originalFileName: "proc2-proof.pdf",
+            declaredMimeType: "application/pdf",
+            streamOrBuffer: pdf3MiB,
+          },
+          { storageBackend: storageA2 },
+        ),
+      ]);
+
+      const succeededA = resultsA.filter((r) => r.status === "fulfilled");
+      const rejectedA = resultsA.filter((r) => r.status === "rejected");
+      expect(succeededA).toHaveLength(1);
+      expect(rejectedA).toHaveLength(1);
+      expect((rejectedA[0] as PromiseRejectedResult).reason).toMatchObject({
+        status: 507,
+        code: "storage_quota_exceeded",
+      });
+      // Zero orphan chunks from rejected independent process
+      expect(sharedTablesA.get("crm_payment_proofs") ?? []).toHaveLength(1);
+      expect(sharedTablesA.get("crm_payment_proof_blobs") ?? []).toHaveLength(3);
+
+      // Scenario B: Independent process lock contention timeout / immediate lock rejection (fails closed with 503)
+      const sharedTablesB = new Map<string, Record<string, unknown>[]>();
+      const sharedLockB = { held: false, waitMode: "reject" as const };
+      const dbProc3 = createHardeningRelationalDb({
+        baseNonBlobInfoSchemaBytes: 2129 * MIB_BYTES,
+        asyncTickMs: 15,
+        sharedTables: sharedTablesB,
+        sharedLock: sharedLockB,
+      });
+      const dbProc4 = createHardeningRelationalDb({
+        baseNonBlobInfoSchemaBytes: 2129 * MIB_BYTES,
+        asyncTickMs: 15,
+        sharedTables: sharedTablesB,
+        sharedLock: sharedLockB,
+      });
+      const { payment1Id: pB1, payment2Id: pB2 } = seedOwnerDealAndPayments(
+        dbProc3,
+        ownerA.id,
+        "xproc-b",
+      );
+      const storageB1 = new MariadbBlobProofStorage({ db: dbProc3, env: testEnv });
+      const storageB2 = new MariadbBlobProofStorage({ db: dbProc4, env: testEnv });
+
+      const resultsB = await Promise.allSettled([
+        attachPaymentProofRecord(
+          dbProc3,
+          ownerA.id,
+          ownerA.id,
+          pB1,
+          {
+            originalFileName: "proc3-proof.pdf",
+            declaredMimeType: "application/pdf",
+            streamOrBuffer: pdf3MiB,
+          },
+          { storageBackend: storageB1 },
+        ),
+        attachPaymentProofRecord(
+          dbProc4,
+          ownerA.id,
+          ownerA.id,
+          pB2,
+          {
+            originalFileName: "proc4-proof.pdf",
+            declaredMimeType: "application/pdf",
+            streamOrBuffer: pdf3MiB,
+          },
+          { storageBackend: storageB2 },
+        ),
+      ]);
+      const succeededB = resultsB.filter((r) => r.status === "fulfilled");
+      const rejectedB = resultsB.filter((r) => r.status === "rejected");
+      expect(succeededB).toHaveLength(1);
+      expect(rejectedB).toHaveLength(1);
+      expect((rejectedB[0] as PromiseRejectedResult).reason).toMatchObject({
+        status: 503,
+        code: "storage_capacity_unavailable",
+      });
     });
 
     it("8-9. handles replacements by actual net growth (smaller allowed under headroom, oversized blocked cleanly, historical downloadable)", async () => {
