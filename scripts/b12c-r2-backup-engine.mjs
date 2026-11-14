@@ -21,6 +21,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import {
   assertBackupProducerEnvHasNoPrivateKey,
+  assertNoPrivateKeyInDotEnv,
   assertSafeBackupFilePath,
   hashFileSha256,
 } from "./b11c-backup-crypto.mjs";
@@ -172,12 +173,13 @@ export async function runR2AutomatedBackup({
   recipientPublicKey = process.env.BACKUP_AGE_RECIPIENT_PUBKEY,
   retentionDays = DEFAULT_RETENTION_DAYS,
   stagingRoot = os.tmpdir(),
-  pinBaseline = true,
+  pinBaseline = false, // Deprecated: Baselines are strictly promoted ONLY after independent recovery verification
   env = process.env,
   fetchImpl = globalThis.fetch,
 }) {
   const startedAt = new Date();
   assertBackupProducerEnvHasNoPrivateKey(env);
+  assertNoPrivateKeyInDotEnv();
 
   if (!recipientPublicKey) {
     throw new Error(
@@ -279,34 +281,9 @@ export async function runR2AutomatedBackup({
       throw new Error(`Remote verification failed for metadata ${remoteKeyMeta}: length mismatch.`);
     }
 
-    // 5. Pin Verified Baseline Copy (Immune to Cloudflare Lifecycle Rules)
-    let pinnedKey = null;
-    if (pinBaseline) {
-      pinnedKey = `${PINNED_BACKUP_PREFIX}latest-verified-baseline.sql.gz.age`;
-      await r2Client.putObject({
-        key: pinnedKey,
-        body: ageBuf,
-        contentType: "application/octet-stream",
-        includeContentMd5: true,
-        fetchImpl,
-      });
-      await r2Client.putObject({
-        key: `${pinnedKey}.manifest.age`,
-        body: manifestBuf,
-        contentType: "application/octet-stream",
-        includeContentMd5: true,
-        fetchImpl,
-      });
-      await r2Client.putObject({
-        key: `${pinnedKey}.meta.json`,
-        body: metaBuf,
-        contentType: "application/json",
-        includeContentMd5: true,
-        fetchImpl,
-      });
-    }
-
-    // 6. Prune Expired Archives in Rolling Prefix (Safeguarded)
+    // 5. Prune Expired Archives in Rolling Prefix (Safeguarded)
+    // Note: Baselines are NOT pinned here. Pinned baselines are promoted strictly
+    // AFTER independent recovery verification via promoteVerifiedBaselineToR2().
     let prunedArchives = [];
     try {
       const listRes = await r2Client.listObjectsV2({ prefix: ROLLING_BACKUP_PREFIX, fetchImpl });
@@ -321,7 +298,11 @@ export async function runR2AutomatedBackup({
           try {
             await r2Client.deleteObject({ key: k, fetchImpl });
           } catch (delErr) {
-            console.warn(`Warning: failed to prune expired key ${k}:`, delErr);
+            // Bucket Lock / Object Lock safeguard: if delete fails because of WORM/BucketLock retention, log warning and preserve
+            console.warn(
+              `Warning: failed to prune key ${k} (may be locked by Bucket Lock or retention policy):`,
+              delErr,
+            );
           }
         }
         prunedArchives.push(cand.primaryKey);
@@ -341,7 +322,7 @@ export async function runR2AutomatedBackup({
       archiveKey: remoteKeyAge,
       manifestKey: remoteKeyManifest,
       metaKey: remoteKeyMeta,
-      pinnedKey,
+      pinnedKey: null,
       encryptedByteSize: ageBuf.byteLength,
       tableCount: exportResult.meta.tableCount,
       totalRows: exportResult.meta.totalRows,
@@ -362,6 +343,85 @@ export async function runR2AutomatedBackup({
       fs.rmSync(stageDir, { recursive: true, force: true });
     } catch {}
   }
+}
+
+/**
+ * Promotes an independently verified recovery archive to a versioned, immutable pinned baseline.
+ * Enforces:
+ * - Versioned immutable key under `backups/pinned/` (never a mutable fixed key).
+ * - `ifNoneMatch: "*"` to prevent overwriting existing pinned baselines.
+ * - Verification of HeadObject after upload.
+ */
+export async function promoteVerifiedBaselineToR2({
+  r2Config = resolveR2Config(),
+  rollingArchiveKey,
+  archiveBuffer,
+  manifestBuffer,
+  metaBuffer,
+  fetchImpl = globalThis.fetch,
+}) {
+  assertR2Configured(r2Config);
+  const r2Client = new CloudflareR2Client(r2Config);
+
+  const baseName = path.basename(rollingArchiveKey);
+  const pinnedArchiveKey = `${PINNED_BACKUP_PREFIX}${baseName}`;
+  const pinnedManifestKey = `${pinnedArchiveKey}.manifest.age`;
+  const pinnedMetaKey = `${pinnedArchiveKey}.meta.json`;
+
+  await r2Client.putObject({
+    key: pinnedArchiveKey,
+    body: archiveBuffer,
+    contentType: "application/octet-stream",
+    ifNoneMatch: "*",
+    includeContentMd5: true,
+    fetchImpl,
+  });
+
+  await r2Client.putObject({
+    key: pinnedManifestKey,
+    body: manifestBuffer,
+    contentType: "application/octet-stream",
+    ifNoneMatch: "*",
+    includeContentMd5: true,
+    fetchImpl,
+  });
+
+  await r2Client.putObject({
+    key: pinnedMetaKey,
+    body: metaBuffer,
+    contentType: "application/json",
+    ifNoneMatch: "*",
+    includeContentMd5: true,
+    fetchImpl,
+  });
+
+  const headArchive = await r2Client.headObject({ key: pinnedArchiveKey, fetchImpl });
+  const headManifest = await r2Client.headObject({ key: pinnedManifestKey, fetchImpl });
+  const headMeta = await r2Client.headObject({ key: pinnedMetaKey, fetchImpl });
+
+  if (!headArchive.exists || headArchive.contentLength !== archiveBuffer.byteLength) {
+    throw new Error(
+      `Pinned archive verification failed for ${pinnedArchiveKey}: length mismatch or not found.`,
+    );
+  }
+  if (!headManifest.exists || headManifest.contentLength !== manifestBuffer.byteLength) {
+    throw new Error(
+      `Pinned manifest verification failed for ${pinnedManifestKey}: length mismatch or not found.`,
+    );
+  }
+  if (!headMeta.exists || headMeta.contentLength !== metaBuffer.byteLength) {
+    throw new Error(
+      `Pinned metadata verification failed for ${pinnedMetaKey}: length mismatch or not found.`,
+    );
+  }
+
+  return {
+    ok: true,
+    pinnedArchiveKey,
+    pinnedManifestKey,
+    pinnedMetaKey,
+    byteSize: archiveBuffer.byteLength,
+  };
 }
 
 const isMainModule =

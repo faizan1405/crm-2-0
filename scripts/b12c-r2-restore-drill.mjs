@@ -16,13 +16,14 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { assertNoPrivateKeyInDotEnv } from "./b11c-backup-crypto.mjs";
 import {
   assertSafeRestoreTarget,
   parseConnectionConfigFromEnv,
   restoreEncryptedMariaDbBackup,
 } from "./b11c-mariadb-backup.mjs";
 import { assertR2Configured, CloudflareR2Client, resolveR2Config } from "./b12c-r2-client.mjs";
-import { BACKUP_PREFIX } from "./b12c-r2-backup-engine.mjs";
+import { BACKUP_PREFIX, promoteVerifiedBaselineToR2 } from "./b12c-r2-backup-engine.mjs";
 
 export async function runR2RestoreDrill({
   targetConfig,
@@ -31,13 +32,19 @@ export async function runR2RestoreDrill({
   archiveKey = null,
   sourceDbName = process.env.DB_NAME || "u256504187_crm_b11c_stg",
   confirmCleanTarget = false,
+  promoteBaseline = false,
   stagingRoot = os.tmpdir(),
   fetchImpl = globalThis.fetch,
 }) {
   const startedAt = new Date();
 
+  // Enforce zero private key in project .env files
+  assertNoPrivateKeyInDotEnv();
+
   if (!secretKey) {
-    throw new Error("Missing secret recovery key: BACKUP_AGE_SECRET_KEY is required to restore.");
+    throw new Error(
+      "Missing secret recovery key: BACKUP_AGE_SECRET_KEY is required in offline session environment to restore. Do NOT persist in .env.",
+    );
   }
   if (!confirmCleanTarget) {
     throw new Error("Safety lockout: --confirm-clean-target must be set to true.");
@@ -105,6 +112,25 @@ export async function runR2RestoreDrill({
       stagingRoot: stageDir,
     });
 
+    // 4. Promote to Versioned Immutable Pinned Baseline ONLY after Verified Clean Restore
+    let promotedBaseline = null;
+    if (promoteBaseline && restoreResult.ok) {
+      console.log(
+        `Promoting verified recovery archive ${targetArchiveKey} to versioned pinned baseline...`,
+      );
+      const archiveBuf = fs.readFileSync(localAgePath);
+      const manifestBuf = fs.readFileSync(localManifestAgePath);
+      const metaBuf = fs.readFileSync(localMetaPath);
+      promotedBaseline = await promoteVerifiedBaselineToR2({
+        r2Config,
+        rollingArchiveKey: targetArchiveKey,
+        archiveBuffer: archiveBuf,
+        manifestBuffer: manifestBuf,
+        metaBuffer: metaBuf,
+        fetchImpl,
+      });
+    }
+
     const completedAt = new Date();
     const durationMs = completedAt.getTime() - startedAt.getTime();
 
@@ -112,7 +138,9 @@ export async function runR2RestoreDrill({
       ok: true,
       archiveKey: targetArchiveKey,
       targetDatabase: targetConfig.database,
-      statementCount: restoreResult.statementCount,
+      statementCount: restoreResult.executedStatements,
+      verification: restoreResult.verification,
+      promotedBaseline,
       durationMs,
       completedAt: completedAt.toISOString(),
     };
@@ -131,8 +159,9 @@ const isMainModule =
 if (isMainModule) {
   const args = process.argv.slice(2);
   const confirmCleanTarget = args.includes("--confirm-clean-target");
+  const promoteBaseline = args.includes("--promote-baseline");
   const cfg = parseConnectionConfigFromEnv("TARGET_DB", process.env);
-  runR2RestoreDrill({ targetConfig: cfg, confirmCleanTarget })
+  runR2RestoreDrill({ targetConfig: cfg, confirmCleanTarget, promoteBaseline })
     .then((res) => {
       console.log(JSON.stringify(res, null, 2));
       process.exit(0);

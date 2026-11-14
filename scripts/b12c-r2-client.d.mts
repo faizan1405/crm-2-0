@@ -4,7 +4,7 @@ export interface R2Config {
   secretAccessKey: string;
   bucketName: string;
   region: string;
-  endpointOverride: string;
+  endpointOverride?: string;
 }
 
 export interface S3ObjectSummary {

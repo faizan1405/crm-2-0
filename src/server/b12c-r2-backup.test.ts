@@ -14,9 +14,11 @@ import {
   DEFAULT_RETENTION_DAYS,
   evaluateRetentionPruning,
   parseArchiveTimestamp,
+  promoteVerifiedBaselineToR2,
 } from "../../scripts/b12c-r2-backup-engine.mjs";
 import {
   assertBackupProducerEnvHasNoPrivateKey,
+  assertNoPrivateKeyInDotEnv,
   decryptFileWithAgeX25519,
   encryptFileWithAgeX25519,
   generateAgeX25519KeyPair,
@@ -483,9 +485,9 @@ describe("Checkpoint B12C — Cloudflare R2 Automated Encrypted Backups", () => 
     it("never prunes pinned baselines even when rolling backups are pruned", () => {
       const now = new Date("2026-11-14T12:00:00.000Z");
       const mixedObjects = [
-        // 1. Pinned baseline (60 days old, MUST NEVER BE PRUNED)
+        // 1. Versioned immutable pinned baseline (60 days old, MUST NEVER BE PRUNED)
         {
-          key: "backups/pinned/latest-verified-baseline.sql.gz.age",
+          key: "backups/pinned/crm-v2-baseline-2026-09-14T12-00-00-000Z.sql.gz.age",
           size: 17000000,
           lastModified: "2026-09-14T12:00:00.000Z",
           etag: "pinned",
@@ -520,6 +522,90 @@ describe("Checkpoint B12C — Cloudflare R2 Automated Encrypted Backups", () => 
       expect(result.candidatesToPrune[0]!.primaryKey).toBe(
         "backups/rolling/crm-v2-backup-2026-10-10T10-00-00-000Z.sql.gz.age",
       );
+    });
+
+    it("assertNoPrivateKeyInDotEnv rejects private age recovery keys in project env files", () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sf-test-env-"));
+      try {
+        // Safe .env without private keys
+        fs.writeFileSync(
+          path.join(tempDir, ".env"),
+          "BACKUP_AGE_RECIPIENT_PUBKEY=age1lvufavuhu4dmzv...\nDB_USER=test\n",
+        );
+        expect(() => assertNoPrivateKeyInDotEnv(tempDir)).not.toThrow();
+
+        // Dangerous .env with private key
+        fs.writeFileSync(
+          path.join(tempDir, ".env"),
+          "BACKUP_AGE_SECRET_KEY=AGE-SECRET-KEY-1...\n",
+        );
+        expect(() => assertNoPrivateKeyInDotEnv(tempDir)).toThrow(/Security policy violation/i);
+
+        // Dangerous .env.local with private key
+        fs.unlinkSync(path.join(tempDir, ".env"));
+        fs.writeFileSync(
+          path.join(tempDir, ".env.local"),
+          "AGE_SECRET_KEY=AGE-SECRET-KEY-1...\n",
+        );
+        expect(() => assertNoPrivateKeyInDotEnv(tempDir)).toThrow(/Security policy violation/i);
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("promoteVerifiedBaselineToR2 promotes verified archive to versioned immutable pinned key", async () => {
+      const uploadedKeys: string[] = [];
+      const mockFetch = vi.fn(async (url: string, init?: RequestInit) => {
+        const method = init?.method ?? "GET";
+        const pathname = new URL(url).pathname;
+        const key = pathname.replace(/^\/[^/]+\//, "");
+
+        if (method === "PUT") {
+          uploadedKeys.push(key);
+          return new Response(null, { status: 200, headers: { etag: '"promoted-etag"' } });
+        }
+        if (method === "HEAD") {
+          return new Response(null, {
+            status: 200,
+            headers: {
+              "content-length": "100",
+              etag: '"promoted-etag"',
+            },
+          });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      const result = await promoteVerifiedBaselineToR2({
+        r2Config: {
+          accountId: "test_acc",
+          accessKeyId: "test_key",
+          secretAccessKey: "test_secret",
+          bucketName: "scaleflow-crm-backups",
+          region: "auto",
+        },
+        rollingArchiveKey: "backups/rolling/crm-v2-backup-2026-11-14T12-00-00-000Z.sql.gz.age",
+        archiveBuffer: Buffer.alloc(100),
+        manifestBuffer: Buffer.alloc(100),
+        metaBuffer: Buffer.alloc(100),
+        fetchImpl: mockFetch as unknown as typeof fetch,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.pinnedArchiveKey).toBe(
+        "backups/pinned/crm-v2-backup-2026-11-14T12-00-00-000Z.sql.gz.age",
+      );
+      expect(result.pinnedManifestKey).toBe(
+        "backups/pinned/crm-v2-backup-2026-11-14T12-00-00-000Z.sql.gz.age.manifest.age",
+      );
+      expect(result.pinnedMetaKey).toBe(
+        "backups/pinned/crm-v2-backup-2026-11-14T12-00-00-000Z.sql.gz.age.meta.json",
+      );
+      expect(uploadedKeys).toEqual([
+        "backups/pinned/crm-v2-backup-2026-11-14T12-00-00-000Z.sql.gz.age",
+        "backups/pinned/crm-v2-backup-2026-11-14T12-00-00-000Z.sql.gz.age.manifest.age",
+        "backups/pinned/crm-v2-backup-2026-11-14T12-00-00-000Z.sql.gz.age.meta.json",
+      ]);
     });
   });
 });

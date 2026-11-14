@@ -60,3 +60,20 @@ export declare function runR2AutomatedBackup(params: {
   env?: NodeJS.ProcessEnv;
   fetchImpl?: typeof fetch;
 }): Promise<R2BackupResult>;
+
+export interface PromotedBaselineResult {
+  ok: boolean;
+  pinnedArchiveKey: string;
+  pinnedManifestKey: string;
+  pinnedMetaKey: string;
+  byteSize: number;
+}
+
+export declare function promoteVerifiedBaselineToR2(params: {
+  r2Config?: R2Config;
+  rollingArchiveKey: string;
+  archiveBuffer: Buffer;
+  manifestBuffer: Buffer;
+  metaBuffer: Buffer;
+  fetchImpl?: typeof fetch;
+}): Promise<PromotedBaselineResult>;

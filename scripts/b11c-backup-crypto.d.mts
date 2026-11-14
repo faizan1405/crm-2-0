@@ -12,6 +12,8 @@ export function assertBackupProducerEnvHasNoPrivateKey(
   env?: Record<string, string | undefined>,
 ): void;
 
+export function assertNoPrivateKeyInDotEnv(rootDir?: string): void;
+
 export function generateAgeX25519KeyPair(): {
   publicKey: string;
   secretKey: string;

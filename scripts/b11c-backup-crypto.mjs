@@ -231,6 +231,25 @@ export function assertBackupProducerEnvHasNoPrivateKey(env = process.env) {
   }
 }
 
+/**
+ * Asserts that the project `.env` files do NOT contain any age private recovery key.
+ * Enforces strict offline Owner custody for secret keys.
+ */
+export function assertNoPrivateKeyInDotEnv(rootDir = process.cwd()) {
+  const envFiles = [".env", ".env.local", ".env.production", ".env.staging"];
+  for (const f of envFiles) {
+    const filePath = path.join(rootDir, f);
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf8");
+      if (/BACKUP_AGE_SECRET_KEY|AGE_SECRET_KEY|AGE-SECRET-KEY-1/i.test(content)) {
+        throw new Error(
+          `Security policy violation: Private recovery key detected in ${f}! Remove it immediately. The age private key must remain in offline Owner custody only and never persisted in project env files.`,
+        );
+      }
+    }
+  }
+}
+
 /** Generates a standard age v1 X25519 keypair (`age1...` public recipient + `AGE-SECRET-KEY-1...` offline identity). */
 export function generateAgeX25519KeyPair() {
   const { publicKey, privateKey } = crypto.generateKeyPairSync("x25519");
