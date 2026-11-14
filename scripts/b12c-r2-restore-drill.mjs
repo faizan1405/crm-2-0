@@ -15,7 +15,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { assertSafeRestoreTarget, restoreEncryptedMariaDbBackup } from "./b11c-mariadb-backup.mjs";
+import { fileURLToPath } from "node:url";
+import {
+  assertSafeRestoreTarget,
+  parseConnectionConfigFromEnv,
+  restoreEncryptedMariaDbBackup,
+} from "./b11c-mariadb-backup.mjs";
 import { assertR2Configured, CloudflareR2Client, resolveR2Config } from "./b12c-r2-client.mjs";
 import { BACKUP_PREFIX } from "./b12c-r2-backup-engine.mjs";
 
@@ -116,4 +121,26 @@ export async function runR2RestoreDrill({
       fs.rmSync(stageDir, { recursive: true, force: true });
     } catch {}
   }
+}
+
+const isMainModule =
+  typeof process.argv[1] === "string" &&
+  path.resolve(process.argv[1]).toLowerCase() ===
+    path.resolve(fileURLToPath(import.meta.url)).toLowerCase();
+
+if (isMainModule) {
+  const args = process.argv.slice(2);
+  const confirmCleanTarget = args.includes("--confirm-clean-target");
+  const cfg = parseConnectionConfigFromEnv("TARGET_DB", process.env);
+  runR2RestoreDrill({ targetConfig: cfg, confirmCleanTarget })
+    .then((res) => {
+      console.log(JSON.stringify(res, null, 2));
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error(
+        JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) }),
+      );
+      process.exit(1);
+    });
 }

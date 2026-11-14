@@ -18,17 +18,17 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import {
   assertBackupProducerEnvHasNoPrivateKey,
   assertSafeBackupFilePath,
   hashFileSha256,
 } from "./b11c-backup-crypto.mjs";
-import { exportEncryptedMariaDbBackup } from "./b11c-mariadb-backup.mjs";
 import {
-  assertR2Configured,
-  CloudflareR2Client,
-  resolveR2Config,
-} from "./b12c-r2-client.mjs";
+  exportEncryptedMariaDbBackup,
+  parseConnectionConfigFromEnv,
+} from "./b11c-mariadb-backup.mjs";
+import { assertR2Configured, CloudflareR2Client, resolveR2Config } from "./b12c-r2-client.mjs";
 
 export const DEFAULT_RETENTION_DAYS = 30;
 export const BACKUP_PREFIX = "backups/";
@@ -62,7 +62,9 @@ export function assertMetaJsonIsSecretFree(meta) {
 
   for (const pattern of sensitivePatterns) {
     if (pattern.test(jsonStr)) {
-      throw new Error(`Security policy violation: .meta.json contains sensitive data matching ${pattern}`);
+      throw new Error(
+        `Security policy violation: .meta.json contains sensitive data matching ${pattern}`,
+      );
     }
   }
 
@@ -70,7 +72,10 @@ export function assertMetaJsonIsSecretFree(meta) {
   if (meta.format !== "age-v1-gzip-sql") {
     throw new Error(`Invalid metadata format: expected 'age-v1-gzip-sql', got '${meta.format}'`);
   }
-  if (!meta.recipientPublicKey || !/^age1[023456789acdefghjklmnpqrstuvwxyz]{58}$/.test(meta.recipientPublicKey)) {
+  if (
+    !meta.recipientPublicKey ||
+    !/^age1[023456789acdefghjklmnpqrstuvwxyz]{58}$/.test(meta.recipientPublicKey)
+  ) {
     throw new Error("Invalid or missing recipientPublicKey in metadata.");
   }
   if (!meta.encryptedSha256 || !/^[a-f0-9]{64}$/.test(meta.encryptedSha256)) {
@@ -145,11 +150,7 @@ export function evaluateRetentionPruning({
       candidates.push({
         primaryKey: arch.key,
         baseName,
-        keysToDelete: [
-          arch.key,
-          `${arch.key}.manifest.age`,
-          `${arch.key}.meta.json`,
-        ],
+        keysToDelete: [arch.key, `${arch.key}.manifest.age`, `${arch.key}.meta.json`],
         ageDays: Math.round((now.getTime() - arch.timeMs) / (24 * 60 * 60 * 1000)),
       });
     }
@@ -270,7 +271,9 @@ export async function runR2AutomatedBackup({
       );
     }
     if (!headManifest.exists || headManifest.contentLength !== manifestBuf.byteLength) {
-      throw new Error(`Remote verification failed for manifest ${remoteKeyManifest}: length mismatch.`);
+      throw new Error(
+        `Remote verification failed for manifest ${remoteKeyManifest}: length mismatch.`,
+      );
     }
     if (!headMeta.exists || headMeta.contentLength !== metaBuf.byteLength) {
       throw new Error(`Remote verification failed for metadata ${remoteKeyMeta}: length mismatch.`);
@@ -324,7 +327,10 @@ export async function runR2AutomatedBackup({
         prunedArchives.push(cand.primaryKey);
       }
     } catch (pruneErr) {
-      console.warn("Warning: retention pruning step encountered error (backup preserved):", pruneErr);
+      console.warn(
+        "Warning: retention pruning step encountered error (backup preserved):",
+        pruneErr,
+      );
     }
 
     const completedAt = new Date();
@@ -356,4 +362,24 @@ export async function runR2AutomatedBackup({
       fs.rmSync(stageDir, { recursive: true, force: true });
     } catch {}
   }
+}
+
+const isMainModule =
+  typeof process.argv[1] === "string" &&
+  path.resolve(process.argv[1]).toLowerCase() ===
+    path.resolve(fileURLToPath(import.meta.url)).toLowerCase();
+
+if (isMainModule) {
+  const cfg = parseConnectionConfigFromEnv("SOURCE_DB", process.env);
+  runR2AutomatedBackup({ connectionConfig: cfg })
+    .then((res) => {
+      console.log(JSON.stringify(res, null, 2));
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error(
+        JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) }),
+      );
+      process.exit(1);
+    });
 }
