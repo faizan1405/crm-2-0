@@ -75,3 +75,6 @@ Must stay deterministic (never replaced by a model): financial totals and status
 
 ## H. Recommended backend implementation order
 1. Auth (Owner) + sessions + server authorization. 2. Database schema mirroring §A with `version` columns. 3. Leads/activities/follow-ups API. 4. Deals/payments with transactions + proof file storage. 5. Projects/tasks/support with 409 conflicts. 6. Data Vault export/import + restore verification. 7. Store swap in `store.ts`. 8. Server scheduling for automations. 9. OpenRouter endpoint (§F). 10. Employee accounts (Team CRM, separately approved).
+
+## I. Android app
+See `android-app-sync-plan.md` (proposed — not built). It adds record sync fields, a change feed, a live update channel, an Android outbox with `operationId` de-duplication, and server-side permission filtering on top of §B.

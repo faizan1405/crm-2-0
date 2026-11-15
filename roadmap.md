@@ -62,3 +62,7 @@ Frontend-only demo. No backend; production CRM untouched.
 - [x] H0 final Owner review & handover freeze
 
 - [x] Focus timer: presets, custom minutes, pause/resume/reset/stop, ring, finish sound + mute, minimise/drag, survives page changes, tabs and refresh
+
+## Android app (connected to the website)
+- [x] Analyse current architecture and propose Android approach + sync strategy (docs/android-app-sync-plan.md)
+- [ ] Build backend, sync and Android app (waiting on Owner approval and decisions in §9 of the plan)
