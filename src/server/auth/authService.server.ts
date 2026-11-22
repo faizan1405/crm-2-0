@@ -1,6 +1,6 @@
 import "@tanstack/react-start/server-only";
 import { and, eq, isNull } from "drizzle-orm";
-import { isLeadPilotAvailable, type ServerEnv } from "../config/env.server";
+import { isCrmV2DefaultBackend, isLeadPilotAvailable, type ServerEnv } from "../config/env.server";
 import { getDatabase, type CrmDatabase } from "../db/index.server";
 import { crmAuthAudit, crmSessions, crmUsers } from "../db/schema.server";
 import { addSeconds, parseUtcDateTime, toMysqlUtcDateTime } from "../db/utc.server";
@@ -130,10 +130,13 @@ export function evaluateStoredSessionValidity(
 
 export function toRequestAuthContext(
   res: SessionResolution,
-  env?: Pick<ServerEnv, "NODE_ENV" | "DEV_LEAD_PILOT">,
+  env?: Pick<ServerEnv, "NODE_ENV" | "DEV_LEAD_PILOT"> &
+    Partial<Pick<ServerEnv, "CRM_V2_DEFAULT_BACKEND">>,
 ): RequestAuthContextState {
   const leadPilotAvailable =
     res.status === "authenticated" && env ? isLeadPilotAvailable(env) : false;
+  const crmV2DefaultBackend =
+    res.status === "authenticated" && env ? isCrmV2DefaultBackend(env) : false;
   if (res.status === "authenticated") {
     return {
       authenticated: true,
@@ -141,6 +144,7 @@ export function toRequestAuthContext(
       idleExpiresAt: res.idleExpiresAt,
       expiresAt: res.expiresAt,
       leadPilotAvailable,
+      crmV2DefaultBackend,
     };
   }
   if (res.status === "unconfigured") {

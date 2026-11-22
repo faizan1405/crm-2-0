@@ -19,6 +19,7 @@ export interface AuthSessionSnapshot {
   idleExpiresAt: string | null;
   expiresAt: string | null;
   leadPilotAvailable?: boolean;
+  crmV2DefaultBackend?: boolean;
   checked: boolean;
 }
 
@@ -30,6 +31,7 @@ interface AuthStoreState {
   idleExpiresAt: string | null;
   expiresAt: string | null;
   leadPilotAvailable: boolean;
+  crmV2DefaultBackend: boolean;
   lastCheckedAt: number | null;
 }
 
@@ -42,6 +44,7 @@ export const useAuthStore = create<AuthStoreState>(() => ({
   idleExpiresAt: null,
   expiresAt: null,
   leadPilotAvailable: false,
+  crmV2DefaultBackend: false,
   lastCheckedAt: null,
 }));
 
@@ -59,6 +62,7 @@ export function useResolvedAuthState(): {
   idleExpiresAt: string | null;
   expiresAt: string | null;
   leadPilotAvailable: boolean;
+  crmV2DefaultBackend: boolean;
 } {
   const store = useAuthStore(
     useShallow((s) => ({
@@ -67,6 +71,7 @@ export function useResolvedAuthState(): {
       idleExpiresAt: s.idleExpiresAt,
       expiresAt: s.expiresAt,
       leadPilotAvailable: s.leadPilotAvailable,
+      crmV2DefaultBackend: s.crmV2DefaultBackend,
     })),
   );
   const ssr = useContext(AuthSsrContext);
@@ -78,6 +83,7 @@ export function useResolvedAuthState(): {
       idleExpiresAt: store.status === "authenticated" ? store.idleExpiresAt : null,
       expiresAt: store.status === "authenticated" ? store.expiresAt : null,
       leadPilotAvailable: store.status === "authenticated" && store.leadPilotAvailable,
+      crmV2DefaultBackend: store.status === "authenticated" && store.crmV2DefaultBackend,
     };
   }
 
@@ -88,6 +94,7 @@ export function useResolvedAuthState(): {
       idleExpiresAt: ssr.authenticated ? ssr.idleExpiresAt : null,
       expiresAt: ssr.authenticated ? ssr.expiresAt : null,
       leadPilotAvailable: ssr.authenticated && Boolean(ssr.leadPilotAvailable),
+      crmV2DefaultBackend: ssr.authenticated && Boolean(ssr.crmV2DefaultBackend),
     };
   }
 
@@ -97,6 +104,7 @@ export function useResolvedAuthState(): {
     idleExpiresAt: null,
     expiresAt: null,
     leadPilotAvailable: false,
+    crmV2DefaultBackend: false,
   };
 }
 
@@ -108,6 +116,7 @@ export function hydrateAuthFromSsr(snapshot: AuthSessionSnapshot): void {
     idleExpiresAt: snapshot.authenticated ? snapshot.idleExpiresAt : null,
     expiresAt: snapshot.authenticated ? snapshot.expiresAt : null,
     leadPilotAvailable: snapshot.authenticated ? Boolean(snapshot.leadPilotAvailable) : false,
+    crmV2DefaultBackend: snapshot.authenticated ? Boolean(snapshot.crmV2DefaultBackend) : false,
     lastCheckedAt: Date.now(),
   });
 }
@@ -119,6 +128,7 @@ export function clearClientAuthState(): void {
     idleExpiresAt: null,
     expiresAt: null,
     leadPilotAvailable: false,
+    crmV2DefaultBackend: false,
     lastCheckedAt: Date.now(),
   });
 }
@@ -199,6 +209,7 @@ export const readInitialAuthState = createIsomorphicFn()
       idleExpiresAt: ctx.idleExpiresAt,
       expiresAt: ctx.expiresAt,
       leadPilotAvailable: Boolean(ctx.authenticated && ctx.leadPilotAvailable),
+      crmV2DefaultBackend: Boolean(ctx.authenticated && ctx.crmV2DefaultBackend),
       checked: true,
     };
   })
@@ -211,6 +222,7 @@ export const readInitialAuthState = createIsomorphicFn()
         idleExpiresAt: state.idleExpiresAt,
         expiresAt: state.expiresAt,
         leadPilotAvailable: state.status === "authenticated" && state.leadPilotAvailable,
+        crmV2DefaultBackend: state.status === "authenticated" && state.crmV2DefaultBackend,
         checked: true,
       };
     }
@@ -220,6 +232,7 @@ export const readInitialAuthState = createIsomorphicFn()
       idleExpiresAt: null,
       expiresAt: null,
       leadPilotAvailable: false,
+      crmV2DefaultBackend: false,
       checked: false,
     };
   });
@@ -257,7 +270,7 @@ export async function refreshAuthSession(): Promise<RefreshSessionResult> {
       authenticated?: boolean;
       user?: AuthenticatedOwner;
       session?: { idleExpiresAt?: string; expiresAt?: string };
-      features?: { leadPilotAvailable?: boolean };
+      features?: { leadPilotAvailable?: boolean; crmV2DefaultBackend?: boolean };
       error?: { code?: string; reason?: string; message?: string };
     } | null;
 
@@ -265,12 +278,14 @@ export async function refreshAuthSession(): Promise<RefreshSessionResult> {
       const idleExpiresAt = data.session?.idleExpiresAt ?? null;
       const expiresAt = data.session?.expiresAt ?? null;
       const leadPilotAvailable = Boolean(data.features?.leadPilotAvailable);
+      const crmV2DefaultBackend = Boolean(data.features?.crmV2DefaultBackend);
       useAuthStore.setState({
         status: "authenticated",
         user: data.user,
         idleExpiresAt,
         expiresAt,
         leadPilotAvailable,
+        crmV2DefaultBackend,
         lastCheckedAt: Date.now(),
       });
       return {
@@ -338,7 +353,7 @@ export async function loginWithOwnerCredentials(
       authenticated?: boolean;
       user?: AuthenticatedOwner;
       session?: { idleExpiresAt?: string; expiresAt?: string };
-      features?: { leadPilotAvailable?: boolean };
+      features?: { leadPilotAvailable?: boolean; crmV2DefaultBackend?: boolean };
       error?: { code?: string; message?: string; retryAfterSeconds?: number };
     } | null;
 
@@ -349,6 +364,7 @@ export async function loginWithOwnerCredentials(
         idleExpiresAt: data.session?.idleExpiresAt ?? null,
         expiresAt: data.session?.expiresAt ?? null,
         leadPilotAvailable: Boolean(data.features?.leadPilotAvailable),
+        crmV2DefaultBackend: Boolean(data.features?.crmV2DefaultBackend),
         lastCheckedAt: Date.now(),
       });
       broadcastAuthSync("login");

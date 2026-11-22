@@ -1,5 +1,5 @@
 import "@tanstack/react-start/server-only";
-import { isLeadPilotAvailable, loadServerEnv } from "../config/env.server";
+import { isCrmV2DefaultBackend, isLeadPilotAvailable, loadServerEnv } from "../config/env.server";
 import { getHealthStatus } from "../health/health.server";
 import {
   loginOwnerAccount,
@@ -230,6 +230,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
           },
           features: {
             leadPilotAvailable: isLeadPilotAvailable(env),
+            crmV2DefaultBackend: isCrmV2DefaultBackend(env),
           },
         },
         200,
@@ -323,6 +324,7 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
           },
           features: {
             leadPilotAvailable: isLeadPilotAvailable(env),
+            crmV2DefaultBackend: isCrmV2DefaultBackend(env),
           },
         },
         200,

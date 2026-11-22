@@ -106,6 +106,16 @@ export const serverEnvSchema = z.object({
     return cleaned;
   }, z.boolean().default(false)),
 
+  // B14A Explicit CRM V2 Default MariaDB Backend flag (never auto-enabled by NODE_ENV=production alone).
+  CRM_V2_DEFAULT_BACKEND: z.preprocess((value) => {
+    const cleaned = emptyToUndefined(value);
+    if (cleaned === true || cleaned === "1" || cleaned === "true") return true;
+    if (cleaned === false || cleaned === "0" || cleaned === "false" || cleaned === undefined) {
+      return false;
+    }
+    return cleaned;
+  }, z.boolean().optional()),
+
   // B10C-QA Exact allowlist of disposable MariaDB databases permitted for POST /automations/:id/execute-test.
   AUTOMATION_TEST_DB_ALLOWLIST: z.preprocess(
     (value) => emptyToUndefined(value),
@@ -201,6 +211,24 @@ export function getMariadbQuotaPolicyFromEnv(
 /** Server-enforced pilot gate: strictly disabled in production regardless of client URL/storage. */
 export function isLeadPilotAvailable(env: Pick<ServerEnv, "NODE_ENV" | "DEV_LEAD_PILOT">): boolean {
   return env.NODE_ENV !== "production" && env.DEV_LEAD_PILOT === true;
+}
+
+/**
+ * B14A explicit CRM V2 default MariaDB backend flag.
+ * Must be explicitly set (`CRM_V2_DEFAULT_BACKEND=true`); never enabled by `NODE_ENV=production` alone.
+ */
+export function isCrmV2DefaultBackend(
+  env: Partial<Pick<ServerEnv, "CRM_V2_DEFAULT_BACKEND">>,
+): boolean {
+  return env.CRM_V2_DEFAULT_BACKEND === true;
+}
+
+/** True when Owner MariaDB API routes are active (either via explicit B14A default flag or dev pilot). */
+export function isCrmApiEnabled(
+  env: Pick<ServerEnv, "NODE_ENV" | "DEV_LEAD_PILOT"> &
+    Partial<Pick<ServerEnv, "CRM_V2_DEFAULT_BACKEND">>,
+): boolean {
+  return isCrmV2DefaultBackend(env) || isLeadPilotAvailable(env);
 }
 
 const LOOPBACK_DB_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
@@ -364,6 +392,7 @@ export interface SafeRuntimeEnvSummary {
   sessionAbsoluteTtlSeconds: number;
   aiProvider: ServerEnv["AI_PROVIDER"];
   leadPilotAvailable: boolean;
+  crmV2DefaultBackend: boolean;
 }
 
 function readEnvSnapshot(
@@ -398,6 +427,7 @@ function readEnvSnapshot(
     AUTH_SECRET: raw["AUTH_SECRET"],
     AI_PROVIDER: raw["AI_PROVIDER"],
     DEV_LEAD_PILOT: raw["DEV_LEAD_PILOT"],
+    CRM_V2_DEFAULT_BACKEND: raw["CRM_V2_DEFAULT_BACKEND"],
     AUTOMATION_TEST_DB_ALLOWLIST: raw["AUTOMATION_TEST_DB_ALLOWLIST"],
     AUTOMATION_TEST_RATE_LIMIT_MAX: raw["AUTOMATION_TEST_RATE_LIMIT_MAX"],
     AUTOMATION_TEST_RATE_LIMIT_WINDOW_SECONDS: raw["AUTOMATION_TEST_RATE_LIMIT_WINDOW_SECONDS"],
@@ -497,6 +527,7 @@ export function summarizeSafeRuntimeEnv(env: ServerEnv): SafeRuntimeEnvSummary {
     sessionAbsoluteTtlSeconds: env.SESSION_ABSOLUTE_TTL_SECONDS,
     aiProvider: env.AI_PROVIDER,
     leadPilotAvailable: isLeadPilotAvailable(env),
+    crmV2DefaultBackend: isCrmV2DefaultBackend(env),
   };
 }
 

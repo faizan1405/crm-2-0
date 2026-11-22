@@ -14,6 +14,7 @@ export interface RequestAuthContextState {
   idleExpiresAt: string | null;
   expiresAt: string | null;
   leadPilotAvailable?: boolean;
+  crmV2DefaultBackend?: boolean;
   reason?:
     | "unconfigured"
     | "db_error"

@@ -6,6 +6,9 @@ import { AlertTriangle, ArrowUpRight, CalendarPlus, ChevronLeft, ChevronRight, C
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Shell, selectCls } from "@/components/crm/Shell";
+import { AppShellSkeleton } from "@/components/crm/ShellPrimitives";
+import { PilotPipelinePage } from "@/components/pilot/PilotPipelinePage";
+import { parsePilotSearch, useLeadPilotState } from "@/lib/api/pilotHook";
 import { FollowUpDialog, LostReasonDialog } from "@/components/crm/Dialogs";
 import { CallButton } from "@/components/crm/CallButton";
 import { openCallLog } from "@/components/crm/PostCallDialog";
@@ -18,9 +21,18 @@ import { canUndoStage, cardSignals, groupByStage, isOpen, PIPE_BATCH, stageSumma
 import { LEAD_STATUSES, STATUS_LABEL, type Lead, type LeadStatus } from "@/lib/crm/types";
 import { cn } from "@/lib/utils";
 
-interface PipeSearch { lead?: string | undefined }
+interface PipeSearch {
+  lead?: string | undefined;
+  pilot?: 1 | 0 | undefined;
+}
 export const Route = createFileRoute("/pipeline")({
-  validateSearch: (s: Record<string, unknown>): PipeSearch => (typeof s["lead"] === "string" ? { lead: s["lead"] } : {}),
+  validateSearch: (s: Record<string, unknown>): PipeSearch => {
+    const pilotObj = parsePilotSearch(s);
+    return {
+      ...(typeof s["lead"] === "string" ? { lead: s["lead"] } : {}),
+      ...(pilotObj.pilot !== undefined ? { pilot: pilotObj.pilot } : {}),
+    };
+  },
   head: () => ({
     meta: [
       { property: "og:type", content: "website" },
@@ -31,8 +43,16 @@ export const Route = createFileRoute("/pipeline")({
       { property: "og:description", content: "Move leads through every sales stage and inspect any client without leaving the board." },
     ],
   }),
-  component: Pipeline,
+  component: PipelineEntry,
 });
+
+function PipelineEntry() {
+  const search = Route.useSearch();
+  const { pilotActive, pilotResolved } = useLeadPilotState(search.pilot);
+  if (pilotActive) return <PilotPipelinePage />;
+  if (!pilotResolved) return <AppShellSkeleton />;
+  return <Pipeline />;
+}
 
 function Pipeline() {
   const board = useRef<HTMLDivElement>(null);

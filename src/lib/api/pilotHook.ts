@@ -30,14 +30,26 @@ export function useLeadPilotState(searchPilot?: PilotParamValue): {
   leadPilotAvailable: boolean;
   pilotActive: boolean;
   pilotResolved: boolean;
+  defaultBackendActive: boolean;
 } {
-  const { status: authStatus, leadPilotAvailable: serverAvailable } = useResolvedAuthState();
-  const leadPilotAvailable = authStatus === "authenticated" && serverAvailable;
+  const {
+    status: authStatus,
+    leadPilotAvailable: serverAvailable,
+    crmV2DefaultBackend: serverDefaultBackend,
+  } = useResolvedAuthState();
+  const defaultBackendActive = authStatus === "authenticated" && Boolean(serverDefaultBackend);
+  const leadPilotAvailable =
+    defaultBackendActive || (authStatus === "authenticated" && serverAvailable);
   const [sessionOptIn, setSessionOptIn] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
   const normalizedSearch = normalizePilotParam(searchPilot);
 
   useEffect(() => {
+    if (defaultBackendActive) {
+      setSessionOptIn(true);
+      setSessionChecked(true);
+      return;
+    }
     if (!leadPilotAvailable) {
       setSessionOptIn(false);
       setSessionChecked(authStatus !== "unknown");
@@ -60,17 +72,24 @@ export function useLeadPilotState(searchPilot?: PilotParamValue): {
     }
     setSessionOptIn(readLeadPilotSessionOptIn());
     setSessionChecked(true);
-  }, [authStatus, leadPilotAvailable, normalizedSearch]);
+  }, [authStatus, defaultBackendActive, leadPilotAvailable, normalizedSearch]);
 
-  const pilotActive = resolveLeadPilotActive({
-    leadPilotAvailable,
-    searchPilot: normalizedSearch,
-    sessionOptIn,
-  });
+  // B14A: When CRM_V2_DEFAULT_BACKEND=true, MariaDB is the default data source without `?pilot=1`
+  // and never silently falls back to local demo data.
+  const pilotActive = defaultBackendActive
+    ? true
+    : resolveLeadPilotActive({
+        leadPilotAvailable,
+        searchPilot: normalizedSearch,
+        sessionOptIn,
+      });
 
   const pilotResolved =
     authStatus !== "unknown" &&
-    (!leadPilotAvailable || normalizedSearch !== undefined || sessionChecked);
+    (defaultBackendActive ||
+      !leadPilotAvailable ||
+      normalizedSearch !== undefined ||
+      sessionChecked);
 
-  return { leadPilotAvailable, pilotActive, pilotResolved };
+  return { leadPilotAvailable, pilotActive, pilotResolved, defaultBackendActive };
 }

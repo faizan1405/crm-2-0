@@ -7,6 +7,9 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Flame, CalendarCheck, AlertTriangle, UserPlus, Hourglass, IndianRupee, RefreshCw, ChevronDown, Phone, MessageCircle, CalendarPlus, Check, RotateCcw, Sparkles, ExternalLink } from "lucide-react";
 import { Shell } from "@/components/crm/Shell";
+import { AppShellSkeleton } from "@/components/crm/ShellPrimitives";
+import { PilotDailyBriefingPage } from "@/components/pilot/PilotDailyBriefingPage";
+import { parsePilotSearch, useLeadPilotState } from "@/lib/api/pilotHook";
 import { FollowUpDialog } from "@/components/crm/Dialogs";
 import { useCRM } from "@/lib/crm/store";
 import { buildPriorities, paymentsToChase, isOpen, isStale, type Severity } from "@/lib/crm/insights";
@@ -14,7 +17,12 @@ import { dayKey, formatDateTime, formatINR, formatINRCompact, formatTime, greeti
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+type BriefingSearch = { pilot?: 1 | 0 | undefined };
 export const Route = createFileRoute("/daily-briefing")({
+  validateSearch: (s: Record<string, unknown>): BriefingSearch => {
+    const pilotObj = parsePilotSearch(s);
+    return pilotObj.pilot !== undefined ? { pilot: pilotObj.pilot } : {};
+  },
   head: () => ({
     meta: [
       { property: "og:type", content: "website" },
@@ -25,8 +33,16 @@ export const Route = createFileRoute("/daily-briefing")({
       { property: "og:description", content: "Today's priorities, calls, proposals and payments to chase." },
     ],
   }),
-  component: Briefing,
+  component: BriefingEntry,
 });
+
+function BriefingEntry() {
+  const search = Route.useSearch();
+  const { pilotActive, pilotResolved } = useLeadPilotState(search.pilot);
+  if (pilotActive) return <PilotDailyBriefingPage />;
+  if (!pilotResolved) return <AppShellSkeleton />;
+  return <Briefing />;
+}
 
 const SEV: Record<Severity, string> = { critical: "bg-destructive-soft text-destructive", important: "bg-warning-soft text-warning", normal: "bg-info-soft text-primary" };
 

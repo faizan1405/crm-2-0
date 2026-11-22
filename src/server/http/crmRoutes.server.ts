@@ -15,6 +15,7 @@ import {
 import {
   type ServerEnv,
   getAutomationTestRateLimitPolicy,
+  isCrmApiEnabled,
   isLeadPilotAvailable,
   verifyDisposableAutomationTestDatabaseConfig,
 } from "../config/env.server";
@@ -4734,7 +4735,7 @@ export async function handleCrmApiRequest(
     }
 
     if (resource === "vault") {
-      if (!isLeadPilotAvailable(env)) {
+      if (!isCrmApiEnabled(env)) {
         return jsonResponse(
           {
             ok: false,
@@ -4975,7 +4976,7 @@ export async function handleCrmApiRequest(
     }
 
     if (resource === "automations") {
-      if (!isLeadPilotAvailable(env)) {
+      if (!isCrmApiEnabled(env)) {
         return jsonResponse(
           {
             ok: false,
