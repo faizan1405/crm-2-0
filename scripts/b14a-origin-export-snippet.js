@@ -1,7 +1,9 @@
 /**
  * Checkpoint B14A — Owner-Initiated Read-Only Original-Origin Browser Export Helper
  *
- * USAGE (ONLY when explicitly run by the Owner on their original CRM origin, e.g. crm.joinscaleflow.in):
+ * USAGE (ONLY when explicitly run by the Owner on the exact browser origin where CRM V2 records live —
+ * e.g. your Lovable preview URL, localhost, or deployed CRM V2 domain; do NOT assume CRM V1 at
+ * crm.joinscaleflow.in holds CRM V2 browser storage):
  * - Strictly READ-ONLY: never calls localStorage.setItem/removeItem/clear or IndexedDB readwrite transactions.
  * - Zero network requests: saves a single local JSON export file (including base64 payment proofs + SHA-256)
  *   directly to the Owner's computer.
@@ -101,6 +103,13 @@
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+  if (!parsedCrm) {
+    console.warn(
+      `[Scale Flow B14A] No '${CRM_KEY}' store found on origin ${window.location.origin}. ` +
+        `Browser storage is origin-specific — verify you are on the exact origin where you entered CRM V2 records.`,
+    );
+  }
 
   console.info(
     `[Scale Flow B14A] Read-only export downloaded: ${filename} (${jsonBytes.byteLength} bytes, proofs: ${proofs.length}, SHA-256: ${bundleSha256}). Original browser storage was NOT modified.`,

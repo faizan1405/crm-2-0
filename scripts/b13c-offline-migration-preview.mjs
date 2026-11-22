@@ -86,6 +86,8 @@ function main() {
   const collections = {};
   const binaries = new Map();
 
+  let sourceFormat = isZip ? "data-vault-zip" : "legacy-json-snapshot";
+
   if (isZip) {
     const entries = unzipSync(rawBytes);
     for (const [entryPath, bytes] of Object.entries(entries)) {
@@ -102,7 +104,20 @@ function main() {
     }
   } else {
     const parsed = JSON.parse(strFromU8(rawBytes));
+    if (parsed?.exportFormat === "scale-flow-b14a-origin-readonly-v1") {
+      sourceFormat = "b14a-origin-readonly-json";
+    }
     Object.assign(collections, parsed?.state && typeof parsed.state === "object" ? parsed.state : parsed);
+    // B14B compatibility: preserve top-level attachments (with inline base64 proofs) from B14A origin exports
+    if (Array.isArray(parsed?.attachments) && parsed.attachments.length > 0) {
+      collections.attachments = parsed.attachments.map((att, idx) => {
+        const key = att.path || `inline-proof/${att.paymentId || att.attachmentId || idx}`;
+        if (typeof att.contentBase64 === "string" && att.contentBase64.length > 0) {
+          binaries.set(key, new Uint8Array(Buffer.from(att.contentBase64, "base64")));
+        }
+        return { ...att, path: key };
+      });
+    }
   }
 
   const asArr = (k) => (Array.isArray(collections[k]) ? collections[k] : []);
@@ -245,7 +260,7 @@ function main() {
     databaseWritten: false,
     hostingPolicy: "hostinger_exclusive",
     cloudflareR2Required: false,
-    sourceFormat: isZip ? "data-vault-zip" : "legacy-json-snapshot",
+    sourceFormat,
     entityCounts: {
       leads: leads.length,
       archivedLeads: bin.length,
