@@ -92,6 +92,19 @@ import {
 import { getProofStorageBackend } from "../storage/proofStorage.server";
 import { MAX_PROOF_BYTES } from "../storage/proofValidation.server";
 import {
+  DEFAULT_MARIADB_HARD_STOP_MIB,
+  DEFAULT_MARIADB_QUOTA_MIB,
+  DEFAULT_MARIADB_SAFETY_MARGIN_MIB,
+  DEFAULT_MARIADB_WARNING_MIB,
+} from "../storage/mariadbCapacity.server";
+import {
+  HOSTINGER_EXCLUSIVE_STORAGE_DRIVER,
+  MIGRATION_WIZARD_VERSION,
+  analyzeMigrationSource,
+  runSyntheticShadowMigrationTest,
+  type MigrationReadinessResponse,
+} from "../migration/index.server";
+import {
   archiveQuotationRecord,
   changeQuotationStatusRecord,
   createQuotationRecord,
@@ -4865,6 +4878,97 @@ export async function handleCrmApiRequest(
           },
           403,
         );
+      }
+
+      // B13 Migration Wizard endpoints: /api/v1/vault/migration/*
+      if (sub === "migration") {
+        const action = segments[4];
+
+        // GET /api/v1/vault/migration/readiness
+        if (action === "readiness") {
+          if (request.method !== "GET") return methodNotAllowed(["GET"]);
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const readiness: MigrationReadinessResponse = {
+            ok: true,
+            wizardVersion: MIGRATION_WIZARD_VERSION,
+            hostingProvider: "hostinger_exclusive",
+            cloudflareR2Required: false,
+            proofStorageDriver: HOSTINGER_EXCLUSIVE_STORAGE_DRIVER,
+            liveExecutionLocked: true,
+            liveExecutionLockReason:
+              "Live production and remote database migration is locked until explicit Owner approval. Use Read-Only Analysis and Synthetic Shadow Testing first.",
+            supportedSourceFormats: ["data-vault-zip", "legacy-json-snapshot"],
+            mappedEntityCount: 27,
+            deferredCollectionCount: 5,
+            hostingerQuotaPolicy: {
+              quotaMiB: DEFAULT_MARIADB_QUOTA_MIB,
+              warningThresholdMiB: DEFAULT_MARIADB_WARNING_MIB,
+              hardStopThresholdMiB: DEFAULT_MARIADB_HARD_STOP_MIB,
+              safetyMarginMiB: DEFAULT_MARIADB_SAFETY_MARGIN_MIB,
+            },
+            guardrails: [
+              { id: "hostinger_only", label: "Hostinger-exclusive target (Cloudflare R2 not required)", enforced: true },
+              { id: "zero_ui_writes", label: "Migration Wizard performs zero database writes", enforced: true },
+              { id: "crm_v1_untouched", label: "CRM V1 and real customer data untouched", enforced: true },
+              { id: "browser_storage_untouched", label: "Existing browser localStorage/IndexedDB untouched", enforced: true },
+              { id: "exact_paise_math", label: "Exact integer-paise financial reconciliation (0-paise delta)", enforced: true },
+              { id: "automations_paused", label: "Imported automation rules forced to paused state", enforced: true },
+            ],
+          };
+          return jsonResponse(readiness, 200);
+        }
+
+        // POST /api/v1/vault/migration/analyze (strictly read-only validation + financial reconciliation)
+        if (action === "analyze") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedUpload = await parseArchiveUpload(request);
+          if (!parsedUpload.ok) return parsedUpload.response;
+
+          const { report } = analyzeMigrationSource({
+            source: parsedUpload.bytes,
+            sourceFilename: request.headers.get("x-migration-filename") ?? "uploaded-migration-source",
+            ownerUserId: auth.userId,
+          });
+          return jsonResponse({ ok: report.ok, analysis: report }, 200);
+        }
+
+        // POST /api/v1/vault/migration/synthetic-shadow-test (in-memory synthetic shadow test; zero real DB writes)
+        if (action === "synthetic-shadow-test") {
+          if (request.method !== "POST") return methodNotAllowed(["POST"]);
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const shadowReport = runSyntheticShadowMigrationTest({
+            ownerUserId: auth.userId,
+          });
+          return jsonResponse({ ok: shadowReport.ok, shadowReport }, 200);
+        }
+
+        // POST /api/v1/vault/migration/execute -> Strictly 403 Forbidden until explicit Owner approval
+        if (action === "execute") {
+          return jsonResponse(
+            {
+              ok: false,
+              error: {
+                code: "MIGRATION_EXECUTION_LOCKED",
+                message:
+                  "Real data migration execution is locked in the UI. Explicit Owner approval and isolated Hostinger staging cutover safeguards are required before any live database writes.",
+              },
+            },
+            403,
+          );
+        }
       }
 
       return null;

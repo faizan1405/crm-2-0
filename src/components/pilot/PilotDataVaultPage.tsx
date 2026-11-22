@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { PilotShell } from "./PilotShell";
+import { PilotMigrationWizard } from "./PilotMigrationWizard";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -41,10 +42,11 @@ import {
 import { formatDateTime } from "@/lib/crm/format";
 import { cn } from "@/lib/utils";
 
-type TabId = "overview" | "synthetic" | "inspect" | "dryrun" | "blockers";
+type TabId = "overview" | "migration" | "synthetic" | "inspect" | "dryrun" | "blockers";
 
 const TABS: Array<{ id: TabId; label: string; icon: typeof Archive; badge?: string }> = [
   { id: "overview", label: "Coverage & inventory", icon: Database },
+  { id: "migration", label: "Migration wizard", icon: ArrowRight, badge: "B13" },
   { id: "synthetic", label: "Synthetic test backup", icon: Download, badge: "Test" },
   { id: "inspect", label: "Archive inspector", icon: FileSearch },
   { id: "dryrun", label: "Restore dry-run preview", icon: FileCheck2, badge: "Safe" },
@@ -59,7 +61,7 @@ export function PilotDataVaultPage({
     | undefined;
 }) {
   const [activeTab, setActiveTab] = useState<TabId>(() => {
-    const validTabs: TabId[] = ["overview", "synthetic", "inspect", "dryrun", "blockers"];
+    const validTabs: TabId[] = ["overview", "migration", "synthetic", "inspect", "dryrun", "blockers"];
     return validTabs.includes(search?.tab as TabId) ? (search!.tab as TabId) : "overview";
   });
 
@@ -1200,6 +1202,9 @@ export function PilotDataVaultPage({
           </div>
         </div>
       )}
+
+      {/* TAB: B13 Migration Wizard */}
+      {activeTab === "migration" && <PilotMigrationWizard />}
     </PilotShell>
   );
 }
