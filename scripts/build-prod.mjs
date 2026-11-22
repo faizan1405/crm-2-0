@@ -61,6 +61,7 @@ async function main() {
     const standaloneScripts = [
       { src: "scripts/run-automation-cron.mjs", out: "run-cron.mjs" },
       { src: "scripts/bootstrap-owner.mjs", out: "bootstrap-owner.mjs" },
+      { src: "scripts/db-migrate.mjs", out: "db-migrate.mjs" },
     ];
     if (fs.existsSync(outServerDir)) {
       for (const item of standaloneScripts) {
@@ -70,6 +71,11 @@ async function main() {
           // Hostinger CLI scripts with rolldown to guarantee standalone execution.
           await bundleStandaloneCronRunner(srcPath, path.join(outServerDir, item.out));
         }
+      }
+      const migrationsSrc = path.resolve(process.cwd(), "src/server/db/migrations");
+      const migrationsOut = path.join(outServerDir, "migrations");
+      if (fs.existsSync(migrationsSrc)) {
+        fs.cpSync(migrationsSrc, migrationsOut, { recursive: true, force: true });
       }
     }
   }

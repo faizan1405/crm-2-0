@@ -1,25 +1,33 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import mysql from "mysql2/promise";
 import { drizzle } from "drizzle-orm/mysql2";
 import { migrate } from "drizzle-orm/mysql2/migrator";
 
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+
 function loadOptionalDotEnv() {
-  const envPath = path.resolve(process.cwd(), ".env");
-  if (!fs.existsSync(envPath)) return;
-  const content = fs.readFileSync(envPath, "utf8");
-  for (const rawLine of content.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
-    const eqIdx = line.indexOf("=");
-    if (eqIdx <= 0) continue;
-    const key = line.slice(0, eqIdx).trim();
-    let val = line.slice(eqIdx + 1).trim();
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1);
-    }
-    if (process.env[key] === undefined) {
-      process.env[key] = val;
+  const candidates = [
+    path.resolve(process.cwd(), ".env"),
+    path.resolve(SCRIPT_DIR, "../../../config/.env"),
+  ];
+  for (const envPath of candidates) {
+    if (!fs.existsSync(envPath)) continue;
+    const content = fs.readFileSync(envPath, "utf8");
+    for (const rawLine of content.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#")) continue;
+      const eqIdx = line.indexOf("=");
+      if (eqIdx <= 0) continue;
+      const key = line.slice(0, eqIdx).trim();
+      let val = line.slice(eqIdx + 1).trim();
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      if (process.env[key] === undefined) {
+        process.env[key] = val;
+      }
     }
   }
 }
@@ -63,9 +71,13 @@ function buildConnectionOptions() {
 
 async function main() {
   loadOptionalDotEnv();
-  const migrationsFolder = path.resolve(process.cwd(), "src/server/db/migrations");
-  if (!fs.existsSync(migrationsFolder)) {
-    throw new Error(`Migrations folder not found: ${migrationsFolder}`);
+  const migrationCandidates = [
+    path.resolve(process.cwd(), "src/server/db/migrations"),
+    path.resolve(SCRIPT_DIR, "migrations"),
+  ];
+  const migrationsFolder = migrationCandidates.find((p) => fs.existsSync(p));
+  if (!migrationsFolder) {
+    throw new Error(`Migrations folder not found in: ${migrationCandidates.join(", ")}`);
   }
 
   const pool = mysql.createPool({

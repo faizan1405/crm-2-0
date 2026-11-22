@@ -1,0 +1,54 @@
+{
+  "checkpoint": "B16B-STAGING-GITHUB-INTEGRATION",
+  "capturedAt": "2026-11-22T19:15:00Z",
+  "stagingDomain": "khaki-butterfly-345144.hostingersite.com",
+  "hostingUsername": "u256504187",
+  "stagingDatabase": "u256504187_crm_b11c_stg",
+  "productionDomain": "crm2.joinscaleflow.in",
+  "productionBuildUuid": "01a2036a-025d-72bf-91b5-29bd57d77cc4",
+  "productionGitAutoDeployment": null,
+  "preB16bStagingDeployment": {
+    "buildUuid": "01a20364-822a-71bc-bd57-f80f3ce74f38",
+    "state": "completed",
+    "createdAt": "2026-11-22T13:14:08Z",
+    "sourceType": "archive",
+    "archivePath": "b15-f3aafd0-staging.zip",
+    "previousGitAutoDeployment": {
+      "installation_uuid": "01a12183-5031-7122-844d-51c745fa9d67",
+      "owner": "faizan1405",
+      "repository": "CRM_2.0",
+      "branch": "main"
+    }
+  },
+  "targetGitHubStagingConnection": {
+    "installationUuid": "01a12183-5031-7122-844d-51c745fa9d67",
+    "repository": "faizan1405/crm-2-0",
+    "branch": "staging",
+    "nodeVersion": 22,
+    "appType": "nitro",
+    "outputDirectory": ".output",
+    "buildScript": "build",
+    "entryFile": "server/index.mjs",
+    "packageManager": "npm"
+  },
+  "stagingEnvVarKeys": [
+    "NODE_ENV",
+    "DEV_LEAD_PILOT",
+    "APP_ORIGIN",
+    "BUSINESS_TIMEZONE",
+    "DB_HOST",
+    "DB_PORT",
+    "DB_NAME",
+    "DB_USER",
+    "DB_PASSWORD",
+    "DB_POOL_LIMIT",
+    "DB_SSL_MODE",
+    "PROOF_STORAGE_DRIVER",
+    "AI_PROVIDER",
+    "AUTH_TRUST_PROXY",
+    "AUTH_SECRET",
+    "SESSION_COOKIE_NAME",
+    "CRM_V2_DEFAULT_BACKEND",
+    "PROOF_PRODUCTION_DURABLE_CONFIRMED"
+  ]
+}
