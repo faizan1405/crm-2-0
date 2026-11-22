@@ -73,9 +73,10 @@ export function PilotShell({
   children: ReactNode;
 }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
-  const { status: authStatus, user: authUser } = useResolvedAuthState();
+  const { status: authStatus, user: authUser, crmV2DefaultBackend } = useResolvedAuthState();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const linkSearch: { pilot?: 0 | 1 } = crmV2DefaultBackend ? {} : { pilot: 1 };
 
   const [mounted, setMounted] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -121,43 +122,57 @@ export function PilotShell({
   const ownerEmail = authUser?.email ?? "Owner session";
 
   const renderNav = (onNav?: () => void) => (
-    <nav aria-label="Lead Pilot navigation" className="sb-nav">
+    <nav
+      aria-label={crmV2DefaultBackend ? "CRM navigation" : "Lead Pilot navigation"}
+      className="sb-nav"
+    >
       <div className="sb-group">
         <div className="sb-group-label">
-          <span>Sales OS Server Pilot</span>
+          <span>{crmV2DefaultBackend ? "Sales OS Workspace" : "Sales OS Server Pilot"}</span>
         </div>
         <div>
           {PILOT_LINKS.map((item) => {
             const active =
               item.to === "/"
                 ? path === "/"
-                : item.to === "/analytics"
-                  ? path === "/analytics" || path.startsWith("/analytics/")
-                  : item.to === "/my-performance"
-                    ? path === "/my-performance" || path.startsWith("/my-performance/")
-                    : item.to === "/settings"
-                      ? path === "/settings" || path.startsWith("/settings/")
-                      : item.to === "/crm-config"
-                        ? path === "/crm-config" || path.startsWith("/crm-config/")
-                        : item.to === "/leads/bin"
-                          ? path.startsWith("/leads/bin")
-                          : item.to === "/follow-ups"
-                            ? path === "/follow-ups" || path.startsWith("/follow-ups/")
-                            : item.to === "/deals"
-                              ? path === "/deals" || path.startsWith("/deals/")
-                              : item.to === "/sales-studio"
-                                ? path === "/sales-studio" || path.startsWith("/sales-studio/")
-                                : item.to === "/projects"
-                                  ? path === "/projects" || path.startsWith("/projects/")
-                                  : item.to === "/leads" &&
-                                    (path === "/leads" ||
-                                      (path.startsWith("/leads/") &&
-                                        !path.startsWith("/leads/bin")));
+                : item.to === "/daily-briefing"
+                  ? path === "/daily-briefing" || path.startsWith("/daily-briefing/")
+                  : item.to === "/inbox"
+                    ? path === "/inbox" || path.startsWith("/inbox/")
+                    : item.to === "/pipeline"
+                      ? path === "/pipeline" || path.startsWith("/pipeline/")
+                      : item.to === "/automation"
+                        ? path === "/automation" || path.startsWith("/automation/")
+                        : item.to === "/data-vault"
+                          ? path === "/data-vault" || path.startsWith("/data-vault/")
+                          : item.to === "/analytics"
+                            ? path === "/analytics" || path.startsWith("/analytics/")
+                            : item.to === "/my-performance"
+                              ? path === "/my-performance" || path.startsWith("/my-performance/")
+                              : item.to === "/settings"
+                                ? path === "/settings" || path.startsWith("/settings/")
+                                : item.to === "/crm-config"
+                                  ? path === "/crm-config" || path.startsWith("/crm-config/")
+                                  : item.to === "/leads/bin"
+                                    ? path.startsWith("/leads/bin")
+                                    : item.to === "/follow-ups"
+                                      ? path === "/follow-ups" || path.startsWith("/follow-ups/")
+                                      : item.to === "/deals"
+                                        ? path === "/deals" || path.startsWith("/deals/")
+                                        : item.to === "/sales-studio"
+                                          ? path === "/sales-studio" ||
+                                            path.startsWith("/sales-studio/")
+                                          : item.to === "/projects"
+                                            ? path === "/projects" || path.startsWith("/projects/")
+                                            : item.to === "/leads" &&
+                                              (path === "/leads" ||
+                                                (path.startsWith("/leads/") &&
+                                                  !path.startsWith("/leads/bin")));
             return (
               <Link
                 key={item.to}
                 to={item.to}
-                search={{ pilot: 1 }}
+                search={linkSearch}
                 onClick={onNav}
                 aria-current={active ? "page" : undefined}
                 title={collapsed ? item.label : undefined}
@@ -170,31 +185,33 @@ export function PilotShell({
           })}
         </div>
       </div>
-      <div className="sb-group">
-        <div className="sb-group-label">
-          <span>Local Browser Modules</span>
+      {!crmV2DefaultBackend && (
+        <div className="sb-group">
+          <div className="sb-group-label">
+            <span>Local Browser Modules</span>
+          </div>
+          <div>
+            {LOCAL_LINKS.map((item) => (
+              <button
+                key={item.to}
+                type="button"
+                onClick={() => {
+                  onNav?.();
+                  setLeadPilotSessionOptIn(false);
+                  queryClient.clear();
+                  void navigate({ to: item.to, search: {} });
+                }}
+                title={collapsed ? `${item.label} (Local browser store)` : undefined}
+                className="sb-link w-full text-left"
+              >
+                <item.icon className="sb-icon" />
+                <span className="sb-label min-w-0 flex-1 truncate">{item.label}</span>
+                {!collapsed && <span className="sb-badge shrink-0 text-[10px]">Local</span>}
+              </button>
+            ))}
+          </div>
         </div>
-        <div>
-          {LOCAL_LINKS.map((item) => (
-            <button
-              key={item.to}
-              type="button"
-              onClick={() => {
-                onNav?.();
-                setLeadPilotSessionOptIn(false);
-                queryClient.clear();
-                void navigate({ to: item.to, search: {} });
-              }}
-              title={collapsed ? `${item.label} (Local browser store)` : undefined}
-              className="sb-link w-full text-left"
-            >
-              <item.icon className="sb-icon" />
-              <span className="sb-label min-w-0 flex-1 truncate">{item.label}</span>
-              {!collapsed && <span className="sb-badge shrink-0 text-[10px]">Local</span>}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
     </nav>
   );
 
@@ -206,7 +223,7 @@ export function PilotShell({
     >
       <aside className="sb hidden md:flex" aria-label="Sidebar">
         <div className="sb-brand">
-          <Link to="/leads" search={{ pilot: 1 }} className="flex min-w-0 items-center gap-2.5">
+          <Link to="/" search={linkSearch} className="flex min-w-0 items-center gap-2.5">
             <span className="sb-mark">
               <ScaleMark className="size-[18px]" />
             </span>
@@ -214,7 +231,9 @@ export function PilotShell({
               <span className="block truncate text-[15px] font-semibold tracking-tight">
                 Scale Flow
               </span>
-              <span className="sb-os mt-1 block">Sales OS · Pilot</span>
+              <span className="sb-os mt-1 block">
+                {crmV2DefaultBackend ? "Sales OS · CRM V2" : "Sales OS · Pilot"}
+              </span>
             </span>
           </Link>
         </div>
@@ -256,31 +275,33 @@ export function PilotShell({
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col pb-24 md:pb-0">
-        <div
-          role="status"
-          data-testid="pilot-mode-banner"
-          className="flex flex-wrap items-center justify-between gap-2 border-b border-primary/25 bg-primary-soft px-4 py-2 text-xs text-foreground sm:px-6 lg:px-8"
-        >
-          <span className="flex min-w-0 items-center gap-2">
-            <Database className="size-4 shrink-0 text-primary" aria-hidden />
-            <span className="min-w-0">
-              <b>Dev CRM Pilot (Synthetic MariaDB)</b> — Server-backed Leads, Calls, WhatsApp,
-              Follow-ups, Finance, Projects, Analytics, Settings & Goals only.{" "}
-              <span className="hidden sm:inline">
-                Browser-local CRM records and IndexedDB proofs remain untouched.
+        {!crmV2DefaultBackend && (
+          <div
+            role="status"
+            data-testid="pilot-mode-banner"
+            className="flex flex-wrap items-center justify-between gap-2 border-b border-primary/25 bg-primary-soft px-4 py-2 text-xs text-foreground sm:px-6 lg:px-8"
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <Database className="size-4 shrink-0 text-primary" aria-hidden />
+              <span className="min-w-0">
+                <b>Dev CRM Pilot (Synthetic MariaDB)</b> — Server-backed Leads, Calls, WhatsApp,
+                Follow-ups, Finance, Projects, Analytics, Settings & Goals only.{" "}
+                <span className="hidden sm:inline">
+                  Browser-local CRM records and IndexedDB proofs remain untouched.
+                </span>
               </span>
             </span>
-          </span>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 rounded-full"
-            onClick={exitPilot}
-          >
-            Exit Pilot Mode
-          </Button>
-        </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 rounded-full"
+              onClick={exitPilot}
+            >
+              Exit Pilot Mode
+            </Button>
+          </div>
+        )}
 
         <header className="topbar sticky top-0 z-30 border-b">
           <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-2 px-4 sm:px-6 lg:px-8">
@@ -293,40 +314,52 @@ export function PilotShell({
               <Menu className="size-5" />
             </button>
             <Link
-              to="/leads"
-              search={{ pilot: 1 }}
+              to="/"
+              search={linkSearch}
               className="flex items-center gap-2 md:hidden"
-              aria-label="Pilot leads"
+              aria-label="Scale Flow Home"
             >
               <span className="sb-mark sb-mark-light">
                 <ScaleMark className="size-4" />
               </span>
             </Link>
             <div className="crumb hidden min-w-0 items-center gap-1.5 text-[13px] sm:flex">
-              <span className="text-muted-foreground">Sales OS Pilot</span>
+              <span className="text-muted-foreground">
+                {crmV2DefaultBackend ? "Scale Flow CRM" : "Sales OS Pilot"}
+              </span>
               <ChevronRight className="size-3.5 text-muted-foreground" />
               <span className="truncate font-medium">
                 {path === "/"
                   ? "Dashboard"
-                  : path.startsWith("/analytics")
-                    ? "Analytics"
-                    : path.startsWith("/my-performance")
-                      ? "My Performance"
-                      : path.startsWith("/settings")
-                        ? "Settings"
-                        : path.startsWith("/crm-config")
-                          ? "CRM Configuration"
-                          : path.startsWith("/deals")
-                            ? "Finance"
-                            : path.startsWith("/sales-studio")
-                              ? "Sales Studio"
-                              : path.startsWith("/projects")
-                                ? "Projects"
-                                : path.startsWith("/follow-ups")
-                                  ? "Follow-ups"
-                                  : path.startsWith("/leads/bin")
-                                    ? "Waste & Recently Deleted"
-                                    : "Leads"}
+                  : path.startsWith("/daily-briefing")
+                    ? "Daily Briefing"
+                    : path.startsWith("/inbox")
+                      ? "Smart Inbox"
+                      : path.startsWith("/pipeline")
+                        ? "Pipeline"
+                        : path.startsWith("/automation")
+                          ? "Automations"
+                          : path.startsWith("/data-vault")
+                            ? "Data Vault"
+                            : path.startsWith("/analytics")
+                              ? "Analytics"
+                              : path.startsWith("/my-performance")
+                                ? "My Performance"
+                                : path.startsWith("/settings")
+                                  ? "Settings"
+                                  : path.startsWith("/crm-config")
+                                    ? "CRM Configuration"
+                                    : path.startsWith("/deals")
+                                      ? "Finance"
+                                      : path.startsWith("/sales-studio")
+                                        ? "Sales Studio"
+                                        : path.startsWith("/projects")
+                                          ? "Projects"
+                                          : path.startsWith("/follow-ups")
+                                            ? "Follow-ups"
+                                            : path.startsWith("/leads/bin")
+                                              ? "Waste & Recently Deleted"
+                                              : "Leads"}
               </span>
             </div>
             <button
@@ -360,7 +393,11 @@ export function PilotShell({
         </main>
 
         <footer className="mx-auto mt-auto flex w-full max-w-[1400px] items-center justify-between gap-2 border-t px-4 py-4 sm:px-6 lg:px-8">
-          <span className="eyebrow">Scale Flow · Sales OS 3.0 · Dev Lead Pilot</span>
+          <span className="eyebrow">
+            {crmV2DefaultBackend
+              ? "Scale Flow · Sales OS · CRM V2"
+              : "Scale Flow · Sales OS 3.0 · Dev Lead Pilot"}
+          </span>
           <span className="eyebrow">
             MariaDB API ·{" "}
             {formatDate(new Date().toISOString(), {
@@ -373,12 +410,12 @@ export function PilotShell({
       </div>
 
       <nav
-        aria-label="Mobile Pilot navigation"
+        aria-label={crmV2DefaultBackend ? "Mobile CRM navigation" : "Mobile Pilot navigation"}
         className="os-mobile-bar fixed inset-x-3 bottom-3 z-40 flex items-center justify-around rounded-[22px] px-1.5 py-1.5 shadow-[var(--shadow-pop)] md:hidden"
       >
         <Link
           to="/"
-          search={{ pilot: 1 }}
+          search={linkSearch}
           aria-current={path === "/" ? "page" : undefined}
           className="flex min-h-12 min-w-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl text-[10px] font-medium"
         >
@@ -387,7 +424,7 @@ export function PilotShell({
         </Link>
         <Link
           to="/leads"
-          search={{ pilot: 1 }}
+          search={linkSearch}
           aria-current={
             path.startsWith("/leads") && !path.startsWith("/leads/bin") ? "page" : undefined
           }
@@ -398,7 +435,7 @@ export function PilotShell({
         </Link>
         <Link
           to="/deals"
-          search={{ pilot: 1 }}
+          search={linkSearch}
           aria-current={path.startsWith("/deals") ? "page" : undefined}
           className="flex min-h-12 min-w-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl text-[10px] font-medium"
         >
@@ -407,7 +444,7 @@ export function PilotShell({
         </Link>
         <Link
           to="/analytics"
-          search={{ pilot: 1 }}
+          search={linkSearch}
           aria-current={path.startsWith("/analytics") ? "page" : undefined}
           className="flex min-h-12 min-w-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl text-[10px] font-medium"
         >
@@ -427,7 +464,7 @@ export function PilotShell({
       <Sheet open={drawer} onOpenChange={setDrawer}>
         <SheetContent side="left" className="sb-drawer w-[280px] border-0 p-0">
           <SheetHeader className="sr-only">
-            <SheetTitle>Pilot navigation</SheetTitle>
+            <SheetTitle>CRM navigation</SheetTitle>
           </SheetHeader>
           <div className="sb flex h-full w-full">
             <div className="sb-brand">
@@ -436,22 +473,26 @@ export function PilotShell({
               </span>
               <span className="leading-none">
                 <span className="block text-[15px] font-semibold">Scale Flow</span>
-                <span className="sb-os mt-1 block">Sales OS · Pilot</span>
+                <span className="sb-os mt-1 block">
+                  {crmV2DefaultBackend ? "Sales OS · CRM V2" : "Sales OS · Pilot"}
+                </span>
               </span>
             </div>
             {renderNav(() => setDrawer(false))}
             <div className="sb-foot">
-              <button
-                type="button"
-                onClick={() => {
-                  setDrawer(false);
-                  exitPilot();
-                }}
-                className="sb-collapse"
-              >
-                <Archive className="size-4" />
-                <span className="text-xs">Exit Pilot Mode</span>
-              </button>
+              {!crmV2DefaultBackend && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDrawer(false);
+                    exitPilot();
+                  }}
+                  className="sb-collapse"
+                >
+                  <Archive className="size-4" />
+                  <span className="text-xs">Exit Pilot Mode</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
