@@ -3,6 +3,10 @@ import { sql } from "drizzle-orm";
 import { Readable } from "node:stream";
 import { z, ZodError } from "zod";
 import { resolveAuthenticatedSession } from "../auth/authService.server";
+import {
+  recordProofUploadFailure,
+  recordUnhandledApiError,
+} from "../monitoring/logger.server";
 import { consumeFixedWindowRateLimit } from "../auth/rateLimit.server";
 import {
   buildClearSessionCookie,
@@ -1204,8 +1208,23 @@ function searchParamsObject(requestUrl: URL): Record<string, string> {
   return out;
 }
 
-function crmErrorResponse(error: unknown): Response {
+function crmErrorResponse(error: unknown, pathname?: string, method?: string): Response {
   if (error instanceof CrmServiceError) {
+    if (pathname && pathname.includes("/proof")) {
+      recordProofUploadFailure({
+        path: pathname,
+        code: error.code,
+        status: error.status,
+      });
+    } else if (error.status >= 500) {
+      recordUnhandledApiError({
+        path: pathname ?? "/api/v1/unknown",
+        method: method ?? "UNKNOWN",
+        code: error.code,
+        status: error.status,
+        error,
+      });
+    }
     return jsonResponse(error.toResponseBody(), error.status);
   }
   if (error instanceof ZodError) {
@@ -5312,6 +5331,6 @@ export async function handleCrmApiRequest(
 
     return null;
   } catch (error) {
-    return crmErrorResponse(error);
+    return crmErrorResponse(error, pathname, request.method);
   }
 }

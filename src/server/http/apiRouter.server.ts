@@ -20,6 +20,11 @@ import {
   verifyCsrfAndOrigin,
 } from "../auth/security.server";
 import { handleCrmApiRequest } from "./crmRoutes.server";
+import {
+  recordAuthFailure,
+  recordUnhandledApiError,
+} from "../monitoring/logger.server";
+import { getOwnerMonitoringSnapshot } from "../monitoring/monitoringService.server";
 
 const API_SECURITY_HEADERS: Record<string, string> = {
   "content-type": "application/json; charset=utf-8",
@@ -195,6 +200,15 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       }
 
       if (resolved.status === "unauthenticated") {
+        if (resolved.reason !== "missing") {
+          recordAuthFailure({
+            event: "auth_session_rejected",
+            reason: resolved.reason,
+            status: 401,
+            path: pathname,
+            ipPrefix,
+          });
+        }
         const headers: Record<string, string> | undefined =
           token && shouldClearRejectedSessionCookie(resolved.reason)
             ? {
@@ -286,6 +300,13 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       );
 
       if (!result.ok) {
+        recordAuthFailure({
+          event: result.status === 503 ? "auth_unavailable" : "auth_login_failed",
+          reason: result.code,
+          status: result.status,
+          path: pathname,
+          ipPrefix: maskIpPrefix(getClientIp(request, env)),
+        });
         const extraHeaders =
           result.status === 429 && result.retryAfterSeconds !== undefined
             ? { "retry-after": String(result.retryAfterSeconds) }
@@ -446,6 +467,53 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       );
     }
 
+    if (pathname === "/api/v1/monitoring/summary") {
+      if (request.method !== "GET") {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "method_not_allowed",
+              message: "Only GET is supported on /api/v1/monitoring/summary.",
+            },
+          },
+          405,
+          { allow: "GET" },
+        );
+      }
+
+      const token = readSessionCookie(request, env.SESSION_COOKIE_NAME);
+      const ipPrefix = maskIpPrefix(getClientIp(request, env));
+      const resolved = await resolveAuthenticatedSession(token, env, { ipPrefix });
+      if (resolved.status === "unconfigured" || resolved.status === "db_error") {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "auth_unavailable",
+              message: "Authentication database is unavailable.",
+            },
+          },
+          503,
+        );
+      }
+      if (resolved.status !== "authenticated") {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "unauthenticated",
+              message: "Authentication required.",
+            },
+          },
+          401,
+        );
+      }
+
+      const snapshot = await getOwnerMonitoringSnapshot(resolved.user.id, { env });
+      return jsonResponse(snapshot, 200);
+    }
+
     const crmResponse = await handleCrmApiRequest(request, pathname, env);
     if (crmResponse) {
       return crmResponse;
@@ -462,7 +530,11 @@ export async function handleApiRequest(request: Request): Promise<Response | nul
       404,
     );
   } catch (error) {
-    console.error("[apiRouter] Unhandled API error", error);
+    recordUnhandledApiError({
+      path: pathname,
+      method: request.method,
+      error,
+    });
     return jsonResponse(
       {
         ok: false,
