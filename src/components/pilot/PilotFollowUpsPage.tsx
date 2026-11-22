@@ -1,3 +1,4 @@
+import { pilotLinkSearch } from "@/lib/api/pilotHook";
 import { useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
@@ -589,7 +590,7 @@ export function PilotFollowUpsPage() {
                         className="ml-auto rounded-full"
                         asChild
                       >
-                        <Link to="/leads/$id" params={{ id: lead.id }} search={{ pilot: 1 }}>
+                        <Link to="/leads/$id" params={{ id: lead.id }} search={pilotLinkSearch()}>
                           Open lead
                           <ArrowUpRight className="size-3.5" />
                         </Link>
@@ -661,7 +662,7 @@ export function PilotFollowUpsPage() {
             </li>
           </ul>
           <Button type="button" variant="outline" size="sm" asChild className="w-full">
-            <Link to="/leads" search={{ pilot: 1 }}>
+            <Link to="/leads" search={pilotLinkSearch()}>
               Manage server leads
               <ArrowUpRight className="size-4" />
             </Link>
@@ -1011,7 +1012,7 @@ function PilotFollowUpLeadInspector({
 
             <div className="m-4 mt-6">
               <Button asChild variant="outline" className="w-full">
-                <Link to="/leads/$id" params={{ id: lead.id }} search={{ pilot: 1 }}>
+                <Link to="/leads/$id" params={{ id: lead.id }} search={pilotLinkSearch()}>
                   Open full record
                   <ArrowUpRight className="size-4" />
                 </Link>

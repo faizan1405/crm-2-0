@@ -1,3 +1,4 @@
+import { pilotLinkSearch } from "@/lib/api/pilotHook";
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -71,7 +72,7 @@ export function PilotLeadsBinPage() {
     >
       <Link
         to="/leads"
-        search={{ pilot: 1 }}
+        search={pilotLinkSearch()}
         className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary"
       >
         <ArrowLeft className="size-4" />
@@ -179,7 +180,7 @@ export function PilotLeadsBinPage() {
                 <Link
                   to="/leads/$id"
                   params={{ id: lead.id }}
-                  search={{ pilot: 1 }}
+                  search={pilotLinkSearch()}
                   className="hover:underline"
                 >
                   <Identity name={lead.name} company={lead.company} />

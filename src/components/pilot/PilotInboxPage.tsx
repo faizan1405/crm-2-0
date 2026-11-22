@@ -1,3 +1,4 @@
+import { pilotLinkSearch } from "@/lib/api/pilotHook";
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -749,7 +750,7 @@ export function PilotInboxPage({ search = {} }: PilotInboxPageProps) {
                       {/* Action Buttons */}
                       <div className="flex flex-wrap items-center gap-1">
                         <Button size="sm" variant="ghost" asChild aria-label="Open lead">
-                          <Link to="/leads/$id" params={{ id: l.id }} search={{ pilot: 1 }}>
+                          <Link to="/leads/$id" params={{ id: l.id }} search={pilotLinkSearch()}>
                             <Eye className="size-3.5" />
                           </Link>
                         </Button>

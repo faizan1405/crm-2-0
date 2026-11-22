@@ -1,3 +1,4 @@
+import { pilotLinkSearch } from "@/lib/api/pilotHook";
 import { useRef, useState, type FormEvent } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -324,7 +325,7 @@ export function PilotAddLeadDialog({
                     <Link
                       to="/leads/$id"
                       params={{ id: m.id }}
-                      search={{ pilot: 1 }}
+                      search={pilotLinkSearch()}
                       onClick={() => onOpenChange(false)}
                       className="font-medium text-primary hover:underline"
                     >

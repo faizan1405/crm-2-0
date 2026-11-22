@@ -1,3 +1,4 @@
+import { pilotLinkSearch } from "@/lib/api/pilotHook";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import {
@@ -392,7 +393,7 @@ function PilotDealInspector({
               {d.leadId ? (
                 <Link
                   to="/leads"
-                  search={{ pilot: 1 }}
+                  search={pilotLinkSearch()}
                   className="underline-offset-4 hover:underline text-teal font-medium"
                 >
                   {d.clientName}

@@ -1,3 +1,4 @@
+import { pilotLinkSearch } from "@/lib/api/pilotHook";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useBlocker, useNavigate } from "@tanstack/react-router";
 import {
@@ -405,7 +406,7 @@ export function PilotSettingsPage({
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild type="button" size="sm" variant="outline" className="rounded-lg gap-1.5">
-            <Link to="/my-performance" search={{ pilot: 1 }}>
+            <Link to="/my-performance" search={pilotLinkSearch()}>
               <Target className="size-3.5" />
               Sales Goals
             </Link>
@@ -1058,7 +1059,7 @@ export function PilotSettingsPage({
                         Configure target metrics & track MariaDB progress in My Performance.
                       </span>
                       <Button asChild type="button" size="sm" variant="outline">
-                        <Link to="/my-performance" search={{ pilot: 1 }}>
+                        <Link to="/my-performance" search={pilotLinkSearch()}>
                           <Target className="size-3.5 mr-1" />
                           Open Sales Goals
                         </Link>
@@ -1388,7 +1389,7 @@ export function PilotSettingsPage({
                     </div>
                     <div className="pt-2">
                       <Button asChild type="button" size="sm" variant="outline">
-                        <Link to="/crm-config" search={{ pilot: 1 }}>
+                        <Link to="/crm-config" search={pilotLinkSearch()}>
                           Inspect CRM Config Boundary
                         </Link>
                       </Button>

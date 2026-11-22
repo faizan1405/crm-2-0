@@ -1239,6 +1239,7 @@ export const listQuotationsQuerySchema = z.object({
   dealId: optionalTrimmedString(64),
   status: z.enum(["all", ...QUOTATION_STATUSES]).default("all"),
   search: optionalTrimmedString(120),
+  q: optionalTrimmedString(120),
   includeArchived: z
     .enum(["true", "false"])
     .default("false")

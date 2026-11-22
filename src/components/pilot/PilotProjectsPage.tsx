@@ -1,3 +1,4 @@
+import { pilotLinkSearch } from "@/lib/api/pilotHook";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
@@ -208,7 +209,7 @@ function PilotProjectsOverview({ onHandoff }: { onHandoff: (d: DealDto) => void 
                   <Link
                     to="/projects/$id"
                     params={{ id: a.projectId }}
-                    search={{ pilot: 1 }}
+                    search={pilotLinkSearch()}
                     className="pd-row"
                   >
                     <AlertTriangle
@@ -395,7 +396,7 @@ function PilotProjectCard({ p }: { p: ProjectDto }) {
     <Link
       to="/projects/$id"
       params={{ id: p.id }}
-      search={{ pilot: 1 }}
+      search={pilotLinkSearch()}
       className="pd-card block hover:no-underline"
       data-overdue={isOverdue || undefined}
     >

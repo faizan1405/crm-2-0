@@ -1,3 +1,4 @@
+import { pilotLinkSearch } from "@/lib/api/pilotHook";
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -387,7 +388,7 @@ export function PilotDuplicateReviewDialog({
           <div className="flex flex-wrap items-center gap-1.5">
             {a && (
               <Button size="sm" variant="ghost" asChild>
-                <Link to="/leads/$id" params={{ id: a.id }} search={{ pilot: 1 }}>
+                <Link to="/leads/$id" params={{ id: a.id }} search={pilotLinkSearch()}>
                   <ExternalLink className="mr-1 size-3" />
                   Open Lead A
                 </Link>
@@ -395,7 +396,7 @@ export function PilotDuplicateReviewDialog({
             )}
             {b && (
               <Button size="sm" variant="ghost" asChild>
-                <Link to="/leads/$id" params={{ id: b.id }} search={{ pilot: 1 }}>
+                <Link to="/leads/$id" params={{ id: b.id }} search={pilotLinkSearch()}>
                   <ExternalLink className="mr-1 size-3" />
                   Open Lead B
                 </Link>

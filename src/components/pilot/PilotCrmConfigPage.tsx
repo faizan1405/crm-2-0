@@ -1,3 +1,4 @@
+import { pilotLinkSearch } from "@/lib/api/pilotHook";
 import { useState, useMemo } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -193,13 +194,13 @@ export function PilotCrmConfigPage(props: { search?: Record<string, unknown> }) 
       actions={
         <div className="flex flex-wrap gap-2">
           <Button asChild type="button" size="sm" variant="outline" className="rounded-lg gap-1.5">
-            <Link to="/leads" search={{ pilot: 1 }}>
+            <Link to="/leads" search={pilotLinkSearch()}>
               <ExternalLink className="size-3.5" />
               Open Leads Pilot
             </Link>
           </Button>
           <Button asChild type="button" size="sm" variant="outline" className="rounded-lg gap-1.5">
-            <Link to="/settings" search={{ pilot: 1 }}>
+            <Link to="/settings" search={pilotLinkSearch()}>
               <Settings className="size-3.5" />
               Owner Settings
             </Link>
@@ -1320,7 +1321,7 @@ function SavedViewsTab() {
 
             <div className="flex items-center gap-2">
               <Button asChild size="sm" variant="secondary" className="h-8 gap-1 rounded-lg">
-                <Link to="/leads" search={{ pilot: 1, view: v.id }}>
+                <Link to="/leads" search={pilotLinkSearch({ view: v.id })}>
                   <ExternalLink className="size-3.5" />
                   Open in Leads
                 </Link>

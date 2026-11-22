@@ -1,3 +1,4 @@
+import { pilotLinkSearch } from "@/lib/api/pilotHook";
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -86,7 +87,7 @@ export function PilotDashboardPage(_props: { search?: Record<string, unknown> })
         {isRefreshing ? "Refreshing…" : "Refresh"}
       </Button>
       <Button size="sm" asChild className="rounded-lg gap-1.5">
-        <Link to="/leads" search={{ pilot: 1 }}>
+        <Link to="/leads" search={pilotLinkSearch()}>
           <Plus className="size-3.5" />
           Manage Leads
         </Link>
@@ -188,7 +189,7 @@ export function PilotDashboardPage(_props: { search?: Record<string, unknown> })
             {/* Open Pipeline Value */}
             <Link
               to="/leads"
-              search={{ pilot: 1 }}
+              search={pilotLinkSearch()}
               className="kpi col-span-2 group rounded-xl border bg-card p-4 transition-colors hover:border-primary/40"
             >
               <div className="flex items-center justify-between text-xs text-muted-foreground font-medium">
@@ -209,7 +210,7 @@ export function PilotDashboardPage(_props: { search?: Record<string, unknown> })
             {/* Active Leads */}
             <Link
               to="/leads"
-              search={{ pilot: 1 }}
+              search={pilotLinkSearch()}
               className="kpi group rounded-xl border bg-card p-4 transition-colors hover:border-primary/40"
             >
               <div className="flex items-center justify-between text-xs text-muted-foreground font-medium">
@@ -227,7 +228,7 @@ export function PilotDashboardPage(_props: { search?: Record<string, unknown> })
             {/* Follow-ups Today */}
             <Link
               to="/follow-ups"
-              search={{ pilot: 1 }}
+              search={pilotLinkSearch()}
               className="kpi group rounded-xl border bg-card p-4 transition-colors hover:border-primary/40"
             >
               <div className="flex items-center justify-between text-xs text-muted-foreground font-medium">
@@ -245,7 +246,7 @@ export function PilotDashboardPage(_props: { search?: Record<string, unknown> })
             {/* Overdue Follow-ups */}
             <Link
               to="/follow-ups"
-              search={{ pilot: 1 }}
+              search={pilotLinkSearch()}
               className={cn(
                 "kpi group rounded-xl border bg-card p-4 transition-colors hover:border-primary/40",
                 data.kpis.followUpsOverdueCount > 0 && "border-destructive/30 bg-destructive/5",
@@ -278,7 +279,7 @@ export function PilotDashboardPage(_props: { search?: Record<string, unknown> })
             {/* Received Cash */}
             <Link
               to="/deals"
-              search={{ pilot: 1 }}
+              search={pilotLinkSearch()}
               className="kpi col-span-2 lg:col-span-1 group rounded-xl border bg-card p-4 transition-colors hover:border-primary/40"
             >
               <div className="flex items-center justify-between text-xs text-muted-foreground font-medium">
@@ -308,7 +309,7 @@ export function PilotDashboardPage(_props: { search?: Record<string, unknown> })
                 </div>
                 <Link
                   to="/projects"
-                  search={{ pilot: 1 }}
+                  search={pilotLinkSearch()}
                   className="text-xs font-medium text-primary hover:underline"
                 >
                   Project Desk →
@@ -442,7 +443,7 @@ export function PilotDashboardPage(_props: { search?: Record<string, unknown> })
                             {t.leadId ? (
                               <Link
                                 to="/leads"
-                                search={{ pilot: 1 }}
+                                search={pilotLinkSearch()}
                                 className="block text-sm font-semibold hover:underline truncate"
                               >
                                 {t.title}
@@ -450,7 +451,7 @@ export function PilotDashboardPage(_props: { search?: Record<string, unknown> })
                             ) : (
                               <Link
                                 to="/deals"
-                                search={{ pilot: 1 }}
+                                search={pilotLinkSearch()}
                                 className="block text-sm font-semibold hover:underline truncate"
                               >
                                 {t.title}
@@ -491,7 +492,7 @@ export function PilotDashboardPage(_props: { search?: Record<string, unknown> })
                               asChild
                               className="h-8 rounded-lg text-xs"
                             >
-                              <Link to="/leads" search={{ pilot: 1 }}>
+                              <Link to="/leads" search={pilotLinkSearch()}>
                                 View Lead
                               </Link>
                             </Button>
@@ -503,7 +504,7 @@ export function PilotDashboardPage(_props: { search?: Record<string, unknown> })
                               asChild
                               className="h-8 gap-1 rounded-lg text-xs"
                             >
-                              <Link to="/deals" search={{ pilot: 1 }}>
+                              <Link to="/deals" search={pilotLinkSearch()}>
                                 Record Payment
                                 <ArrowUpRight className="size-3" />
                               </Link>
@@ -520,7 +521,7 @@ export function PilotDashboardPage(_props: { search?: Record<string, unknown> })
                 <div className="border-t px-5 py-3 text-right">
                   <Link
                     to="/follow-ups"
-                    search={{ pilot: 1 }}
+                    search={pilotLinkSearch()}
                     className="text-xs font-medium text-primary hover:underline"
                   >
                     Open full agenda in Follow-ups (Pilot) →
@@ -542,7 +543,7 @@ export function PilotDashboardPage(_props: { search?: Record<string, unknown> })
                   </div>
                   <Link
                     to="/deals"
-                    search={{ pilot: 1 }}
+                    search={pilotLinkSearch()}
                     className="text-xs font-medium text-primary hover:underline"
                   >
                     Finance →
@@ -664,7 +665,7 @@ export function PilotDashboardPage(_props: { search?: Record<string, unknown> })
                   </div>
                   <Link
                     to="/leads"
-                    search={{ pilot: 1 }}
+                    search={pilotLinkSearch()}
                     className="text-xs font-medium text-primary hover:underline"
                   >
                     Board →
@@ -678,7 +679,7 @@ export function PilotDashboardPage(_props: { search?: Record<string, unknown> })
                       <Link
                         key={s.stage}
                         to="/leads"
-                        search={{ pilot: 1 }}
+                        search={pilotLinkSearch()}
                         className="flex items-center justify-between gap-2 rounded-lg p-1.5 text-xs transition-colors hover:bg-secondary/60"
                         title={`${s.name}: ${s.count} leads · ${formatINR(s.value)}`}
                       >
@@ -715,7 +716,7 @@ export function PilotDashboardPage(_props: { search?: Record<string, unknown> })
                 </div>
                 <Link
                   to="/leads"
-                  search={{ pilot: 1 }}
+                  search={pilotLinkSearch()}
                   className="text-xs font-medium text-primary hover:underline"
                 >
                   All leads →
@@ -747,7 +748,7 @@ export function PilotDashboardPage(_props: { search?: Record<string, unknown> })
                           <td className="py-3 pl-5">
                             <Link
                               to="/leads"
-                              search={{ pilot: 1 }}
+                              search={pilotLinkSearch()}
                               className="block font-medium hover:underline truncate max-w-[180px]"
                             >
                               {l.name}
@@ -793,7 +794,7 @@ export function PilotDashboardPage(_props: { search?: Record<string, unknown> })
                               </Button>
                             ) : (
                               <Button variant="ghost" size="sm" asChild className="h-7 text-xs">
-                                <Link to="/leads" search={{ pilot: 1 }}>
+                                <Link to="/leads" search={pilotLinkSearch()}>
                                   View
                                 </Link>
                               </Button>

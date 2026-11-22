@@ -1,3 +1,4 @@
+import { pilotLinkSearch } from "@/lib/api/pilotHook";
 import { useRef, useState, type FormEvent } from "react";
 import { Link, useBlocker, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -503,7 +504,7 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
                   </Button>
                 )}
                 <Button type="button" asChild>
-                  <Link to="/leads" search={{ pilot: 1 }}>
+                  <Link to="/leads" search={pilotLinkSearch()}>
                     Back to Pilot leads
                   </Link>
                 </Button>
@@ -519,7 +520,7 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
   if (!lead) {
     return (
       <PilotShell title="Lead not found">
-        <Link to="/leads" search={{ pilot: 1 }} className="text-primary underline">
+        <Link to="/leads" search={pilotLinkSearch()} className="text-primary underline">
           Back to Pilot leads
         </Link>
       </PilotShell>
@@ -655,7 +656,7 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
         archiveKind === "waste" ? "Moved to Waste" : "Deleted — restore from Recently Deleted",
       );
       setArchiveKind(null);
-      void navigate({ to: "/leads", search: { pilot: 1 } });
+      void navigate({ to: "/leads", search: pilotLinkSearch() });
     } catch (err) {
       setArchiveError(formatApiErrorMessage(err));
     }
@@ -761,7 +762,7 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
     >
       <Link
         to={archived ? "/leads/bin" : "/leads"}
-        search={{ pilot: 1 }}
+        search={pilotLinkSearch()}
         className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="size-4" />
@@ -1039,7 +1040,7 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
                         <span>No custom fields configured yet.</span>
                         <Link
                           to="/crm-config"
-                          search={{ pilot: 1 }}
+                          search={pilotLinkSearch()}
                           className="text-primary underline font-medium"
                         >
                           Configure Custom Fields
@@ -1498,7 +1499,7 @@ export function PilotLeadDetailPage({ id }: { id: string }) {
               <h2 className="font-semibold">Follow-ups (MariaDB)</h2>
               <Link
                 to="/follow-ups"
-                search={{ pilot: 1 }}
+                search={pilotLinkSearch()}
                 className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
               >
                 Agenda

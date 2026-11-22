@@ -1,3 +1,4 @@
+import { pilotLinkSearch } from "@/lib/api/pilotHook";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
@@ -141,7 +142,7 @@ export function PilotProjectDetailPage({
             title="Project not found"
             hint="This project doesn't exist or is not associated with your session."
             action={
-              <Link to="/projects" search={{ pilot: 1 }} className="text-sm underline">
+              <Link to="/projects" search={pilotLinkSearch()} className="text-sm underline">
                 Back to Project Desk
               </Link>
             }
@@ -161,7 +162,7 @@ export function PilotProjectDetailPage({
         <div className="flex flex-wrap items-center gap-2">
           <Link
             to="/projects"
-            search={{ pilot: 1 }}
+            search={pilotLinkSearch()}
             className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-xs font-medium hover:bg-accent"
           >
             <ArrowLeft className="size-3.5" />
@@ -441,7 +442,7 @@ function OverviewTab({ project }: { project: ProjectDto }) {
                   <Link
                     to="/leads/$id"
                     params={{ id: project.leadId }}
-                    search={{ pilot: 1 }}
+                    search={pilotLinkSearch()}
                     className="underline-offset-4 hover:underline"
                   >
                     {project.clientName}
@@ -475,7 +476,7 @@ function OverviewTab({ project }: { project: ProjectDto }) {
               <div>
                 <dt>Linked Deal</dt>
                 <dd>
-                  <Link to="/deals" search={{ pilot: 1 }} className="underline-offset-4 hover:underline">
+                  <Link to="/deals" search={pilotLinkSearch()} className="underline-offset-4 hover:underline">
                     View in Finance Studio
                   </Link>
                 </dd>
@@ -1651,7 +1652,7 @@ function FinanceTab({ project }: { project: ProjectDto }) {
 
         <p className="mt-4 text-xs text-muted-foreground border-t pt-3">
           Payments, voids, and payment-proof attachments are exclusively managed in{" "}
-          <Link to="/deals" search={{ pilot: 1 }} className="underline">
+          <Link to="/deals" search={pilotLinkSearch()} className="underline">
             Finance Studio
           </Link>
           . Projects and tasks never mutate the financial ledger.

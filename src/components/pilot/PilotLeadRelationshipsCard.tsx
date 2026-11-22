@@ -1,3 +1,4 @@
+import { pilotLinkSearch } from "@/lib/api/pilotHook";
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -110,7 +111,7 @@ export function PilotLeadRelationshipsCard({ leadId }: PilotLeadRelationshipsCar
                   <Link
                     to="/leads/$id"
                     params={{ id: rel.otherLead.id }}
-                    search={{ pilot: 1 }}
+                    search={pilotLinkSearch()}
                   >
                     <ExternalLink className="mr-1 size-3" />
                     Open

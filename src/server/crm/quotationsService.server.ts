@@ -234,6 +234,7 @@ export interface ListQuotationsFilters {
   dealId?: string | undefined;
   status?: string | undefined;
   search?: string | undefined;
+  q?: string | undefined;
   limit?: number | undefined;
   offset?: number | undefined;
   includeArchived?: boolean | undefined;
@@ -729,14 +730,15 @@ export async function listQuotationsRecords(
   if (filters.dealId) {
     conditions.push(eq(crmQuotations.dealId, filters.dealId));
   }
-  if (filters.status) {
+  if (filters.status && filters.status !== "all") {
     conditions.push(eq(crmQuotations.status, filters.status));
   }
   if (!filters.includeArchived) {
     conditions.push(isNull(crmQuotations.archivedAt));
   }
-  if (filters.search) {
-    const s = `%${filters.search.trim()}%`;
+  const searchTerm = (filters.search ?? filters.q ?? "").trim();
+  if (searchTerm) {
+    const s = `%${searchTerm}%`;
     conditions.push(
       or(
         like(crmQuotations.quotationNumber, s),

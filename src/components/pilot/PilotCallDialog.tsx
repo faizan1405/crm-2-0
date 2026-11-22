@@ -1,3 +1,4 @@
+import { pilotLinkSearch } from "@/lib/api/pilotHook";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -280,7 +281,7 @@ export function PilotCallDialog({
     onSaved?.(payload);
     onClose();
     if (andOpen) {
-      void navigate({ to: "/leads/$id", params: { id: leadId }, search: { pilot: 1 } });
+      void navigate({ to: "/leads/$id", params: { id: leadId }, search: pilotLinkSearch() });
     }
   };
 

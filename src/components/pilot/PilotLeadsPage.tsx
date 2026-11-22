@@ -1,3 +1,4 @@
+import { pilotLinkSearch } from "@/lib/api/pilotHook";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -252,7 +253,7 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
 
   const handleRowPick = (id: string) => {
     if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
-      void navigate({ to: "/leads/$id", params: { id }, search: { pilot: 1 } });
+      void navigate({ to: "/leads/$id", params: { id }, search: pilotLinkSearch() });
       return;
     }
     setSelectedId(id);
@@ -389,7 +390,7 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
       actions={
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" asChild className="rounded-full">
-            <Link to="/leads/bin" search={{ pilot: 1 }}>
+            <Link to="/leads/bin" search={pilotLinkSearch()}>
               <Archive className="size-4" />
               Waste & deleted
               {binTotal > 0 ? (
@@ -435,7 +436,7 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
             size="sm"
             variant="ghost"
             className="h-7 rounded-full"
-            onClick={() => void navigate({ to: "/leads", search: { pilot: 1 } })}
+            onClick={() => void navigate({ to: "/leads", search: pilotLinkSearch() })}
           >
             Clear date filter
           </Button>
@@ -609,7 +610,7 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
         <div className="flex items-center gap-2 text-xs">
           <Link
             to="/crm-config"
-            search={{ pilot: 1 }}
+            search={pilotLinkSearch()}
             className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 font-medium"
           >
             Manage Views & Tags <ChevronRight className="size-3" />
@@ -989,7 +990,7 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
                     <Pin className={cn("size-4", !l.pinned && "opacity-40")} />
                   </Button>
                 </div>
-                <Link to="/leads/$id" params={{ id: l.id }} search={{ pilot: 1 }}>
+                <Link to="/leads/$id" params={{ id: l.id }} search={pilotLinkSearch()}>
                   <h3 className="editorial text-[30px]">{l.name}</h3>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {l.company ?? "Independent"} · <span className="num">{l.phone}</span>
@@ -1092,7 +1093,7 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
                     asChild
                     className="ml-auto rounded-full"
                   >
-                    <Link to="/leads/$id" params={{ id: l.id }} search={{ pilot: 1 }}>
+                    <Link to="/leads/$id" params={{ id: l.id }} search={pilotLinkSearch()}>
                       View
                       <ArrowUpRight className="size-3.5" />
                     </Link>
@@ -1182,7 +1183,7 @@ export function PilotLeadsPage({ search }: { search: LeadsSearch }) {
                     <Link
                       to="/leads/$id"
                       params={{ id: l.id }}
-                      search={{ pilot: 1 }}
+                      search={pilotLinkSearch()}
                       className="hover:underline"
                     >
                       <Identity name={l.name} company={l.company} />
@@ -1511,7 +1512,7 @@ function PilotLeadInspector({
           Follow-up
         </Button>
         <Button type="button" variant="ghost" size="sm" asChild className="ml-auto rounded-full">
-          <Link to="/leads/$id" params={{ id: lead.id }} search={{ pilot: 1 }}>
+          <Link to="/leads/$id" params={{ id: lead.id }} search={pilotLinkSearch()}>
             Full record
             <ArrowUpRight className="size-3.5" />
           </Link>
@@ -1609,7 +1610,7 @@ function PilotLeadInspector({
               <span className="eyebrow">Follow-up (MariaDB)</span>
               <Link
                 to="/follow-ups"
-                search={{ pilot: 1 }}
+                search={pilotLinkSearch()}
                 className="text-xs font-medium text-primary hover:underline"
               >
                 All follow-ups →

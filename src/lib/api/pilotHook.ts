@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useResolvedAuthState } from "@/lib/auth/authClient";
+import { useAuthStore, useResolvedAuthState } from "@/lib/auth/authClient";
 import {
   normalizePilotParam,
   readLeadPilotSessionOptIn,
@@ -10,6 +10,21 @@ import {
 
 export interface PilotSearchFlag {
   pilot?: 1 | 0;
+}
+
+/**
+ * B14F: Returns clean `{}` (plus any extra params) when `CRM_V2_DEFAULT_BACKEND=true`,
+ * omitting unnecessary `?pilot=1` query parameters across all in-page CTA links and redirects.
+ * In legacy dev pilot mode (`crmV2DefaultBackend === false`), preserves `{ pilot: 1 }`.
+ */
+export function pilotLinkSearch<T extends Record<string, unknown> = Record<string, never>>(
+  extra?: T,
+): T & PilotSearchFlag {
+  const isDefault = useAuthStore.getState().crmV2DefaultBackend;
+  const base = (extra ?? {}) as T;
+  return isDefault
+    ? ({ ...base } as T & PilotSearchFlag)
+    : ({ ...base, pilot: 1 } as T & PilotSearchFlag);
 }
 
 export function parsePilotSearch(s: Record<string, unknown>): PilotSearchFlag {

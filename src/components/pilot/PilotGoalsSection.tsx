@@ -1,3 +1,4 @@
+import { pilotLinkSearch } from "@/lib/api/pilotHook";
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
@@ -237,7 +238,7 @@ export function PilotGoalsSection({ unknownWonDatesCount = 0 }: PilotGoalsSectio
 
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild type="button" size="sm" variant="outline" className="rounded-lg gap-1.5">
-            <Link to="/settings" search={{ pilot: 1, section: "notifications" }}>
+            <Link to="/settings" search={pilotLinkSearch({ section: "notifications" })}>
               <Settings className="size-3.5" />
               Goal alert prefs
             </Link>

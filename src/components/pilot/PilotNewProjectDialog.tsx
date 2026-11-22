@@ -1,3 +1,4 @@
+import { pilotLinkSearch } from "@/lib/api/pilotHook";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
@@ -168,7 +169,7 @@ export function PilotNewProjectDialog({
       void navigate({
         to: "/projects/$id",
         params: { id: res.project.id },
-        search: { pilot: 1 },
+        search: pilotLinkSearch(),
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to create project.";
