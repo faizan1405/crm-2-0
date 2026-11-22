@@ -193,6 +193,19 @@ export interface MigrationAnalysisReport {
     followUpActiveLocksResolved: number;
     crmV1Untouched: true;
   };
+  duplicatePhones?: Array<{
+    phoneKey: string;
+    leadIds: string[];
+  }>;
+  duplicateIds?: Array<{
+    entity: MigrationEntityKey;
+    legacyId: string;
+    occurrences: number;
+  }>;
+  unsupportedFields?: Array<{
+    entity: string;
+    fieldNames: string[];
+  }>;
   errors: string[];
   warnings: string[];
   readyForShadowStaging: boolean;

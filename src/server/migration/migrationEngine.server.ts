@@ -197,6 +197,47 @@ function normalizeDealStorageStatus(
   return "active";
 }
 
+const CANONICAL_CALL_OUTCOMES: Record<string, string> = {
+  connected: "Connected",
+  "not picked": "Not picked",
+  not_picked: "Not picked",
+  busy: "Busy",
+  "call back later": "Call back later",
+  callback: "Call back later",
+  interested: "Interested",
+  "not interested": "Not interested",
+  not_interested: "Not interested",
+  qualified: "Qualified",
+  "proposal sent": "Proposal Sent",
+  proposal_sent: "Proposal Sent",
+  won: "Won",
+  lost: "Lost",
+};
+
+function normalizeCallOutcome(raw?: string): string {
+  const key = (raw ?? "connected").trim().toLowerCase();
+  return CANONICAL_CALL_OUTCOMES[key] ?? "Connected";
+}
+
+function toIstTimeHm(isoDateStr?: string | null): string {
+  if (!isoDateStr) return "12:00";
+  try {
+    const dt = new Date(isoDateStr);
+    if (Number.isNaN(dt.getTime())) return "12:00";
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(dt);
+    const h = parts.find((p) => p.type === "hour")?.value ?? "12";
+    const m = parts.find((p) => p.type === "minute")?.value ?? "00";
+    return `${h}:${m}`;
+  } catch {
+    return "12:00";
+  }
+}
+
 function createEmptyEntitySummary(entity: MigrationEntityKey): MigrationEntitySummary {
   const meta = ENTITY_META[entity];
   return {
@@ -625,6 +666,8 @@ export function analyzeMigrationSource(params: {
       activeFollowUpLockSeen.add(mappedLeadId);
     }
 
+    const dueIso = String(raw["dueAt"] ?? new Date().toISOString());
+    const nowMysql = mapper.toMysqlUtc(new Date().toISOString())!;
     entities.followUps.validCount++;
     entities.followUps.toCreate++;
     mapped.followUps.push({
@@ -634,15 +677,20 @@ export function analyzeMigrationSource(params: {
       leadId: mappedLeadId,
       activeLeadLock,
       type: String(raw["type"] ?? "call"),
-      dueAt: mapper.toMysqlUtc(String(raw["dueAt"] ?? new Date().toISOString())),
-      dueIstDate:
-        mapper.toIstDate(String(raw["dueAt"] ?? new Date().toISOString())) ?? "2026-01-01",
+      dueAt: mapper.toMysqlUtc(dueIso),
+      dueIstDate: mapper.toIstDate(dueIso) ?? "2026-01-01",
+      dueIstTime: toIstTimeHm(dueIso),
       note: typeof raw["note"] === "string" ? raw["note"] : null,
       completedAt: isCompleted
         ? mapper.toMysqlUtc(String(raw["completedAt"] ?? new Date().toISOString()))
         : null,
       cancelledAt,
       cancelReason,
+      createdByUserId: ownerUserId,
+      updatedByUserId: ownerUserId,
+      version: 1,
+      createdAt: mapper.toMysqlUtc(String(raw["createdAt"] ?? dueIso)) ?? nowMysql,
+      updatedAt: nowMysql,
     });
   }
 
@@ -671,18 +719,34 @@ export function analyzeMigrationSource(params: {
       entities.callLogs.errorCount++;
       continue;
     }
+    const occurredIso = String(raw["at"] ?? raw["occurredAt"] ?? new Date().toISOString());
+    const normalizedOutcome = normalizeCallOutcome(
+      typeof raw["outcome"] === "string" ? raw["outcome"] : undefined,
+    );
+    const nowMysql = mapper.toMysqlUtc(new Date().toISOString())!;
+    const mappedLeadId = mapper.mapId(leadId, "lead");
+    const matchingAct = mapped.activities.find((a) => a.leadId === mappedLeadId);
     entities.callLogs.validCount++;
     entities.callLogs.toCreate++;
     mapped.callLogs.push({
       id: mapper.mapId(id, "call"),
       legacyId: id,
       ownerUserId,
-      leadId: mapper.mapId(leadId, "lead"),
-      outcome: String(raw["outcome"] ?? "connected"),
+      leadId: mappedLeadId,
+      actorUserId: ownerUserId,
+      outcome: normalizedOutcome,
+      connected: normalizedOutcome !== "Not picked" && normalizedOutcome !== "Busy",
+      recordingSource: "user_recorded",
+      dialSource: String(raw["dialSource"] ?? "lead_detail"),
+      stageBefore: String(raw["stageBefore"] ?? "new"),
+      stageAfter: String(raw["stageAfter"] ?? "contacted"),
+      leadActivityId: matchingAct ? matchingAct.id : mapper.mapId(`act_call_${id}`, "act"),
       notes: typeof raw["notes"] === "string" ? raw["notes"] : null,
-      occurredAt: mapper.toMysqlUtc(
-        String(raw["at"] ?? raw["occurredAt"] ?? new Date().toISOString()),
-      ),
+      occurredAt: mapper.toMysqlUtc(occurredIso) ?? nowMysql,
+      occurredIstDate: mapper.toIstDate(occurredIso) ?? "2026-01-01",
+      occurredIstTime: toIstTimeHm(occurredIso),
+      createdAt: nowMysql,
+      updatedAt: nowMysql,
     });
   }
 
@@ -708,15 +772,29 @@ export function analyzeMigrationSource(params: {
       entities.whatsAppLogs.errorCount++;
       continue;
     }
+    const sentIso = String(raw["sentAt"] ?? raw["at"] ?? new Date().toISOString());
+    const nowMysql = mapper.toMysqlUtc(new Date().toISOString())!;
+    const mappedLeadId = mapper.mapId(leadId, "lead");
+    const matchingAct = mapped.activities.find((a) => a.leadId === mappedLeadId);
     entities.whatsAppLogs.validCount++;
     entities.whatsAppLogs.toCreate++;
     mapped.whatsAppLogs.push({
       id: mapper.mapId(id, "wa"),
       legacyId: id,
       ownerUserId,
-      leadId: mapper.mapId(leadId, "lead"),
-      messageBody: String(raw["messageBody"] ?? raw["text"] ?? ""),
-      sentAt: mapper.toMysqlUtc(String(raw["sentAt"] ?? raw["at"] ?? new Date().toISOString())),
+      leadId: mappedLeadId,
+      actorUserId: ownerUserId,
+      purpose: String(raw["purpose"] ?? "followup"),
+      recipientPhone: String(raw["recipientPhone"] ?? "0000000000"),
+      messageText: String(raw["messageBody"] ?? raw["text"] ?? ""),
+      confirmationStatus: "owner_confirmed_sent",
+      composerSource: String(raw["composerSource"] ?? "lead_detail"),
+      leadActivityId: matchingAct ? matchingAct.id : mapper.mapId(`act_wa_${id}`, "act"),
+      confirmedAt: mapper.toMysqlUtc(sentIso) ?? nowMysql,
+      confirmedIstDate: mapper.toIstDate(sentIso) ?? "2026-01-01",
+      confirmedIstTime: toIstTimeHm(sentIso),
+      createdAt: nowMysql,
+      updatedAt: nowMysql,
     });
   }
 
@@ -1089,7 +1167,9 @@ export function analyzeMigrationSource(params: {
     entities.paymentProofs.toCreate++;
     mapped.paymentProofs.push({
       ...row,
+      activePaymentLock: row.paymentId,
       storageKey: safeStorageKey,
+      storageStatus: "verified",
       mimeType: resolvedMime,
       sha256Hash: resolvedSha,
       fileSize: bytes ? bytes.byteLength : raw.fileSize,
@@ -1683,6 +1763,25 @@ export function analyzeMigrationSource(params: {
     hostingerCapacity.fitsWithinHostingerBudget &&
     blockingFkErrors.length === 0;
 
+  // Detect duplicate normalized phone numbers across leads
+  const phoneToLeads = new Map<string, string[]>();
+  for (const l of [...mapped.leads, ...mapped.archivedLeads]) {
+    const pk = String(l["phoneKey"] ?? "");
+    if (pk && pk !== "0000000000") {
+      const list = phoneToLeads.get(pk) ?? [];
+      list.push(String(l["legacyId"] ?? l.id));
+      phoneToLeads.set(pk, list);
+    }
+  }
+  const duplicatePhones = Array.from(phoneToLeads.entries())
+    .filter(([, ids]) => ids.length > 1)
+    .map(([phoneKey, leadIds]) => ({ phoneKey, leadIds }));
+  if (duplicatePhones.length > 0) {
+    warnings.push(
+      `${duplicatePhones.length} duplicate normalized phone number(s) detected across imported leads.`,
+    );
+  }
+
   const report: MigrationAnalysisReport = {
     ok,
     wizardVersion: MIGRATION_WIZARD_VERSION,
@@ -1721,6 +1820,7 @@ export function analyzeMigrationSource(params: {
       followUpActiveLocksResolved,
       crmV1Untouched: true,
     },
+    duplicatePhones,
     errors,
     warnings: [...warnings, ...financialReconciliation.warnings],
     readyForShadowStaging: ok,
