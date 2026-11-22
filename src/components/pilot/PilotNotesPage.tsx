@@ -122,6 +122,8 @@ export function PilotNotesPage() {
     }
   }, [notes, selId, q, tagFilter, pinnedOnly]);
 
+  const notesRef = useRef(notes);
+  notesRef.current = notes;
   const selIdRef = useRef<string | null>(selId);
   selIdRef.current = selId;
   const versionRef = useRef<number>(1);
@@ -236,7 +238,8 @@ export function PilotNotesPage() {
     setConflictLatest(null);
     setStatus("idle");
 
-    if (!sel) {
+    const active = notesRef.current.find((n) => n.id === selId) ?? null;
+    if (!active) {
       setTitle("");
       setTags([]);
       setLinkedLeadId(null);
@@ -244,15 +247,15 @@ export function PilotNotesPage() {
       return;
     }
 
-    setTitle(sel.title);
-    setTags(sel.tags);
-    setLinkedLeadId(sel.linkedLeadId);
-    setLinkedProjectId(sel.linkedProjectId);
-    versionRef.current = sel.version;
+    setTitle(active.title);
+    setTags(active.tags);
+    setLinkedLeadId(active.linkedLeadId);
+    setLinkedProjectId(active.linkedProjectId);
+    versionRef.current = active.version;
     if (editor) {
-      editor.commands.setContent(noteDoc(sel) as never, { emitUpdate: false });
+      editor.commands.setContent(noteDoc(active) as never, { emitUpdate: false });
     }
-  }, [sel?.id, editor]);
+  }, [selId, editor]);
 
   const handleSelect = async (id: string) => {
     if (id !== selId) {
