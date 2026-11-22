@@ -113,6 +113,13 @@
       "when": 1794417986490,
       "tag": "0015_b11c_business_mariadb_blob",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1795367368781,
+      "tag": "0016_b16b_personal_notes",
+      "breakpoints": true
     }
   ]
 }

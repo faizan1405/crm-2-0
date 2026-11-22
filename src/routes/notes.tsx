@@ -6,6 +6,9 @@ import StarterKit from "@tiptap/starter-kit";
 import { TaskList, TaskItem } from "@tiptap/extension-list";
 import { Pin, Trash2, Search, StickyNote, Plus, Bold, Italic, List, ListOrdered, ListChecks, Pilcrow, Undo2, Redo2, ArrowLeft, Check, Loader2, AlertCircle } from "lucide-react";
 import { Shell, Empty, selectCls } from "@/components/crm/Shell";
+import { AppShellSkeleton } from "@/components/crm/ShellPrimitives";
+import { PilotNotesPage } from "@/components/pilot/PilotNotesPage";
+import { parsePilotSearch, useLeadPilotState } from "@/lib/api/pilotHook";
 import { useCRM } from "@/lib/crm/store";
 import { uid, relative } from "@/lib/crm/format";
 import type { Note, NoteDoc } from "@/lib/crm/types";
@@ -18,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { isStaleError } from "@/lib/crm/crossTab";
 
 export const Route = createFileRoute("/notes")({
+  validateSearch: (s: Record<string, unknown>) => parsePilotSearch(s),
   head: () => ({
     meta: [
       { property: "og:type", content: "website" },
@@ -28,8 +32,16 @@ export const Route = createFileRoute("/notes")({
       { property: "og:description", content: "Private notes with checklists, numbered and bullet lists, saved automatically." },
     ],
   }),
-  component: Notes,
+  component: NotesEntry,
 });
+
+function NotesEntry() {
+  const search = Route.useSearch();
+  const { pilotActive, pilotResolved } = useLeadPilotState(search.pilot);
+  if (pilotActive) return <PilotNotesPage />;
+  if (!pilotResolved) return <AppShellSkeleton />;
+  return <Notes />;
+}
 
 type Draft = { id: string; title: string; doc: NoteDoc };
 

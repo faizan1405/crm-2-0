@@ -24,6 +24,7 @@ import {
   SlidersHorizontal,
   Inbox,
   Workflow,
+  StickyNote,
 } from "lucide-react";
 import { logoutOwner, useResolvedAuthState } from "@/lib/auth/authClient";
 import { setLeadPilotSessionOptIn } from "@/lib/api/pilotGate";
@@ -45,6 +46,7 @@ const PILOT_LINKS = [
   { to: "/sales-studio" as const, label: "Sales Studio", icon: FileText, pilot: true },
   { to: "/follow-ups" as const, label: "Follow-ups", icon: CalendarClock, pilot: true },
   { to: "/projects" as const, label: "Projects", icon: FolderKanban, pilot: true },
+  { to: "/notes" as const, label: "Personal Notes", icon: StickyNote, pilot: true },
   { to: "/analytics" as const, label: "Analytics", icon: BarChart3, pilot: true },
   { to: "/my-performance" as const, label: "My Performance", icon: Target, pilot: true },
   { to: "/settings" as const, label: "Settings", icon: Settings, pilot: true },

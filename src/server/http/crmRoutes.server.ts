@@ -23,6 +23,16 @@ import {
   isLeadPilotAvailable,
   verifyDisposableAutomationTestDatabaseConfig,
 } from "../config/env.server";
+import {
+  createPersonalNote,
+  deletePersonalNote,
+  getPersonalNoteById,
+  listPersonalNotes,
+  NOTE_SORTS,
+  pinPersonalNote,
+  updatePersonalNote,
+  type NoteSortApi,
+} from "../crm/notesService.server";
 import { createLeadActivity, listLeadActivities } from "../crm/activitiesService.server";
 import {
   createCallLogRecord,
@@ -1306,7 +1316,8 @@ export async function handleCrmApiRequest(
     !pathname.startsWith("/api/v1/saved-views") &&
     !pathname.startsWith("/api/v1/inbox") &&
     !pathname.startsWith("/api/v1/vault") &&
-    !pathname.startsWith("/api/v1/automations")
+    !pathname.startsWith("/api/v1/automations") &&
+    !pathname.startsWith("/api/v1/notes")
   ) {
     return null;
   }
@@ -5324,6 +5335,122 @@ export async function handleCrmApiRequest(
         }
 
         return null;
+      }
+
+      return null;
+    }
+
+    // -------------------------------------------------------------------------
+    // Personal Notes (/api/v1/notes*) — Checkpoint B16B
+    // -------------------------------------------------------------------------
+    if (segments[2] === "notes") {
+      // GET|POST /api/v1/notes
+      if (segments.length === 3) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const url = new URL(request.url, "http://127.0.0.1");
+          const rawSort = url.searchParams.get("sort");
+          const sort: NoteSortApi | undefined =
+            rawSort && (NOTE_SORTS as readonly string[]).includes(rawSort)
+              ? (rawSort as NoteSortApi)
+              : undefined;
+          const rawPinned = url.searchParams.get("pinned");
+          const pinned =
+            rawPinned === "true" ? true : rawPinned === "false" ? false : undefined;
+          const rawLimit = url.searchParams.get("limit");
+          const parsedLimit = rawLimit ? Number(rawLimit) : undefined;
+          const limit =
+            parsedLimit !== undefined && Number.isFinite(parsedLimit) && parsedLimit > 0
+              ? Math.floor(parsedLimit)
+              : undefined;
+
+          const result = await listPersonalNotes(auth.db, auth.userId, {
+            q: url.searchParams.get("q") ?? undefined,
+            tag: url.searchParams.get("tag") ?? undefined,
+            pinned,
+            leadId: url.searchParams.get("leadId") ?? undefined,
+            projectId: url.searchParams.get("projectId") ?? undefined,
+            sort,
+            limit,
+          });
+          return jsonResponse({ ok: true, ...result }, 200);
+        }
+
+        if (request.method === "POST") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const note = await createPersonalNote(auth.db, auth.userId, parsedBody.data);
+          return jsonResponse({ ok: true, note }, 201);
+        }
+
+        return methodNotAllowed(["GET", "POST"]);
+      }
+
+      const idSeg = decodeIdSegment(segments[3] ?? "");
+      if (!idSeg.ok) return idSeg.response;
+      const noteId = idSeg.value;
+
+      // GET|PATCH|DELETE /api/v1/notes/:id
+      if (segments.length === 4) {
+        if (request.method === "GET") {
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const note = await getPersonalNoteById(auth.db, auth.userId, noteId);
+          return jsonResponse({ ok: true, note }, 200);
+        }
+
+        if (request.method === "PATCH") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const parsedBody = await parseJsonObject(request);
+          if (!parsedBody.ok) return parsedBody.response;
+
+          const note = await updatePersonalNote(auth.db, auth.userId, noteId, parsedBody.data);
+          return jsonResponse({ ok: true, note }, 200);
+        }
+
+        if (request.method === "DELETE") {
+          const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: false });
+          if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+          const auth = await requireAuthenticatedOwnerDb(request, env);
+          if (!auth.ok) return auth.response;
+
+          const deleted = await deletePersonalNote(auth.db, auth.userId, noteId);
+          return jsonResponse({ ok: true, ...deleted }, 200);
+        }
+
+        return methodNotAllowed(["GET", "PATCH", "DELETE"]);
+      }
+
+      // POST /api/v1/notes/:id/pin
+      if (segments.length === 5 && segments[4] === "pin") {
+        if (request.method !== "POST") return methodNotAllowed(["POST"]);
+        const csrf = verifyCsrfAndOrigin(request, env, { requireJsonContentType: true });
+        if (!csrf.ok) return csrfRejectResponse(csrf.code, csrf.message);
+
+        const auth = await requireAuthenticatedOwnerDb(request, env);
+        if (!auth.ok) return auth.response;
+
+        const parsedBody = await parseJsonObject(request);
+        if (!parsedBody.ok) return parsedBody.response;
+
+        const note = await pinPersonalNote(auth.db, auth.userId, noteId, parsedBody.data);
+        return jsonResponse({ ok: true, note }, 200);
       }
 
       return null;

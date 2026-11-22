@@ -1697,6 +1697,43 @@ export const b1aFoundationSchema = {
   crmSchemaMeta,
 } as const;
 
+/**
+ * B16B: Owner-scoped Personal Notes with rich-text Tiptap JSON, tags, pinning,
+ * optional Lead/Project links, optimistic version concurrency, and soft-archive safety.
+ */
+export const crmPersonalNotes = mysqlTable(
+  "crm_personal_notes",
+  {
+    id: crmId("id").primaryKey(),
+    ownerUserId: crmId("owner_user_id")
+      .notNull()
+      .references(() => crmUsers.id, { onDelete: "restrict" }),
+    title: varchar("title", { length: 200 }).notNull().default(""),
+    bodyText: text("body_text").notNull(),
+    docJson: text("doc_json").notNull(),
+    tagsJson: text("tags_json").notNull(),
+    color: varchar("color", { length: 24 }),
+    isPinned: boolean("is_pinned").notNull().default(false),
+    linkedLeadId: crmId("linked_lead_id").references(() => crmLeads.id, { onDelete: "set null" }),
+    linkedProjectId: crmId("linked_project_id").references(() => crmProjects.id, {
+      onDelete: "set null",
+    }),
+    version: versionCol("version"),
+    archivedAt: utcDateTime("archived_at"),
+    ...auditTimestamps(),
+  },
+  (t) => [
+    index("idx_crm_personal_notes_owner_updated").on(t.ownerUserId, t.isPinned, t.updatedAt),
+    index("idx_crm_personal_notes_owner_lead").on(t.ownerUserId, t.linkedLeadId),
+    index("idx_crm_personal_notes_owner_project").on(t.ownerUserId, t.linkedProjectId),
+    index("idx_crm_personal_notes_owner_archived").on(t.ownerUserId, t.archivedAt),
+  ],
+);
+
+export const crmNotesSchema = {
+  crmPersonalNotes,
+} as const;
+
 export const authSchema = {
   crmSchemaMeta,
   crmUsers,
@@ -1759,6 +1796,7 @@ export const crmCoreSchema = {
   ...crmSettingsGoalsSchema,
   ...crmInboxSchema,
   ...crmAutomationSchema,
+  ...crmNotesSchema,
 } as const;
 
 export const appSchema = {
