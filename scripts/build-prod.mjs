@@ -57,12 +57,20 @@ async function main() {
   }
 
   if ((result.status ?? 1) === 0 && !isExplicitDevMode) {
-    const cronSrc = path.resolve(process.cwd(), "scripts/run-automation-cron.mjs");
     const outServerDir = path.resolve(process.cwd(), ".output/server");
-    if (fs.existsSync(cronSrc) && fs.existsSync(outServerDir)) {
-      // Nitro strips mysql2 from .output/server/node_modules, so bundle the
-      // Hostinger cron CLI with rolldown to guarantee standalone execution.
-      await bundleStandaloneCronRunner(cronSrc, path.join(outServerDir, "run-cron.mjs"));
+    const standaloneScripts = [
+      { src: "scripts/run-automation-cron.mjs", out: "run-cron.mjs" },
+      { src: "scripts/bootstrap-owner.mjs", out: "bootstrap-owner.mjs" },
+    ];
+    if (fs.existsSync(outServerDir)) {
+      for (const item of standaloneScripts) {
+        const srcPath = path.resolve(process.cwd(), item.src);
+        if (fs.existsSync(srcPath)) {
+          // Nitro strips mysql2 from .output/server/node_modules, so bundle
+          // Hostinger CLI scripts with rolldown to guarantee standalone execution.
+          await bundleStandaloneCronRunner(srcPath, path.join(outServerDir, item.out));
+        }
+      }
     }
   }
 
