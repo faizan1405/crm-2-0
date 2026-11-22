@@ -40,7 +40,11 @@ describe("Checkpoint B13: PilotMigrationWizard UI & Browser Storage Isolation", 
               safetyMarginMiB: 16,
             },
             guardrails: [
-              { id: "hostinger_only", label: "Hostinger-exclusive target (Cloudflare R2 not required)", enforced: true },
+              {
+                id: "hostinger_only",
+                label: "Hostinger-exclusive target (Cloudflare R2 not required)",
+                enforced: true,
+              },
             ],
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },

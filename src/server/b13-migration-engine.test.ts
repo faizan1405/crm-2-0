@@ -102,7 +102,9 @@ describe("Checkpoint B13: Existing Data Migration Engine & Financial Accuracy", 
 
     expect(report.ok).toBe(false);
     expect(report.financialReconciliation.financialParityPassed).toBe(false);
-    expect(report.errors.some((e) => e.includes("syn_pay_01") && e.includes("invalid monetary"))).toBe(true);
+    expect(
+      report.errors.some((e) => e.includes("syn_pay_01") && e.includes("invalid monetary")),
+    ).toBe(true);
   });
 
   it("detects and blocks orphan payment foreign keys", () => {
@@ -115,7 +117,10 @@ describe("Checkpoint B13: Existing Data Migration Engine & Financial Accuracy", 
     expect(report.ok).toBe(false);
     expect(
       report.unresolvedForeignKeys.some(
-        (fk) => fk.entity === "payments" && fk.recordId === "syn_pay_orphan" && fk.missingTargetId === "nonexistent_deal_999",
+        (fk) =>
+          fk.entity === "payments" &&
+          fk.recordId === "syn_pay_orphan" &&
+          fk.missingTargetId === "nonexistent_deal_999",
       ),
     ).toBe(true);
   });
@@ -130,7 +135,9 @@ describe("Checkpoint B13: Existing Data Migration Engine & Financial Accuracy", 
     expect(report.ok).toBe(false);
     expect(report.proofVerification.failed).toBe(1);
     expect(
-      report.proofVerification.checks.some((c) => c.attachmentId === "syn_att_01" && c.status === "hash_mismatch"),
+      report.proofVerification.checks.some(
+        (c) => c.attachmentId === "syn_att_01" && c.status === "hash_mismatch",
+      ),
     ).toBe(true);
   });
 
@@ -139,14 +146,25 @@ describe("Checkpoint B13: Existing Data Migration Engine & Financial Accuracy", 
       version: 7,
       state: {
         leads: [
-          { id: "l1", name: "JSON Snapshot Client", phone: "9876543210", status: "new", createdAt: "2026-09-01T00:00:00.000Z" },
+          {
+            id: "l1",
+            name: "JSON Snapshot Client",
+            phone: "9876543210",
+            status: "new",
+            createdAt: "2026-09-01T00:00:00.000Z",
+          },
         ],
         deals: [
-          { id: "d1", leadId: "l1", name: "JSON Deal", value: "25000.50", status: "active", createdAt: "2026-09-02T00:00:00.000Z" },
+          {
+            id: "d1",
+            leadId: "l1",
+            name: "JSON Deal",
+            value: "25000.50",
+            status: "active",
+            createdAt: "2026-09-02T00:00:00.000Z",
+          },
         ],
-        payments: [
-          { id: "p1", dealId: "d1", amount: "10000.25", date: "2026-09-03" },
-        ],
+        payments: [{ id: "p1", dealId: "d1", amount: "10000.25", date: "2026-09-03" }],
       },
     };
     const { report } = analyzeMigrationSource({
@@ -204,7 +222,9 @@ describe("Checkpoint B13: Existing Data Migration Engine & Financial Accuracy", 
     expect(cleaned).not.toHaveProperty("passwordHash");
     expect((cleaned.nested as Record<string, unknown>)["apiKey"]).toBeUndefined();
     expect(
-      ((cleaned.fieldValues as Record<string, Record<string, unknown>>)["lead1"] ?? {})["cf_token_note"],
+      ((cleaned.fieldValues as Record<string, Record<string, unknown>>)["lead1"] ?? {})[
+        "cf_token_note"
+      ],
     ).toBe("keep custom field value");
   });
 });

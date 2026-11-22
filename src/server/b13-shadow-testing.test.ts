@@ -1,10 +1,7 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  assertSafeShadowTarget,
-  runSyntheticShadowMigrationTest,
-} from "./migration/index.server";
+import { assertSafeShadowTarget, runSyntheticShadowMigrationTest } from "./migration/index.server";
 
 describe("Checkpoint B13: Synthetic Staging Shadow Testing & Target Guardrails", () => {
   it("passes all 8 synthetic shadow migration assertions (entities, 0-paise parity, idempotency, rollback, Hostinger-only)", () => {

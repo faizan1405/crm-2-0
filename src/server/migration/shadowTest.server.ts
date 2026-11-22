@@ -134,7 +134,8 @@ export function runSyntheticShadowMigrationTest(params?: {
   assertions.push({
     id: "entity_validation",
     name: "All CRM Entities Validated",
-    passed: report.ok && report.unresolvedForeignKeys.filter((f) => f.severity === "error").length === 0,
+    passed:
+      report.ok && report.unresolvedForeignKeys.filter((f) => f.severity === "error").length === 0,
     detail: `Validated ${report.totalValidRecords}/${report.totalSourceRecords} records across 27 mapped entity groups with 0 blocking FK errors.`,
   });
 

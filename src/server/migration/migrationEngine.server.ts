@@ -53,14 +53,31 @@ export interface MappedMigrationPayload {
   leads: Array<Record<string, unknown> & { id: string }>;
   archivedLeads: Array<Record<string, unknown> & { id: string }>;
   activities: Array<Record<string, unknown> & { id: string; leadId: string }>;
-  followUps: Array<Record<string, unknown> & { id: string; leadId: string; activeLeadLock: string | null }>;
+  followUps: Array<
+    Record<string, unknown> & { id: string; leadId: string; activeLeadLock: string | null }
+  >;
   callLogs: Array<Record<string, unknown> & { id: string; leadId: string }>;
   whatsAppLogs: Array<Record<string, unknown> & { id: string; leadId: string }>;
   deals: Array<Record<string, unknown> & { id: string; leadId: string; valuePaise: number }>;
-  dealMilestones: Array<Record<string, unknown> & { id: string; dealId: string; amountPaise: number }>;
-  payments: Array<Record<string, unknown> & { id: string; dealId: string; amountPaise: number; voided: boolean }>;
+  dealMilestones: Array<
+    Record<string, unknown> & { id: string; dealId: string; amountPaise: number }
+  >;
+  payments: Array<
+    Record<string, unknown> & { id: string; dealId: string; amountPaise: number; voided: boolean }
+  >;
   financeEvents: Array<Record<string, unknown> & { id: string; dealId: string }>;
-  paymentProofs: Array<Record<string, unknown> & { id: string; paymentId: string; dealId: string }>;
+  paymentProofs: Array<
+    Record<string, unknown> & {
+      id: string;
+      paymentId: string;
+      dealId: string;
+      storageKey: string;
+      sha256Hash: string;
+      mimeType: string;
+      fileSize: number;
+    }
+  >;
+  proofBinaries: Map<string, Uint8Array>;
   quotationTemplates: Array<Record<string, unknown> & { id: string }>;
   quotations: Array<Record<string, unknown> & { id: string }>;
   projects: Array<Record<string, unknown> & { id: string }>;
@@ -73,7 +90,9 @@ export interface MappedMigrationPayload {
   leadTags: Array<Record<string, unknown> & { id: string; leadId: string; tagId: string }>;
   savedViews: Array<Record<string, unknown> & { id: string }>;
   inboxItems: Array<Record<string, unknown> & { id: string; leadId: string }>;
-  leadRelationships: Array<Record<string, unknown> & { id: string; leadAId: string; leadBId: string }>;
+  leadRelationships: Array<
+    Record<string, unknown> & { id: string; leadAId: string; leadBId: string }
+  >;
   automationRules: Array<Record<string, unknown> & { id: string; status: string }>;
   ownerSettings: Array<Record<string, unknown> & { id: string }>;
   salesGoals: Array<Record<string, unknown> & { id: string }>;
@@ -144,6 +163,7 @@ function createEmptyMappedPayload(ownerUserId: string): MappedMigrationPayload {
     payments: [],
     financeEvents: [],
     paymentProofs: [],
+    proofBinaries: new Map<string, Uint8Array>(),
     quotationTemplates: [],
     quotations: [],
     projects: [],
@@ -174,7 +194,13 @@ function asRecord(val: unknown): Record<string, unknown> {
 }
 
 function isZipBytes(bytes: Uint8Array): boolean {
-  return bytes.byteLength >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
+  return (
+    bytes.byteLength >= 4 &&
+    bytes[0] === 0x50 &&
+    bytes[1] === 0x4b &&
+    bytes[2] === 0x03 &&
+    bytes[3] === 0x04
+  );
 }
 
 interface ExtractedSourceData {
@@ -192,7 +218,8 @@ function extractMigrationSource(
 
   if (!(input instanceof Uint8Array) && typeof input !== "string") {
     const obj = asRecord(input);
-    const unwrapped = obj["state"] && typeof obj["state"] === "object" ? asRecord(obj["state"]) : obj;
+    const unwrapped =
+      obj["state"] && typeof obj["state"] === "object" ? asRecord(obj["state"]) : obj;
     return {
       format: "legacy-json-snapshot",
       collections: unwrapped,
@@ -203,7 +230,9 @@ function extractMigrationSource(
 
   if (input instanceof Uint8Array && isZipBytes(input)) {
     if (input.byteLength > ARCHIVE_LIMITS.maxArchiveBytes) {
-      parseErrors.push(`Archive exceeds maximum allowed size (${ARCHIVE_LIMITS.maxArchiveBytes} bytes).`);
+      parseErrors.push(
+        `Archive exceeds maximum allowed size (${ARCHIVE_LIMITS.maxArchiveBytes} bytes).`,
+      );
       return { format: "data-vault-zip", collections: {}, binaryFiles, parseErrors };
     }
 
@@ -289,7 +318,8 @@ function extractMigrationSource(
   try {
     const parsed = JSON.parse(rawText) as unknown;
     const obj = asRecord(parsed);
-    const unwrapped = obj["state"] && typeof obj["state"] === "object" ? asRecord(obj["state"]) : obj;
+    const unwrapped =
+      obj["state"] && typeof obj["state"] === "object" ? asRecord(obj["state"]) : obj;
     return {
       format: "legacy-json-snapshot",
       collections: unwrapped,
@@ -382,7 +412,9 @@ export function analyzeMigrationSource(params: {
   const rawBin = asArray<Record<string, unknown>>(collections["bin"]);
   entities.archivedLeads.sourceCount = rawBin.length;
   for (const entry of rawBin) {
-    const rawLead = (entry["lead"] ? asRecord(entry["lead"]) : entry) as unknown as LegacyLeadRecord;
+    const rawLead = (entry["lead"]
+      ? asRecord(entry["lead"])
+      : entry) as unknown as LegacyLeadRecord;
     if (!rawLead?.id || !rawLead?.name?.trim()) {
       entities.archivedLeads.errorCount++;
       errors.push("Archived bin lead entry missing required 'id' or 'name'.");
@@ -406,7 +438,9 @@ export function analyzeMigrationSource(params: {
         ...row,
         legacyId: rawLead.id,
         lifecycleStatus: "archived",
-        archivedAt: mapper.toMysqlUtc(String(entry["deletedAt"] ?? rawLead.updatedAt ?? rawLead.createdAt)),
+        archivedAt: mapper.toMysqlUtc(
+          String(entry["deletedAt"] ?? rawLead.updatedAt ?? rawLead.createdAt),
+        ),
         archiveReason: typeof entry["reason"] === "string" ? entry["reason"] : "Migrated from Bin",
       });
     }
@@ -450,8 +484,12 @@ export function analyzeMigrationSource(params: {
       type: String(raw["type"] ?? "note"),
       text: String(raw["text"] ?? raw["note"] ?? ""),
       outcome: typeof raw["outcome"] === "string" ? raw["outcome"] : null,
-      occurredAt: mapper.toMysqlUtc(String(raw["at"] ?? raw["occurredAt"] ?? raw["createdAt"] ?? new Date().toISOString())),
-      createdAt: mapper.toMysqlUtc(String(raw["createdAt"] ?? raw["at"] ?? new Date().toISOString())),
+      occurredAt: mapper.toMysqlUtc(
+        String(raw["at"] ?? raw["occurredAt"] ?? raw["createdAt"] ?? new Date().toISOString()),
+      ),
+      createdAt: mapper.toMysqlUtc(
+        String(raw["createdAt"] ?? raw["at"] ?? new Date().toISOString()),
+      ),
     });
   }
 
@@ -491,7 +529,9 @@ export function analyzeMigrationSource(params: {
     const isCancelled = Boolean(raw["cancelledAt"] || raw["status"] === "cancelled");
     let activeLeadLock: string | null = !isCompleted && !isCancelled ? mappedLeadId : null;
     let cancelReason = typeof raw["cancelReason"] === "string" ? raw["cancelReason"] : null;
-    let cancelledAt = isCancelled ? mapper.toMysqlUtc(String(raw["cancelledAt"] ?? new Date().toISOString())) : null;
+    let cancelledAt = isCancelled
+      ? mapper.toMysqlUtc(String(raw["cancelledAt"] ?? new Date().toISOString()))
+      : null;
 
     if (activeLeadLock && activeFollowUpLockSeen.has(mappedLeadId)) {
       // Normalize duplicate active follow-up for the same lead to respect MySQL unique active_lead_lock
@@ -523,9 +563,12 @@ export function analyzeMigrationSource(params: {
       activeLeadLock,
       type: String(raw["type"] ?? "call"),
       dueAt: mapper.toMysqlUtc(String(raw["dueAt"] ?? new Date().toISOString())),
-      dueIstDate: mapper.toIstDate(String(raw["dueAt"] ?? new Date().toISOString())) ?? "2026-01-01",
+      dueIstDate:
+        mapper.toIstDate(String(raw["dueAt"] ?? new Date().toISOString())) ?? "2026-01-01",
       note: typeof raw["note"] === "string" ? raw["note"] : null,
-      completedAt: isCompleted ? mapper.toMysqlUtc(String(raw["completedAt"] ?? new Date().toISOString())) : null,
+      completedAt: isCompleted
+        ? mapper.toMysqlUtc(String(raw["completedAt"] ?? new Date().toISOString()))
+        : null,
       cancelledAt,
       cancelReason,
     });
@@ -565,7 +608,9 @@ export function analyzeMigrationSource(params: {
       leadId: mapper.mapId(leadId, "lead"),
       outcome: String(raw["outcome"] ?? "connected"),
       notes: typeof raw["notes"] === "string" ? raw["notes"] : null,
-      occurredAt: mapper.toMysqlUtc(String(raw["at"] ?? raw["occurredAt"] ?? new Date().toISOString())),
+      occurredAt: mapper.toMysqlUtc(
+        String(raw["at"] ?? raw["occurredAt"] ?? new Date().toISOString()),
+      ),
     });
   }
 
@@ -685,9 +730,14 @@ export function analyzeMigrationSource(params: {
       entities.dealMilestones.sourceCount++;
       const msId = String(ms["id"] ?? `${raw.id}_ms_${entities.dealMilestones.sourceCount}`);
       const msParsed =
-        typeof ms["amountPaise"] === "number" && Number.isSafeInteger(ms["amountPaise"]) && ms["amountPaise"] >= 0
+        typeof ms["amountPaise"] === "number" &&
+        Number.isSafeInteger(ms["amountPaise"]) &&
+        ms["amountPaise"] >= 0
           ? { ok: true as const, paise: ms["amountPaise"] as number }
-          : parseLegacyRupeesToPaise(ms["amount"], { allowZero: true, entityContext: `milestone '${msId}'` });
+          : parseLegacyRupeesToPaise(ms["amount"], {
+              allowZero: true,
+              entityContext: `milestone '${msId}'`,
+            });
       if (!msParsed.ok) {
         entities.dealMilestones.errorCount++;
         const msg = `Deal milestone '${msId}' has invalid amount: ${msParsed.error}`;
@@ -938,7 +988,8 @@ export function analyzeMigrationSource(params: {
         magicBytesValid: true,
         withinSizeLimit: (raw.fileSize || 0) <= MAX_PROOF_BINARY_BYTES,
         status: "missing_binary",
-        error: "JSON-only snapshot does not embed binary proof files; export a Data Vault ZIP to migrate proof binaries.",
+        error:
+          "JSON-only snapshot does not embed binary proof files; export a Data Vault ZIP to migrate proof binaries.",
       });
       warnings.push(
         `Proof '${attId}' metadata found in JSON snapshot without binary bytes; use a Data Vault ZIP for full proof migration.`,
@@ -946,12 +997,23 @@ export function analyzeMigrationSource(params: {
     }
 
     const row = mapper.mapPaymentProof(raw, resolvedDealId);
+    const resolvedSha = bytes ? computeSha256(bytes) : raw.sha256 || "";
+    const resolvedMime =
+      (bytes ? sniffProofMagicBytes(bytes).detectedMime : null) ??
+      raw.mimeType ??
+      "application/octet-stream";
     entities.paymentProofs.validCount++;
     entities.paymentProofs.toCreate++;
     mapped.paymentProofs.push({
       ...row,
+      mimeType: resolvedMime,
+      sha256Hash: resolvedSha,
+      fileSize: bytes ? bytes.byteLength : raw.fileSize,
       storageDriver: HOSTINGER_EXCLUSIVE_STORAGE_DRIVER,
     });
+    if (bytes) {
+      mapped.proofBinaries.set(row.storageKey, bytes);
+    }
   }
 
   // 10. Quotation Templates & Quotations
@@ -992,7 +1054,12 @@ export function analyzeMigrationSource(params: {
         typeof raw.totalAmountPaise === "number" && Number.isSafeInteger(raw.totalAmountPaise)
           ? raw.totalAmountPaise
           : parseLegacyRupeesToPaise(raw.total, { allowZero: true }).ok
-            ? (parseLegacyRupeesToPaise(raw.total, { allowZero: true }) as { ok: true; paise: number }).paise
+            ? (
+                parseLegacyRupeesToPaise(raw.total, { allowZero: true }) as {
+                  ok: true;
+                  paise: number;
+                }
+              ).paise
             : 0;
       quotationsTotalPaise += qPaise;
       entities.quotations.validCount++;
@@ -1391,31 +1458,63 @@ export function analyzeMigrationSource(params: {
   }
 
   // 17. Deferred browser-local collections (explicitly reported, never silently dropped)
-  const deferredDefinitions: Array<{ key: string; label: string; reason: string }> = [
+  const deferredDefinitions: Array<{
+    key: string;
+    label: string;
+    disposition: DeferredCollectionReport["disposition"];
+    destinationMapping: string;
+    archivePath: string;
+    reason: string;
+  }> = [
     {
       key: "notes",
       label: "Personal Notes",
-      reason: "Deferred to post-B13 phase; preserved intact in browser backup ZIP.",
+      disposition: "preserve_legacy_archive",
+      destinationMapping:
+        "Preserved in Data Vault ZIP (data/personal-notes.json) with SHA-256 manifest; lead-level notes are migrated via crm_leads.notes and crm_lead_activities.",
+      archivePath: "data/personal-notes.json",
+      reason:
+        "No dedicated crm_personal_notes table in MariaDB yet; preserved intact for future restoration.",
     },
     {
       key: "demos",
       label: "Demo Library",
-      reason: "Deferred to post-B13 phase; preserved intact in browser backup ZIP.",
+      disposition: "preserve_legacy_archive",
+      destinationMapping:
+        "Preserved in Data Vault ZIP (data/demo-library.json) with SHA-256 manifest.",
+      archivePath: "data/demo-library.json",
+      reason:
+        "No dedicated crm_demos table in MariaDB yet; preserved intact for future restoration.",
     },
     {
       key: "employees",
       label: "Employee Profiles",
-      reason: "Owner-only launch phase; multi-user employee accounts deferred.",
+      disposition: "defer_unsupported_feature",
+      destinationMapping:
+        "Preserved (credential-scrubbed) in Data Vault ZIP (data/employees.json); crm_users is Owner-only in current launch.",
+      archivePath: "data/employees.json",
+      reason:
+        "Multi-user Team/Employee accounts are intentionally deferred in the Owner-only launch phase.",
     },
     {
       key: "teamEvents",
       label: "Team Activity Events",
-      reason: "Multi-user team activity stream deferred until employee auth rollout.",
+      disposition: "defer_unsupported_feature",
+      destinationMapping:
+        "Preserved in Data Vault ZIP (data/team-activity.json); single-owner audit logs live in crm_lead_activities, crm_finance_events, and module audit tables.",
+      archivePath: "data/team-activity.json",
+      reason:
+        "Multi-user team activity stream is intentionally deferred until employee auth rollout.",
     },
     {
       key: "savedReports",
       label: "Analytics Saved Reports",
-      reason: "Report definitions deferred; live analytics recompute directly from MariaDB records.",
+      disposition: "preserve_legacy_archive",
+      destinationMapping:
+        "Preserved in Data Vault ZIP (data/analytics-settings.json); live analytics recompute directly from MariaDB records.",
+      archivePath: "data/analytics-settings.json",
+      reason:
+        "No crm_saved_reports table yet; definitions preserved intact while live analytics compute from MariaDB.",
     },
   ];
 
@@ -1428,6 +1527,9 @@ export function analyzeMigrationSource(params: {
         label: def.label,
         sourceCount: items.length,
         status: "deferred_not_dropped",
+        disposition: def.disposition,
+        destinationMapping: def.destinationMapping,
+        archivePath: def.archivePath,
         reason: def.reason,
       });
     }

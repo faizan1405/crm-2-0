@@ -52,11 +52,16 @@ export interface MigrationEntitySummary {
   }>;
 }
 
+export type DeferredCollectionDisposition = "preserve_legacy_archive" | "defer_unsupported_feature";
+
 export interface DeferredCollectionReport {
   collection: string;
   label: string;
   sourceCount: number;
   status: "deferred_not_dropped";
+  disposition: DeferredCollectionDisposition;
+  destinationMapping: string;
+  archivePath: string;
   reason: string;
 }
 

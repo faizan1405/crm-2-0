@@ -5,14 +5,10 @@ import { computeSha256 } from "../backup/manifest.server";
 /** Valid minimal 1x1 PNG binary (passes magic-byte sniffing). */
 export function buildSyntheticPngBytes(): Uint8Array {
   return new Uint8Array([
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-    0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-    0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
-    0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41,
-    0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
-    0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xdd, 0x8d,
-    0xb0, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
+    0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xdd, 0x8d, 0xb0, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
     0x44, 0xae, 0x42, 0x60, 0x82,
   ]);
 }
@@ -36,9 +32,10 @@ export interface SyntheticMigrationDatasetOptions {
  * CRM entities, deferred browser collections, valid payment proof binaries, and exact paise edge cases.
  * NEVER reads real customer data or browser storage.
  */
-export function buildSyntheticMigrationZip(
-  options: SyntheticMigrationDatasetOptions = {},
-): { zipBytes: Uint8Array; filename: string } {
+export function buildSyntheticMigrationZip(options: SyntheticMigrationDatasetOptions = {}): {
+  zipBytes: Uint8Array;
+  filename: string;
+} {
   const pngBytes = buildSyntheticPngBytes();
   const pdfBytes = buildSyntheticPdfBytes();
   const pngSha = computeSha256(pngBytes);
@@ -316,7 +313,12 @@ export function buildSyntheticMigrationZip(
   ];
 
   const projectMilestones = [
-    { id: "syn_pms_01", projectId: "syn_proj_01", title: "UI Prototype Approval", status: "completed" },
+    {
+      id: "syn_pms_01",
+      projectId: "syn_proj_01",
+      title: "UI Prototype Approval",
+      status: "completed",
+    },
   ];
 
   const projectTasks = [
@@ -341,25 +343,19 @@ export function buildSyntheticMigrationZip(
     },
   ];
 
-  const customFields = [
-    { id: "cf_industry", name: "Industry", type: "text" },
-  ];
+  const customFields = [{ id: "cf_industry", name: "Industry", type: "text" }];
 
   const fieldValues = {
     syn_lead_01: { cf_industry: "Retail D2C" },
   };
 
-  const tagDefs = [
-    { id: "tag_vip", name: "VIP", color: "amber" },
-  ];
+  const tagDefs = [{ id: "tag_vip", name: "VIP", color: "amber" }];
 
   const leadTags = {
     syn_lead_01: ["tag_vip"],
   };
 
-  const savedViews = [
-    { id: "view_hot", name: "Hot Leads", visibility: "owner" },
-  ];
+  const savedViews = [{ id: "view_hot", name: "Hot Leads", visibility: "owner" }];
 
   const inboxMeta = {
     syn_lead_02: { reviewed: false, duplicate: false },
@@ -371,7 +367,12 @@ export function buildSyntheticMigrationZip(
 
   // Intentionally set status: "active" to verify B13 forces it to "paused"
   const automationRules = [
-    { id: "auto_01", name: "Follow-up Reminder Rule", trigger: "followup_overdue", status: "active" },
+    {
+      id: "auto_01",
+      name: "Follow-up Reminder Rule",
+      trigger: "followup_overdue",
+      status: "active",
+    },
   ];
 
   const settings = {
@@ -413,12 +414,16 @@ export function buildSyntheticMigrationZip(
 
   const files: Record<string, Uint8Array> = {
     "data/leads.json": strToU8(JSON.stringify({ leads, bin }, null, 2)),
-    "data/lead-activities.json": strToU8(JSON.stringify({ activities, callLogs, whatsAppLogs }, null, 2)),
+    "data/lead-activities.json": strToU8(
+      JSON.stringify({ activities, callLogs, whatsAppLogs }, null, 2),
+    ),
     "data/followups.json": strToU8(JSON.stringify({ followUps }, null, 2)),
     "data/deals.json": strToU8(JSON.stringify({ deals }, null, 2)),
     "data/payments.json": strToU8(JSON.stringify({ payments }, null, 2)),
     "data/attachment-metadata.json": strToU8(JSON.stringify({ attachments }, null, 2)),
-    "data/quotation-templates.json": strToU8(JSON.stringify({ quotationTemplates, quotations }, null, 2)),
+    "data/quotation-templates.json": strToU8(
+      JSON.stringify({ quotationTemplates, quotations }, null, 2),
+    ),
     "data/projects.json": strToU8(
       JSON.stringify({ projects, projectMilestones, projectTasks, supportRequests }, null, 2),
     ),

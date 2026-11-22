@@ -88,7 +88,11 @@ describe("Checkpoint B13: Migration Wizard HTTP API Endpoints", () => {
     expect(res!.status).toBe(200);
     const body = (await res!.json()) as {
       ok: boolean;
-      analysis: { dryRun: boolean; databaseWritten: boolean; financialReconciliation: { financialParityPassed: boolean } };
+      analysis: {
+        dryRun: boolean;
+        databaseWritten: boolean;
+        financialReconciliation: { financialParityPassed: boolean };
+      };
     };
     expect(body.ok).toBe(true);
     expect(body.analysis.dryRun).toBe(true);
@@ -106,12 +110,20 @@ describe("Checkpoint B13: Migration Wizard HTTP API Endpoints", () => {
       },
       body: JSON.stringify({ syntheticOnly: true }),
     });
-    const res = await handleCrmApiRequest(req, "/api/v1/vault/migration/synthetic-shadow-test", DEV_ENV);
+    const res = await handleCrmApiRequest(
+      req,
+      "/api/v1/vault/migration/synthetic-shadow-test",
+      DEV_ENV,
+    );
     expect(res).not.toBeNull();
     expect(res!.status).toBe(200);
     const body = (await res!.json()) as {
       ok: boolean;
-      shadowReport: { realDatabaseTouched: boolean; rollbackVerified: boolean; pass2InsertedTotal: number };
+      shadowReport: {
+        realDatabaseTouched: boolean;
+        rollbackVerified: boolean;
+        pass2InsertedTotal: number;
+      };
     };
     expect(body.ok).toBe(true);
     expect(body.shadowReport.realDatabaseTouched).toBe(false);

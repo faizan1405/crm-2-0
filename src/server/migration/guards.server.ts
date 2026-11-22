@@ -31,7 +31,10 @@ export function assertSafeShadowTarget(target: {
   const hostName = (target.hostName ?? "").trim();
 
   if (!dbName) {
-    return { allowed: false, reason: "Target database name is required for shadow target validation." };
+    return {
+      allowed: false,
+      reason: "Target database name is required for shadow target validation.",
+    };
   }
 
   for (const pattern of PROTECTED_TARGET_PATTERNS) {

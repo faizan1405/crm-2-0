@@ -24,6 +24,7 @@ import {
   type MigrationAnalysisReport,
   type ShadowMigrationTestReport,
 } from "@/lib/api/migrationApi";
+import { exportBrowserCrmSnapshot, type BrowserExportSummary } from "@/lib/crm/browserExport";
 import { cn } from "@/lib/utils";
 
 type WizardStep = 1 | 2 | 3 | 4;
@@ -43,6 +44,12 @@ export function PilotMigrationWizard() {
 
   const [isRunningShadow, setIsRunningShadow] = useState(false);
   const [shadowReport, setShadowReport] = useState<ShadowMigrationTestReport | null>(null);
+
+  const [browserExportConfirmed, setBrowserExportConfirmed] = useState(false);
+  const [isExportingBrowser, setIsExportingBrowser] = useState(false);
+  const [browserExportSummary, setBrowserExportSummary] = useState<BrowserExportSummary | null>(
+    null,
+  );
 
   const { data: readiness, isLoading: isReadinessLoading } = useMigrationReadinessQuery();
 
@@ -87,6 +94,34 @@ export function PilotMigrationWizard() {
       toast.error(err instanceof Error ? err.message : "Failed to run synthetic shadow test");
     } finally {
       setIsRunningShadow(false);
+    }
+  };
+
+  const handleExportBrowserStorage = async () => {
+    if (!browserExportConfirmed) {
+      toast.warning("Check the explicit Owner confirmation box first.");
+      return;
+    }
+    try {
+      setIsExportingBrowser(true);
+      const result = await exportBrowserCrmSnapshot({ ownerConfirmed: true });
+      setBrowserExportSummary(result.summary);
+      const blob = new Blob([result.zipBytes as unknown as BlobPart], { type: "application/zip" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.summary.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      toast.success(
+        `Read-only browser export created: ${result.summary.filename} (storage untouched).`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to export browser storage");
+    } finally {
+      setIsExportingBrowser(false);
     }
   };
 
@@ -193,11 +228,15 @@ export function PilotMigrationWizard() {
                 <dl className="space-y-2 text-xs">
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground">Mapped Entity Groups</dt>
-                    <dd className="font-semibold">{readiness?.mappedEntityCount ?? 27} tables/scopes</dd>
+                    <dd className="font-semibold">
+                      {readiness?.mappedEntityCount ?? 27} tables/scopes
+                    </dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground">Deferred Browser Collections</dt>
-                    <dd className="font-semibold">{readiness?.deferredCollectionCount ?? 5} (non-silent)</dd>
+                    <dd className="font-semibold">
+                      {readiness?.deferredCollectionCount ?? 5} (non-silent)
+                    </dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground">Hostinger MariaDB Quota</dt>
@@ -283,6 +322,48 @@ export function PilotMigrationWizard() {
               </p>
             )}
           </div>
+
+          {/* Owner-Controlled Read-Only Browser Export */}
+          <div className="rounded-lg border border-border/60 bg-card p-4 text-xs">
+            <h4 className="font-semibold text-foreground">
+              Owner-Controlled Read-Only Browser Export
+            </h4>
+            <p className="mt-1 text-muted-foreground">
+              Exports <code className="font-mono">scale-flow-crm-2-demo</code>, IndexedDB{" "}
+              <code className="font-mono">scale-flow-payment-proofs</code> (binary receipts +
+              SHA-256), and <code className="font-mono">scale-flow-sidebar-groups</code> into a
+              verifiable ZIP archive without deleting or modifying any browser storage.
+            </p>
+            <label className="mt-3 flex cursor-pointer items-center gap-2">
+              <input
+                type="checkbox"
+                checked={browserExportConfirmed}
+                onChange={(e) => setBrowserExportConfirmed(e.target.checked)}
+              />
+              <span>
+                I explicitly approve a read-only export of this browser&apos;s local CRM storage.
+              </span>
+            </label>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!browserExportConfirmed || isExportingBrowser}
+                onClick={() => void handleExportBrowserStorage()}
+                className="gap-1.5"
+              >
+                <Download className="size-3.5" />
+                {isExportingBrowser ? "Exporting..." : "Export Browser Storage (Read-Only)"}
+              </Button>
+              {browserExportSummary && (
+                <span className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                  Exported {browserExportSummary.filename} · {browserExportSummary.proofsIncluded}/
+                  {browserExportSummary.proofsExpected} proofs · browserStorageModified: false
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -325,19 +406,25 @@ export function PilotMigrationWizard() {
 
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="rounded-md border border-border/50 bg-muted/20 p-3">
-                    <div className="text-[11px] text-muted-foreground">Deals Booked (Won+Active)</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Deals Booked (Won+Active)
+                    </div>
                     <div className="mt-1 text-sm font-bold">
                       {analysis.financialReconciliation.formattedSummary.dealsBookedInr}
                     </div>
                   </div>
                   <div className="rounded-md border border-border/50 bg-muted/20 p-3">
-                    <div className="text-[11px] text-muted-foreground">Active Payments Collected</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Active Payments Collected
+                    </div>
                     <div className="mt-1 text-sm font-bold text-emerald-700 dark:text-emerald-400">
                       {analysis.financialReconciliation.formattedSummary.activePaymentsInr}
                     </div>
                   </div>
                   <div className="rounded-md border border-border/50 bg-muted/20 p-3">
-                    <div className="text-[11px] text-muted-foreground">Voided Payments Preserved</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Voided Payments Preserved
+                    </div>
                     <div className="mt-1 text-sm font-bold">
                       {analysis.financialReconciliation.formattedSummary.voidedPaymentsInr}
                     </div>
@@ -428,7 +515,9 @@ export function PilotMigrationWizard() {
                   <ul className="mt-1.5 space-y-1 text-muted-foreground">
                     {analysis.deferredCollections.map((d) => (
                       <li key={d.collection}>
-                        <b>{d.label}</b> ({d.sourceCount} record(s)) — {d.reason}
+                        <b>{d.label}</b> ({d.sourceCount} record(s),{" "}
+                        <code className="font-mono">{d.disposition}</code> →{" "}
+                        <code className="font-mono">{d.archivePath}</code>) — {d.destinationMapping}
                       </li>
                     ))}
                   </ul>
@@ -514,7 +603,8 @@ export function PilotMigrationWizard() {
                   </span>
                 </div>
                 <span className="font-mono text-[11px] text-muted-foreground">
-                  {shadowReport.durationMs} ms · realDatabaseTouched: false · cloudflareR2Required: false
+                  {shadowReport.durationMs} ms · realDatabaseTouched: false · cloudflareR2Required:
+                  false
                 </span>
               </div>
 
