@@ -1,0 +1,51 @@
+{
+  "checkpoint": "B13B-LIVE-STAGING-ACCEPTANCE",
+  "capturedAt": "2026-11-22T10:06:00Z",
+  "stagingSite": "khaki-butterfly-345144.hostingersite.com",
+  "hostingUsername": "u256504187",
+  "existingStagingDatabase": "u256504187_crm_b11c_stg",
+  "currentLiveBuildSymlink": "versions/01a1d9ca-a139-71d3-b95c-c858c150569e",
+  "healthCheckpointBeforeB13b": {
+    "service": "scale-flow-crm-v2",
+    "checkpoint": "b1a",
+    "node": "v22.23.5",
+    "env": "development",
+    "timezone": "Asia/Kolkata",
+    "proofStorageDriver": "mariadb-blob",
+    "productionReady": false
+  },
+  "existingStagingReceiptHashes": [
+    { "id": "proof_08e39433-7f47-49b9-9d79-5f4c0383f7b7", "sha256": "1d5872ab952741c01b95a8c06ff22036cc30012c2a2dd5e75b90376105ed3baa", "lifecycleStatus": "replaced" },
+    { "id": "proof_23eb88a0-1fb7-4daa-bdbc-6eba929873e7", "sha256": "1d5872ab952741c01b95a8c06ff22036cc30012c2a2dd5e75b90376105ed3baa", "lifecycleStatus": "replaced" },
+    { "id": "proof_3bceff62-d524-4932-ba98-8288ee21fa55", "sha256": "1d5872ab952741c01b95a8c06ff22036cc30012c2a2dd5e75b90376105ed3baa", "lifecycleStatus": "replaced" },
+    { "id": "proof_42132317-a2b1-4a20-9cc0-ec1c2eee1b75", "sha256": "a1bdd2d9a9f3c93d308972fe822fa165289946092b19339ec75c1cb877a945e0", "lifecycleStatus": "active" },
+    { "id": "proof_4a61ec88-3df6-4d5c-853e-1050658c18e0", "sha256": "9951303f7af6a0d1851151b35e873ab55acbe6b26ecdac2b661d74494278219e", "lifecycleStatus": "active" },
+    { "id": "proof_6492c050-df16-4c09-95ca-6c6beef1a824", "sha256": "9951303f7af6a0d1851151b35e873ab55acbe6b26ecdac2b661d74494278219e", "lifecycleStatus": "replaced" },
+    { "id": "proof_683082e0-e82a-40f5-b1e9-53275151fde5", "sha256": "c0b9c51dc4b12ec98bfe1444c5d96b439156e3f58935b7fd524b24157c4a06cc", "lifecycleStatus": "active" },
+    { "id": "proof_6a3c6099-9a28-422a-afd5-6c24bd10adab", "sha256": "1f3725cf0d07149a8da7ca803d6b49734b54b164fcf991360f3dc1886b77b404", "lifecycleStatus": "active" },
+    { "id": "proof_74ea84ed-2a68-40e7-b6a3-fc1dcbef791a", "sha256": "9951303f7af6a0d1851151b35e873ab55acbe6b26ecdac2b661d74494278219e", "lifecycleStatus": "replaced" },
+    { "id": "proof_782864b7-3538-4ea9-9636-f2d92735972e", "sha256": "19b4ba06583e8af10c7a0af9568190e93d417c40fa126ab3c970b237fb8a2479", "lifecycleStatus": "active" },
+    { "id": "proof_7b0cf970-32a4-4319-9dfb-fdeb68dfb2c0", "sha256": "6ff2b035bd914f2980951bed17aa63d40997bb33d6b972b8190a2c561d2c3210", "lifecycleStatus": "active" },
+    { "id": "proof_90af0536-cb98-4ded-aae4-f482371fe365", "sha256": "8cac33d02c631d433a6e463ad6dea67d3f817563ec6fd56e01a5d2ee8991c5c6", "lifecycleStatus": "active" },
+    { "id": "proof_94237be2-3c4c-4881-981c-942522f6dd47", "sha256": "8cac33d02c631d433a6e463ad6dea67d3f817563ec6fd56e01a5d2ee8991c5c6", "lifecycleStatus": "active" },
+    { "id": "proof_a8092e66-a4d4-4d3f-8a3f-afa6ec9d3d31", "sha256": "af10963404c7944241be2425e587395c4764aa37ab93811d9be9ce1e83ad3aec", "lifecycleStatus": "active" },
+    { "id": "proof_a8331855-7556-4735-8257-4c351c5d2d77", "sha256": "9951303f7af6a0d1851151b35e873ab55acbe6b26ecdac2b661d74494278219e", "lifecycleStatus": "replaced" },
+    { "id": "proof_a8b20d64-c4fa-4717-b4a4-c14507bead52", "sha256": "af10963404c7944241be2425e587395c4764aa37ab93811d9be9ce1e83ad3aec", "lifecycleStatus": "active" },
+    { "id": "proof_bd969a9d-64f3-4908-81a0-88d931a6d56e", "sha256": "1d5872ab952741c01b95a8c06ff22036cc30012c2a2dd5e75b90376105ed3baa", "lifecycleStatus": "replaced" },
+    { "id": "proof_c0f65239-a0b2-40f9-ba9e-fce910d480c6", "sha256": "8cac33d02c631d433a6e463ad6dea67d3f817563ec6fd56e01a5d2ee8991c5c6", "lifecycleStatus": "active" },
+    { "id": "proof_ccb23e93-296c-40bb-ac91-4459007faaa", "sha256": "c0b9c51dc4b12ec98bfe1444c5d96b439156e3f58935b7fd524b24157c4a06cc", "lifecycleStatus": "active" },
+    { "id": "proof_d55d9a8b-4c30-4745-be71-e096db647df0", "sha256": "a45f9770679187cb862ddb52f39e25eead60597514d44c901e5fc25a1e6061ef", "lifecycleStatus": "active" },
+    { "id": "proof_ed09d677-5620-465d-bccb-44704d7f04e7", "sha256": "8cac33d02c631d433a6e463ad6dea67d3f817563ec6fd56e01a5d2ee8991c5c6", "lifecycleStatus": "active" },
+    { "id": "proof_fa94560c-e1a9-4de5-adfa-1432c9843c1a", "sha256": "a9e43fc0eea77dfe51545277307406b6a928ebb541a2df9c2eee54bc8a6b7838", "lifecycleStatus": "replaced" },
+    { "id": "proof_fc4eddf1-7cab-44b9-8577-65f2aeb29a47", "sha256": "af10963404c7944241be2425e587395c4764aa37ab93811d9be9ce1e83ad3aec", "lifecycleStatus": "active" }
+  ],
+  "status": "RESTORED_AND_VERIFIED_23_OF_23_RECEIPT_HASHES_INTACT",
+  "disposableDatabaseRetainedForOwnerReview": "u256504187_crm_b13b_disp",
+  "postRestoreVerification": {
+    "restoredAt": "2026-11-22T10:36:56Z",
+    "stagingDbName": "u256504187_crm_b11c_stg",
+    "healthEndpointStatus": 200,
+    "syntheticOwnerLoginAfterRestoreStatus": 401,
+    "receiptHashesMatched": "23/23"
+  }
+}

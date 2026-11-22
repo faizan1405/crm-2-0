@@ -133,6 +133,70 @@ const ENTITY_META: Record<MigrationEntityKey, { label: string; tableName: string
   salesGoals: { label: "Sales Goals", tableName: "crm_sales_goals" },
 };
 
+const CANONICAL_LEAD_SOURCES: Record<string, string> = {
+  website: "Website",
+  referral: "Referral",
+  instagram: "Instagram",
+  "google ads": "Google Ads",
+  linkedin: "LinkedIn",
+  "walk-in": "Walk-in",
+  whatsapp: "WhatsApp",
+  "meta ads": "Meta Ads",
+  facebook: "Facebook",
+  google: "Google",
+  indiamart: "IndiaMART",
+  "direct enquiry": "Direct Enquiry",
+  other: "Other",
+};
+
+function normalizeLeadSource(raw?: string): string {
+  const key = (raw ?? "other").trim().toLowerCase();
+  return CANONICAL_LEAD_SOURCES[key] ?? "Other";
+}
+
+function normalizeLeadPriority(raw?: string): "hot" | "warm" | "cold" {
+  const key = (raw ?? "warm").trim().toLowerCase();
+  if (key === "hot" || key === "high") return "hot";
+  if (key === "cold" || key === "low") return "cold";
+  return "warm";
+}
+
+function normalizePaymentMethod(
+  raw?: string,
+): "UPI" | "Bank Transfer" | "Cash" | "Card" | "Cheque" {
+  const key = (raw ?? "bank_transfer").trim().toLowerCase();
+  if (key === "upi") return "UPI";
+  if (key === "cash") return "Cash";
+  if (key === "card") return "Card";
+  if (key === "cheque" || key === "check") return "Cheque";
+  return "Bank Transfer";
+}
+
+function normalizePaymentType(raw?: string): "advance" | "milestone" | "final" | "other" {
+  const key = (raw ?? "other").trim().toLowerCase();
+  if (key === "advance" || key === "milestone" || key === "final") return key;
+  return "other";
+}
+
+function normalizeProjectStage(raw?: string): string {
+  const key = (raw ?? "discovery").trim().toLowerCase();
+  if (key === "dev") return "development";
+  if (key === "qa") return "testing";
+  if (key === "review") return "client_review";
+  if (key === "handover") return "ready_to_launch";
+  return key;
+}
+
+function normalizeDealStorageStatus(
+  raw?: string,
+): "active" | "completed" | "on_hold" | "cancelled" {
+  const key = (raw ?? "active").trim().toLowerCase();
+  if (key === "completed") return "completed";
+  if (key === "on_hold") return "on_hold";
+  if (key === "cancelled" || key === "lost") return "cancelled";
+  return "active";
+}
+
 function createEmptyEntitySummary(entity: MigrationEntityKey): MigrationEntitySummary {
   const meta = ENTITY_META[entity];
   return {
@@ -404,7 +468,13 @@ export function analyzeMigrationSource(params: {
       });
     } else {
       entities.leads.toCreate++;
-      mapped.leads.push({ ...row, legacyId: raw.id, lifecycleStatus: "active" });
+      mapped.leads.push({
+        ...row,
+        source: normalizeLeadSource(row.source),
+        priority: normalizeLeadPriority(row.priority),
+        legacyId: raw.id,
+        lifecycleStatus: "active",
+      });
     }
   }
 
@@ -436,8 +506,10 @@ export function analyzeMigrationSource(params: {
       entities.archivedLeads.toCreate++;
       mapped.archivedLeads.push({
         ...row,
+        source: normalizeLeadSource(row.source),
+        priority: normalizeLeadPriority(row.priority),
         legacyId: rawLead.id,
-        lifecycleStatus: "archived",
+        lifecycleStatus: "waste",
         archivedAt: mapper.toMysqlUtc(
           String(entry["deletedAt"] ?? rawLead.updatedAt ?? rawLead.createdAt),
         ),
@@ -721,7 +793,12 @@ export function analyzeMigrationSource(params: {
       });
     } else {
       entities.deals.toCreate++;
-      mapped.deals.push({ ...row, legacyId: raw.id });
+      mapped.deals.push({
+        ...row,
+        clientType: row.leadId ? "crm" : "other",
+        status: normalizeDealStorageStatus(row.status),
+        legacyId: raw.id,
+      });
     }
 
     // Embedded deal milestones
@@ -833,7 +910,12 @@ export function analyzeMigrationSource(params: {
       });
     } else {
       entities.payments.toCreate++;
-      mapped.payments.push({ ...row, legacyId: raw.id });
+      mapped.payments.push({
+        ...row,
+        method: normalizePaymentMethod(row.method),
+        paymentType: normalizePaymentType(row.paymentType),
+        legacyId: raw.id,
+      });
       // Synthesize immutable finance audit event for every migrated payment
       entities.financeEvents.sourceCount++;
       entities.financeEvents.validCount++;
@@ -1002,17 +1084,19 @@ export function analyzeMigrationSource(params: {
       (bytes ? sniffProofMagicBytes(bytes).detectedMime : null) ??
       raw.mimeType ??
       "application/octet-stream";
+    const safeStorageKey = `prf_${row.id.replace(/[^A-Za-z0-9._-]/g, "_")}.${row.fileExtension.toLowerCase()}`;
     entities.paymentProofs.validCount++;
     entities.paymentProofs.toCreate++;
     mapped.paymentProofs.push({
       ...row,
+      storageKey: safeStorageKey,
       mimeType: resolvedMime,
       sha256Hash: resolvedSha,
       fileSize: bytes ? bytes.byteLength : raw.fileSize,
       storageDriver: HOSTINGER_EXCLUSIVE_STORAGE_DRIVER,
     });
     if (bytes) {
-      mapped.proofBinaries.set(row.storageKey, bytes);
+      mapped.proofBinaries.set(safeStorageKey, bytes);
     }
   }
 
@@ -1112,7 +1196,11 @@ export function analyzeMigrationSource(params: {
       entities.projects.toSkip++;
     } else {
       entities.projects.toCreate++;
-      mapped.projects.push({ ...row, legacyId: raw.id });
+      mapped.projects.push({
+        ...row,
+        stage: normalizeProjectStage(row.stage),
+        legacyId: raw.id,
+      });
     }
   }
 
